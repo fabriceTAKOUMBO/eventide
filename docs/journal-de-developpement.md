@@ -1,5 +1,13 @@
 # Journal de développement — Eventide
 
+## 28 octobre 2026 (nuit) — vidéos de paysage, sourdine, mélodie d'accueil, démo
+
+- **Vidéos de paysage** (décision du product owner) : le paysage doit sembler vivant et incrusté, jamais un lecteur vidéo ; **la pause n'arrête que le son**. Image fixe seulement en veille, avec « réduire les animations » et en arrière-plan. Boucles sans raccord (`tools/media/process_video.py`), image de départ identique à la première image de la boucle. `cascade-foret` (gratuit, dans l'app) et `pluie-ville` (Premium, S3) viennent de vidéos Gemini du product owner (usage commercial à confirmer) ; `toits-pluie` et `ciel-etoile` utilisent **deux vidéos YouTube de tiers, pour les tests internes seulement** (`medias-test/`, démo uniquement, garde-fous CI) : **à retirer avant toute bêta**.
+- **Sourdine** « Sons de nature » / « Musique » qui garde les niveaux ; voix « coupe / remets la musique ».
+- **Mélodie d'accueil** (décision du product owner) : chaque paysage démarre avec une mélodie douce qui monte en 20 s.
+- **Démo Premium** (`be.cinaf.eventide.demo`) et contrôles Android en CI (alignement 16 Ko, émulateurs Android 14 et 16). La CI a révélé un **plantage au démarrage de la version optimisée** (R8 retirait la base de données de WorkManager) : corrigé ; et un arrêt de l'émulateur ~55 s après le début du son avec `-noaudio` : option retirée.
+- **À faire** : widget de lecture sur l'écran verrouillé (comme Spotify : carte déployée et repliée, image du paysage, minuteur en barre de progression, paysage précédent/suivant, favori) ; accepter la clé `videos/paysages/<id>.mp4` côté API ; vidéos 1080 × 1920 d'au moins 12 s ; décider si les images des paysages Premium servent d'aperçu aux utilisateurs gratuits ; envisager Git LFS (≈ 30 Mo de médias dans le dépôt).
+
 ## 28 octobre 2026 (soir) — règle de non-influence et audit de l'infrastructure
 
 **Règle absolue du product owner**, inscrite dans [`AGENTS.md`](../AGENTS.md) et à recopier dans toute consigne d'agent touchant l'infra, la CI, le déploiement ou la base : CINAF, JobMinutes et Candidature Express restent intouchées et ne doivent être influencées en aucun cas par Eventide.
