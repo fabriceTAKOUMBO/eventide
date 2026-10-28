@@ -2,6 +2,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:eventide/app/app_model.dart';
 import 'package:eventide/core/catalog.dart';
@@ -9,6 +10,7 @@ import 'package:eventide/core/plan.dart';
 import 'package:eventide/services/account_service.dart';
 import 'package:eventide/services/ads_service.dart';
 import 'package:eventide/services/audio/audio_focus.dart';
+import 'package:eventide/services/audio/media_artwork.dart';
 import 'package:eventide/services/billing_service.dart';
 import 'package:eventide/services/connectivity.dart';
 import 'package:eventide/services/links_service.dart';
@@ -347,6 +349,24 @@ class FakeUrlOpener implements UrlOpener {
   Future<bool> open(Uri uri) async {
     opened.add(uri);
     return succeeds;
+  }
+}
+
+/// In-memory files of the media card pictures.
+class MemoryArtworkFiles implements ArtworkFiles {
+  final Map<String, Uint8List> files = {};
+  final List<String> writes = [];
+
+  @override
+  String get directory => '/cache/media_art';
+
+  @override
+  Future<bool> exists(String path) async => files.containsKey(path);
+
+  @override
+  Future<void> write(String path, Uint8List bytes) async {
+    writes.add(path);
+    files[path] = bytes;
   }
 }
 

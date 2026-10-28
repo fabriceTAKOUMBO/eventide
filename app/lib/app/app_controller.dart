@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart' show AppLifecycleState;
 
 import '../core/catalog.dart';
 import '../core/landscape_media.dart';
+import '../core/media_card.dart';
 import '../core/ops.dart';
 import '../core/plan.dart';
 import '../core/scene.dart';
@@ -21,6 +22,7 @@ import '../services/account_service.dart';
 import '../services/ads_service.dart';
 import '../services/api_client.dart';
 import '../services/audio/audio_engine.dart';
+import '../services/audio/media_artwork.dart';
 import '../services/audio/playback_handler.dart';
 import '../services/billing_service.dart';
 import '../services/connectivity.dart';
@@ -139,6 +141,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
     required this._permissions,
     required this._urls,
     this._config = const AppConfig(),
+    this._artwork,
     DateTime Function()? now,
     Random? random,
   })  : _catalog = catalog,
@@ -168,6 +171,9 @@ class RealAppModel extends AppModel implements PlaybackHost {
   final Permissions _permissions;
   final UrlOpener _urls;
   final AppConfig _config;
+
+  /// Pictures of the system media card (null in tests that do not need them).
+  final MediaArtwork? _artwork;
   final DateTime Function() _now;
   final Random _random;
 
@@ -199,6 +205,13 @@ class RealAppModel extends AppModel implements PlaybackHost {
 
   /// Landscapes whose poster is downloaded (synchronous lookups by the UI).
   final Set<String> _posterIds = {};
+
+  // System media card (lock screen, notification shade): see « Media card » below.
+  final ValueNotifier<MediaCardInfo?> _mediaCard = ValueNotifier(null);
+  Object? _cardInputs;
+
+  /// Pictures asked for during this listening session (landscape|moment).
+  final Set<String> _artRequested = {};
 
   bool _preparing = false;
   int _audioGeneration = 0;
@@ -242,6 +255,9 @@ class RealAppModel extends AppModel implements PlaybackHost {
     }
     _handler.nightMaxHours = _catalog.limits.nightMaxHours;
     _handler.status.addListener(_onPlaybackStatus);
+    // The media card follows every change of the model (cheap when nothing it shows moved).
+    addListener(_refreshMediaCard);
+    _refreshMediaCard();
     _handler.attachHost(this);
     _subscriptions
       ..add(_billing.events.listen(_onBillingEvent))
@@ -407,6 +423,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
     _voiceStopGrace?.cancel();
     _handler.status.removeListener(_onPlaybackStatus);
     _events.close();
+    _mediaCard.dispose();
     super.dispose();
   }
 
@@ -838,6 +855,8 @@ class RealAppModel extends AppModel implements PlaybackHost {
 
   @override
   void onPlaybackStopped(StopReason reason, Duration listened) {
+    // A picture that failed may be made at the next session (the UI may be up by then).
+    _artRequested.clear();
     final night = _tracker.onPlaybackStopped(_now(), listened);
     _saveState();
     if (night != null) unawaited(_addNight(night));
@@ -873,6 +892,8 @@ class RealAppModel extends AppModel implements PlaybackHost {
     _browseTimer = Timer(_config.browseDebounce, () {
       _browseTimer = null;
       unawaited(_commitBrowse(landscapeId));
+      // The card goes back to the scene when the browse did not change it (locked, offline).
+      _refreshMediaCard();
     });
     notifyListeners();
   }
@@ -963,8 +984,10 @@ class RealAppModel extends AppModel implements PlaybackHost {
     return jsonEncode(json);
   }
 
-  Favorite? _currentFavorite() {
-    final key = _mixKey(_scene);
+  Favorite? _currentFavorite() => _favoriteOf(_scene);
+
+  Favorite? _favoriteOf(Scene scene) {
+    final key = _mixKey(scene);
     for (final f in _favorites) {
       if (_mixKey(f.scene) == key) return f;
     }
@@ -978,7 +1001,11 @@ class RealAppModel extends AppModel implements PlaybackHost {
   bool get isCurrentSceneFavorite => _currentFavorite() != null;
 
   @override
-  Future<void> toggleFavorite() async {
+  Future<void> toggleFavorite() => _toggleFavorite(quiet: false);
+
+  /// [quiet]: from the media card, no message and no Premium screen (the app may be closed);
+  /// at the free limit nothing changes.
+  Future<void> _toggleFavorite({required bool quiet}) async {
     final existing = _currentFavorite();
     if (existing != null) {
       _favorites = [
@@ -986,13 +1013,13 @@ class RealAppModel extends AppModel implements PlaybackHost {
           if (f.id != existing.id) f,
       ];
       await _saveFavorites();
-      _emit(const ToastEvent(AppMessages.removedFromFavorites));
+      if (!quiet) _emit(const ToastEvent(AppMessages.removedFromFavorites));
       notifyListeners();
       return;
     }
     final max = _rules.maxFavorites(_plan);
     if (max != null && _favorites.length >= max) {
-      _emit(const OpenPremiumEvent());
+      if (!quiet) _emit(const OpenPremiumEvent());
       return;
     }
     _favorites = [
@@ -1005,7 +1032,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
       ),
     ];
     await _saveFavorites();
-    _emit(const ToastEvent(AppMessages.addedToFavorites));
+    if (!quiet) _emit(const ToastEvent(AppMessages.addedToFavorites));
     notifyListeners();
   }
 
@@ -1039,6 +1066,102 @@ class RealAppModel extends AppModel implements PlaybackHost {
     ];
     unawaited(_saveFavorites());
     notifyListeners();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Media card (PlaybackHost): what the lock screen and notification card show, and its
+  // buttons. Every button goes through the app's own paths: previous/next is a home swipe
+  // (debounced, default mix, progressive melody, locked landscapes skipped), the heart is
+  // the favourite toggle, the timer button sets the timer. Play/pause is handled by the
+  // playback handler and only changes the sound (never the landscape video).
+  // ---------------------------------------------------------------------------
+
+  @override
+  ValueListenable<MediaCardInfo?> get mediaCard => _mediaCard;
+
+  bool get _browsePending => _browseTimer?.isActive ?? false;
+
+  /// Landscape of the card: the scene's, or the usable one a previous/next tap or a swipe is
+  /// about to load (the card shows it at once, the sound follows after the browse pause).
+  String get _cardLandscapeId {
+    if (_browsePending && _browsedId != _scene.landscapeId) {
+      final browsed = _catalog.landscape(_browsedId);
+      if (browsed != null && _rules.canUseLandscape(_plan, browsed)) return _browsedId;
+    }
+    return _scene.landscapeId;
+  }
+
+  /// Sound loaded or being prepared: the card is (or is about to be) on screen.
+  bool get _audioActive {
+    final st = _handler.status.value;
+    return _preparing || st.loading || st.playing || st.paused;
+  }
+
+  void _refreshMediaCard() {
+    if (_events.isClosed) return;
+    final id = _cardLandscapeId;
+    final landscape = _catalog.landscape(id);
+    if (landscape == null) return;
+    final art = _artwork;
+    final moment = _scene.moment;
+    final inputs = (_scene, _favorites, id, _plan, art?.peek(id, moment));
+    if (inputs != _cardInputs) {
+      _cardInputs = inputs;
+      final scene = id == _scene.landscapeId ? _scene : _scene.withLandscape(landscape);
+      bool usable(Landscape l) => _rules.canUseLandscape(_plan, l);
+      _mediaCard.value = MediaCardInfo(
+        landscapeId: id,
+        title: landscape.name,
+        artist: mixSummary(scene, _catalog, canUse: (kind, item) => _rules.canUseItem(_plan, kind, item)),
+        moment: moment,
+        favorite: _favoriteOf(scene) != null,
+        previousId: neighbourLandscape(_catalog, id, -1, usable),
+        nextId: neighbourLandscape(_catalog, id, 1, usable),
+        artUri: art?.peek(id, moment),
+      );
+    }
+    _requestArtwork(landscape, moment);
+  }
+
+  /// Makes the card's picture in the background, only while the card can be seen; the card
+  /// is published without it first and updated when it is ready.
+  void _requestArtwork(Landscape landscape, Moment moment) {
+    final art = _artwork;
+    if (art == null || !_audioActive || art.peek(landscape.id, moment) != null) return;
+    if (!_artRequested.add('${landscape.id}|${moment.name}')) return;
+    unawaited(art.resolve(landscape, moment).then((uri) {
+      if (uri != null) _refreshMediaCard();
+    }));
+  }
+
+  @override
+  Future<void> skipLandscape(int direction) async {
+    await _ready.future;
+    final target = neighbourLandscape(
+      _catalog,
+      _cardLandscapeId,
+      direction,
+      (l) => _rules.canUseLandscape(_plan, l),
+    );
+    if (target != null) browseLandscape(target);
+  }
+
+  @override
+  Future<void> toggleFavoriteFromCard() async {
+    await _ready.future;
+    // A previous/next tap still waiting: the heart is for the landscape the card shows.
+    if (_browsePending) {
+      _browseTimer!.cancel();
+      _browseTimer = null;
+      await _commitBrowse(_browsedId);
+    }
+    await _toggleFavorite(quiet: true);
+  }
+
+  @override
+  Future<void> cycleTimerFromCard() async {
+    await _ready.future;
+    setTimer(nextMediaCardTimer(_scene.timer));
   }
 
   // ---------------------------------------------------------------------------

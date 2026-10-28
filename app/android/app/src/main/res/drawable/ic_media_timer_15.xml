@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Media card timer: 15 min. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M5.85,8.2 L8.35,6 L8.35,18" />
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M17.75,6 L13.15,6 L12.65,11.4 C13.35,10.8 14.25,10.5 15.25,10.5 C17.05,10.5 18.15,11.9 18.15,14.2 C18.15,16.6 16.95,18 15.15,18 C13.95,18 12.95,17.4 12.35,16.5" />
+</vector>

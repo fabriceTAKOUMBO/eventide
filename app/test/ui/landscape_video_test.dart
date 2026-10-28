@@ -1,7 +1,16 @@
 // Living landscapes: priority chain (video → poster → painter), when a video plays, and the
 // player budget. A fake player stands for video_player (no platform channel in tests).
+import 'dart:io';
+
+import 'package:eventide/app/app_controller.dart';
+import 'package:eventide/app/app_model.dart';
 import 'package:eventide/core/landscape_media.dart';
 import 'package:eventide/core/plan.dart';
+import 'package:eventide/services/api_client.dart';
+import 'package:eventide/services/audio/fake_audio_engine.dart';
+import 'package:eventide/services/audio/media_card_controls.dart';
+import 'package:eventide/services/audio/playback_handler.dart';
+import 'package:eventide/services/content_repository.dart';
 import 'package:eventide/ui/landscape/landscape_background.dart';
 import 'package:eventide/ui/landscape/landscape_image.dart';
 import 'package:eventide/ui/landscape/landscape_video.dart';
@@ -9,7 +18,10 @@ import 'package:eventide/ui/model_scope.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
+import '../services/fakes.dart' hide loadTestCatalog, settle;
 import 'app_harness.dart';
 import 'fake_app_model.dart';
 import 'ui_test_utils.dart';
@@ -87,7 +99,7 @@ const _cascadeVideo = AssetLandscapeVideo('assets/landscapes/cascade-foret.mp4')
 const _cascadePoster = AssetImage('assets/landscapes/cascade-foret.jpg');
 
 Widget _host(
-  FakeAppModel model,
+  AppModel model,
   Widget child, {
   bool reduceMotion = false,
   bool covered = false,
@@ -119,6 +131,56 @@ double _videoOpacity(WidgetTester tester) =>
 Finder _poster(ImageProvider provider) => find.byWidgetPredicate(
   (w) => w is Image && w.image == provider,
 );
+
+/// The real application model and playback handler, on fake platform services (free plan,
+/// the free landscapes' sounds and media bundled).
+Future<(RealAppModel, PlaybackHandler, FakeAudioEngine)> _realModel() async {
+  final catalog = loadTestCatalog();
+  final store = MemoryStore();
+  final native = FakeNativeBridge();
+  final engine = FakeAudioEngine();
+  final handler = PlaybackHandler(engine: engine, focus: FakeFocus(), native: native);
+  final client = MockClient((request) async => http.Response('', 500));
+  final api = ApiClient(
+    baseUrl: '',
+    client: client,
+    store: store,
+    native: native,
+    appVersion: '1.0.0',
+    deviceSalt: 'salt',
+  );
+  final connectivity = FakeConnectivity();
+  final model = RealAppModel(
+    catalog: catalog,
+    store: store,
+    handler: handler,
+    content: ContentRepository(
+      directory: Directory('/nonexistent/eventide-content'),
+      client: client,
+      api: api,
+      bundledAssets: () async => {
+        ...allBundledAudio(catalog),
+        'assets/landscapes/cascade-foret.mp4',
+        'assets/landscapes/cascade-foret.jpg',
+      },
+      connectivity: connectivity,
+    ),
+    native: native,
+    api: api,
+    connectivity: connectivity,
+    speech: FakeSpeech(),
+    billing: FakeBilling(),
+    ads: FakeAds(),
+    account: FakeAccount(),
+    links: FakeLinks(),
+    share: FakeShare(),
+    permissions: FakePermissions(),
+    urls: FakeUrlOpener(),
+    config: const AppConfig(browseDebounce: Duration(milliseconds: 60)),
+  );
+  await model.init();
+  return (model, handler, engine);
+}
 
 Future<void> _lifecycle(WidgetTester tester, List<AppLifecycleState> states) async {
   for (final state in states) {
@@ -336,6 +398,44 @@ void main() {
       expect(player.calls.where((c) => c == 'pause'), hasLength(pausesBefore));
       expect(player.disposed, isFalse);
       await tester.pumpWidget(const SizedBox());
+    });
+
+    testWidgets('the media card drives the sound only: its buttons never touch the video', (
+      tester,
+    ) async {
+      final (model, handler, engine) = await _realModel();
+      await tester.pumpWidget(_host(model, _cascade));
+      await tester.pump();
+      await tester.pump();
+      final player = factory.created.single..showFrames();
+      await tester.pump();
+      expect(player.playing, isTrue);
+      await model.play();
+      await tester.pump();
+      final pausesBefore = player.calls.where((c) => c == 'pause').length;
+
+      // Lock screen / notification card: play/pause, timer, heart (no app UI involved).
+      await handler.click();
+      await tester.pump();
+      expect(model.playing, isFalse);
+      await handler.click();
+      await handler.pause();
+      await handler.play();
+      await handler.customAction(MediaCardActions.timer);
+      await handler.customAction(MediaCardActions.favorite);
+      await tester.pump();
+
+      expect(model.playing, isTrue);
+      expect(engine.calls, ['start', 'pause', 'resume', 'pause', 'resume']);
+      expect(player.playing, isTrue);
+      expect(player.calls.where((c) => c == 'pause'), hasLength(pausesBefore));
+      expect(player.disposed, isFalse);
+      expect(factory.created, hasLength(1));
+
+      await handler.stop();
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump(const Duration(seconds: 2));
+      model.dispose();
     });
 
     testWidgets('a locked Premium landscape never asks for its video (free plan)', (

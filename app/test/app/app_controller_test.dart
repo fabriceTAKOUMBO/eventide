@@ -1,12 +1,16 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
+import 'package:audio_service/audio_service.dart';
 import 'package:eventide/app/app_controller.dart';
 import 'package:eventide/app/app_model.dart';
 import 'package:eventide/app/demo_mode.dart';
 import 'package:eventide/core/catalog.dart';
 import 'package:eventide/core/landscape_media.dart';
+import 'package:eventide/core/media_card.dart';
 import 'package:eventide/core/plan.dart';
 import 'package:eventide/core/scene.dart';
 import 'package:eventide/core/schedule.dart';
@@ -16,6 +20,8 @@ import 'package:eventide/services/ads_service.dart';
 import 'package:eventide/services/api_client.dart';
 import 'package:eventide/services/audio/audio_engine.dart';
 import 'package:eventide/services/audio/fake_audio_engine.dart';
+import 'package:eventide/services/audio/media_artwork.dart';
+import 'package:eventide/services/audio/media_card_controls.dart';
 import 'package:eventide/services/audio/playback_handler.dart';
 import 'package:eventide/services/billing_service.dart';
 import 'package:eventide/services/content_repository.dart';
@@ -67,6 +73,7 @@ class Harness {
     Set<String> bundledMedia = const {},
     RemoteLandscapeMedia remoteMedia = RemoteLandscapeMedia.none,
     Directory? contentDirectory,
+    MediaArtwork? artwork,
   }) async {
     handler = PlaybackHandler(engine: engineOverride ?? engine, focus: focus, native: native, now: () => now);
     final client = MockClient(backend ?? (request) async => http.Response('', 500));
@@ -108,6 +115,7 @@ class Harness {
         browseDebounce: const Duration(milliseconds: 60),
         demo: demo,
       ),
+      artwork: artwork,
       now: () => now,
       random: Random(7),
     );
@@ -532,8 +540,13 @@ void main() {
       expect(model.playing, isTrue);
       expect(model.scene.landscapeId, 'sous-bois');
       expect(h.engine.lastRampUp, const Duration(minutes: 15));
-      expect(h.handler.mediaItem.value?.artist, 'C’est l’heure d’aller dormir');
-      expect(h.handler.mediaItem.value?.title, 'Sous-bois ensoleillé');
+      final item = h.handler.mediaItem.value!;
+      expect(item.title, 'Sous-bois ensoleillé');
+      // The card's subtitle is the audible mix; the reminder is the notification's third line.
+      expect(item.artist, 'Vent · Oiseaux · Nappes apaisantes');
+      expect(item.displayDescription, 'C’est l’heure d’aller dormir');
+      expect(item.displayTitle, 'Sous-bois ensoleillé');
+      expect(item.displaySubtitle, 'Vent · Oiseaux · Nappes apaisantes');
     });
 
     test('scheduled start of a free user without network: « Pas de connexion » notification', () async {
@@ -557,7 +570,8 @@ void main() {
       h.native.requestLaunch();
       await settle();
       expect(model.playing, isTrue);
-      expect(h.handler.mediaItem.value?.artist, 'C’est l’heure de vous détendre');
+      expect(h.handler.mediaItem.value?.displayDescription, 'C’est l’heure de vous détendre');
+      expect(h.handler.mediaItem.value?.artist, 'Eau vive · Oiseaux · Vent · Piano doux');
     });
 
     test('a scheduled « dormir » start opens a night when tracking is on', () async {
@@ -1072,6 +1086,235 @@ void main() {
       expect(model.plan, Plan.free);
       await model.buy(PurchaseChoice.annual);
       expect(h.billing.calls, ['initialize', 'buy:annual']);
+    });
+  });
+
+  group('media card (lock screen, notification shade)', () {
+    MediaCardInfo card() => h.model.mediaCard.value!;
+    List<MediaAction> actions() => [for (final c in h.handler.playbackState.value.controls) c.action];
+
+    test('free plan: landscape, audible mix (mute included), neighbours of the theme', () async {
+      final model = await h.start();
+      expect(card().landscapeId, 'cascade-foret');
+      expect(card().title, 'Cascade en forêt');
+      expect(card().artist, 'Eau vive · Oiseaux · Vent · Piano doux');
+      expect(card().previousId, isNull);
+      expect(card().nextId, 'sous-bois');
+      expect(card().favorite, isFalse);
+      await model.play();
+      final item = h.handler.mediaItem.value!;
+      expect(item.title, 'Cascade en forêt');
+      expect(item.artist, 'Eau vive · Oiseaux · Vent · Piano doux');
+      expect(item.album, 'Eventide');
+      expect(item.duration, const Duration(hours: 1));
+      expect(actions(), [MediaAction.pause, MediaAction.skipToNext, MediaAction.custom, MediaAction.custom]);
+      expect(h.handler.playbackState.value.androidCompactActionIndices, [0, 1]);
+      model.setCategoryMuted(LayerKind.son, true);
+      await settle();
+      expect(h.handler.mediaItem.value!.artist, 'Piano doux');
+      model.setCategoryMuted(LayerKind.musique, true);
+      await settle();
+      expect(h.handler.mediaItem.value!.artist, 'Son en sourdine');
+    });
+
+    test('free plan at the edge of what it can use: next omitted, a next tap does nothing', () async {
+      final model = await h.start();
+      model.selectLandscape('sous-bois');
+      await model.play();
+      await settle();
+      expect(card().previousId, 'cascade-foret');
+      expect(card().nextId, isNull, reason: 'the other Nature landscapes are Premium');
+      expect(actions(), [MediaAction.skipToPrevious, MediaAction.pause, MediaAction.custom, MediaAction.custom]);
+      expect(h.handler.playbackState.value.androidCompactActionIndices, [1]);
+      await h.handler.skipToNext();
+      await settle(150);
+      expect(model.scene.landscapeId, 'sous-bois');
+      expect(model.browsedLandscapeId, 'sous-bois');
+    });
+
+    for (final demo in [false, true]) {
+      test('${demo ? 'demo build' : 'Premium'}: every landscape of the theme, no wrap', () async {
+        final model = await h.start(plan: demo ? null : Plan.annual, demo: demo);
+        model.selectLandscape('sous-bois');
+        await settle();
+        expect(card().previousId, 'cascade-foret');
+        expect(card().nextId, 'berge-mousseuse');
+        model.selectLandscape('lisiere-verte');
+        await model.play();
+        await settle();
+        expect(card().previousId, 'pierres-eau');
+        expect(card().nextId, isNull);
+        expect(actions(), [MediaAction.skipToPrevious, MediaAction.pause, MediaAction.custom, MediaAction.custom]);
+        expect(h.handler.playbackState.value.androidCompactActionIndices, [1]);
+        model.selectLandscape('pluie-ville');
+        await settle();
+        expect(card().previousId, isNull);
+        expect(card().nextId, 'cafe-nuit');
+        expect(actions(), [MediaAction.pause, MediaAction.skipToNext, MediaAction.custom, MediaAction.custom]);
+      });
+    }
+
+    test('next from the card: shown at once, the sound follows after the browse pause (home swipe path)', () async {
+      final model = await h.start();
+      await model.play();
+      await h.handler.skipToNext();
+      expect(model.browsedLandscapeId, 'sous-bois', reason: 'the home screen (and its video) follows');
+      expect(h.handler.mediaItem.value!.title, 'Sous-bois ensoleillé');
+      expect(h.handler.mediaItem.value!.artist, 'Vent · Oiseaux · Nappes apaisantes');
+      expect(model.scene.landscapeId, 'cascade-foret', reason: 'the sound waits for the browse pause');
+      expect(h.engine.activeKeys, contains('son:eau-vive'));
+      await settle(150);
+      expect(model.scene.landscapeId, 'sous-bois');
+      expect(h.engine.activeKeys, {'son:vent', 'son:oiseaux', 'musique:nappes-apaisantes'});
+      expect(h.engine.lastFade, MixRules.crossFade);
+      expect(h.engine.entryFades['musique:nappes-apaisantes'], MixRules.musicEntry);
+      expect(card().previousId, 'cascade-foret');
+      await h.handler.skipToPrevious();
+      await settle(150);
+      expect(model.scene.landscapeId, 'cascade-foret');
+      expect(model.playing, isTrue);
+    });
+
+    test('quick taps: the card moves at each tap, the sound loads only the last landscape', () async {
+      final model = await h.start(plan: Plan.annual);
+      await model.play();
+      await h.handler.skipToNext();
+      await h.handler.skipToNext();
+      expect(h.handler.mediaItem.value!.title, 'Berge mousseuse');
+      await settle(150);
+      expect(model.scene.landscapeId, 'berge-mousseuse');
+      expect(h.engine.calls.where((c) => c == 'update'), hasLength(1));
+    });
+
+    test('heart from the card: quiet toggle; at the free limit nothing happens', () async {
+      final model = await h.start();
+      await model.play();
+      h.events.clear();
+      await h.handler.customAction(MediaCardActions.favorite);
+      expect(model.favorites, hasLength(1));
+      expect(card().favorite, isTrue);
+      expect(h.handler.playbackState.value.controls[2].androidIcon, MediaCardIcons.favorite);
+      await h.handler.customAction(MediaCardActions.favorite);
+      expect(model.favorites, isEmpty);
+      expect(card().favorite, isFalse);
+      expect(await h.got<ToastEvent>(), isEmpty);
+      // Three favourites (the free limit) of other mixes, from the app.
+      for (final level in [10, 20, 30]) {
+        model.setLayerLevel(LayerKind.son, 'eau-vive', level);
+        await model.toggleFavorite();
+      }
+      model.setLayerLevel(LayerKind.son, 'eau-vive', 45);
+      await settle();
+      h.events.clear();
+      await h.handler.customAction(MediaCardActions.favorite);
+      expect(model.favorites, hasLength(3));
+      expect(model.isCurrentSceneFavorite, isFalse);
+      expect(card().favorite, isFalse);
+      expect(await h.got<OpenPremiumEvent>(), isEmpty, reason: 'the app shows Premium when opened');
+      expect(await h.got<ToastEvent>(), isEmpty);
+    });
+
+    test('heart during a pending next: for the landscape the card shows', () async {
+      final model = await h.start(plan: Plan.annual);
+      await model.play();
+      await h.handler.skipToNext();
+      await h.handler.customAction(MediaCardActions.favorite);
+      expect(model.scene.landscapeId, 'sous-bois');
+      expect(model.favorites.single.landscapeId, 'sous-bois');
+      expect(card().favorite, isTrue);
+    });
+
+    test('timer from the card: 1 h → 2 h → night → none → 15 min → 30 min → 1 h, counted from zero', () async {
+      final model = await h.start();
+      await model.play();
+      expect(model.scene.timer, const TimerDuration(60));
+      final seen = <(TimerSetting, Duration?, DateTime?)>[];
+      for (var i = 0; i < 6; i++) {
+        h.now = h.now.add(const Duration(minutes: 3));
+        await h.handler.customAction(MediaCardActions.timer);
+        seen.add((model.scene.timer, h.handler.mediaItem.value!.duration, model.timerEndsAt));
+        expect(h.handler.playbackState.value.updatePosition, Duration.zero);
+        expect(h.handler.playbackState.value.controls.last.label, mediaCardTimerLabel(model.scene.timer));
+      }
+      final t = h.now;
+      expect(seen.map((s) => s.$1), const [
+        TimerDuration(120),
+        TimerNight(),
+        TimerNone(),
+        TimerDuration(15),
+        TimerDuration(30),
+        TimerDuration(60),
+      ]);
+      expect(seen.map((s) => s.$2), const [
+        Duration(hours: 2),
+        Duration(hours: 10),
+        null,
+        Duration(minutes: 15),
+        Duration(minutes: 30),
+        Duration(hours: 1),
+      ]);
+      expect(seen.last.$3, t.add(const Duration(hours: 1)));
+      expect(seen[2].$3, isNull);
+    });
+
+    test('picture: card first without it, then the landscape picture; never made while silent', () async {
+      final files = MemoryArtworkFiles();
+      final renders = <(String, Moment)>[];
+      final slowAsset = Completer<void>();
+      final artwork = MediaArtwork(
+        files: files,
+        bundledAssets: () async => {'assets/landscapes/cascade-foret.jpg'},
+        loadAsset: (asset) async {
+          await slowAsset.future;
+          return Uint8List.fromList([1, 2, 3]);
+        },
+        downloadedPoster: (id) => '/content/images/paysages/$id.jpg',
+        render: ({required String style, required Moment moment, required int size}) async {
+          renders.add((style, moment));
+          return Uint8List.fromList([4, 5, 6]);
+        },
+      );
+      final model = await h.start(plan: Plan.annual, artwork: artwork);
+      model.setMoment(Moment.soir);
+      await settle();
+      expect(files.writes, isEmpty, reason: 'nothing plays: no card, no picture');
+      final items = <MediaItem>[];
+      final sub = h.handler.mediaItem.where((i) => i != null).cast<MediaItem>().listen(items.add);
+      await model.play();
+      await settle();
+      expect(model.playing, isTrue, reason: 'playback never waits for the picture');
+      expect(h.handler.mediaItem.value!.title, 'Cascade en forêt');
+      expect(h.handler.mediaItem.value!.artUri, isNull);
+      slowAsset.complete();
+      await settle();
+      expect(items.first.artUri, isNull);
+      final poster = items.last.artUri!;
+      expect(poster.scheme, 'file');
+      expect(poster.path, startsWith('/cache/media_art/cascade-foret-'));
+      expect(renders, isEmpty);
+      // A landscape without a poster: the procedural picture at the moment of the day.
+      model.selectLandscape('berge-mousseuse');
+      await settle();
+      expect(renders, [('berge', Moment.soir)]);
+      expect(h.handler.mediaItem.value!.artUri, Uri.file('/cache/media_art/berge-mousseuse-soir-v1.png'));
+      model.setMoment(Moment.nuit);
+      await settle();
+      expect(renders.last, ('berge', Moment.nuit));
+      expect(h.handler.mediaItem.value!.artUri, Uri.file('/cache/media_art/berge-mousseuse-nuit-v1.png'));
+      await sub.cancel();
+    });
+
+    test('pause and play from the card change the sound only', () async {
+      final model = await h.start();
+      await model.play();
+      model.setMoment(Moment.nuit);
+      final before = (model.browsedLandscapeId, model.scene);
+      await h.handler.click(); // card play/pause
+      expect(model.playing, isFalse);
+      await h.handler.click();
+      expect(model.playing, isTrue);
+      expect((model.browsedLandscapeId, model.scene), before);
+      expect(h.engine.calls, ['start', 'pause', 'resume']);
     });
   });
 

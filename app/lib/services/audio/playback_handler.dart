@@ -2,15 +2,24 @@
 // audio focus and the timer. The timer lives here, not in the UI, so it keeps running when the
 // app is closed (dossier § 6). Scheduled starts enter through click()/play(), fired by the
 // native alarm receiver (ScheduleAlarmReceiver.kt) with a MEDIA_PLAY key event.
+//
+// The system media card (lock screen, Always On Display, notification shade; docs/app/
+// architecture.md « Carte de lecture ») is drawn by Android from what this handler publishes:
+// the media item (landscape, audible mix, picture, timer length) and the playback state
+// (buttons, timer progress). What the card shows about the scene comes from the host
+// (PlaybackHost.mediaCard); its buttons go back to the host, which uses the app's own paths.
+// Play/pause only ever changes the sound: nothing here touches the landscape video.
 import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../core/media_card.dart';
 import '../../core/scene.dart';
 import '../native_bridge.dart';
 import 'audio_engine.dart';
 import 'audio_focus.dart';
+import 'media_card_controls.dart';
 
 /// What to play, prepared by the app (content already resolved).
 class PlayRequest {
@@ -29,7 +38,8 @@ class PlayRequest {
   /// Landscape name, shown in the media notification.
   final String title;
 
-  /// Reminder text for a scheduled start (« C’est l’heure d’aller dormir »), or null.
+  /// Reminder text for a scheduled start (« C’est l’heure d’aller dormir »), or null. Third
+  /// line of the media notification (Android 12 and older); the card's subtitle is the mix.
   final String? subtitle;
   final List<EngineLayer> layers;
   final TimerSetting timer;
@@ -88,6 +98,25 @@ abstract class PlaybackHost {
 
   /// [listened]: sound actually played since the start (pauses excluded).
   void onPlaybackStopped(StopReason reason, Duration listened);
+
+  // ---- System media card
+
+  /// What the card shows about the scene: landscape name, audible mix, favourite, previous
+  /// and next landscapes, picture. The handler republishes the media item and the buttons
+  /// whenever it changes.
+  ValueListenable<MediaCardInfo?> get mediaCard;
+
+  /// Previous (-1) or next (+1) landscape of the theme, from the card or a headset button:
+  /// the same path as a home swipe (the sound follows after the browse pause, with the
+  /// landscape's default mix; locked landscapes are skipped).
+  Future<void> skipLandscape(int direction);
+
+  /// Heart button of the card. At the free limit nothing happens (no message, heart left
+  /// empty): the app shows its Premium offer when it is opened.
+  Future<void> toggleFavoriteFromCard();
+
+  /// Timer button of the card: next step of [mediaCardTimerCycle], counted from zero.
+  Future<void> cycleTimerFromCard();
 }
 
 /// Prefix of the scheduled-start log lines (same tag as the Kotlin receiver; read by the CI
@@ -119,6 +148,13 @@ class PlaybackHandler extends BaseAudioHandler {
   late final StreamSubscription<void> _noisySub;
 
   final Completer<PlaybackHost> _hostCompleter = Completer<PlaybackHost>();
+  PlaybackHost? _host;
+
+  /// Last card info from the host (null before the app model is ready).
+  MediaCardInfo? _card;
+
+  /// Fields of the last media item sent (MediaItem compares ids only).
+  String? _mediaSignature;
   final ValueNotifier<PlaybackStatus> status = ValueNotifier(const PlaybackStatus());
   PlaybackStatus get _status => status.value;
 
@@ -140,7 +176,17 @@ class PlaybackHandler extends BaseAudioHandler {
   PlayRequest? get current => _current;
 
   void attachHost(PlaybackHost host) {
-    if (!_hostCompleter.isCompleted) _hostCompleter.complete(host);
+    if (_hostCompleter.isCompleted) return;
+    _host = host;
+    _hostCompleter.complete(host);
+    host.mediaCard.addListener(_onCard);
+    _onCard();
+  }
+
+  void _onCard() {
+    _card = _host?.mediaCard.value;
+    // Nothing on the system card while idle (browsing in the app without sound).
+    if (_current != null || _status.loading) _publish(_status);
   }
 
   set nightMaxHours(int hours) => _nightMaxHours = hours;
@@ -150,12 +196,19 @@ class PlaybackHandler extends BaseAudioHandler {
   void _publish(PlaybackStatus next) {
     status.value = next;
     final playing = next.playing || next.loading;
+    final current = _current;
+    // Heart and timer only with a loaded session (not while a system start is loading).
+    final buttons = mediaCardControls(
+      playing: playing,
+      card: current == null ? null : _card,
+      timer: current?.timer,
+    );
+    final progress = _progress();
+    _publishMedia();
     playbackState.add(PlaybackState(
-      controls: [
-        if (playing) MediaControl.pause else MediaControl.play,
-        MediaControl.stop,
-      ],
-      androidCompactActionIndices: const [0, 1],
+      controls: buttons.controls,
+      androidCompactActionIndices: buttons.compactIndices,
+      // No seek: the progress bar is the timer, for information only.
       systemActions: const {},
       processingState: next.loading
           ? AudioProcessingState.loading
@@ -163,16 +216,64 @@ class PlaybackHandler extends BaseAudioHandler {
               ? AudioProcessingState.ready
               : AudioProcessingState.idle,
       playing: playing,
+      // The system moves the bar itself from this point (speed 1 while the timer counts).
+      updatePosition: progress.position,
+      speed: progress.counting ? 1.0 : 0.0,
+      updateTime: _now(),
     ));
   }
 
-  void _publishMedia(PlayRequest request) {
-    mediaItem.add(MediaItem(
-      id: request.landscapeId,
-      title: request.title,
-      artist: request.subtitle,
-      album: 'Eventide',
-    ));
+  /// Media item of the loaded session: landscape name, audible mix, picture, and the timer
+  /// length as duration (no duration, hence no progress bar, without a timer). Sent only
+  /// when one of its fields changed.
+  void _publishMedia() {
+    final current = _current;
+    if (current == null) return;
+    final card = _card;
+    final title = card?.title ?? current.title;
+    final artist = card?.artist;
+    final reminder = current.subtitle;
+    final item = MediaItem(
+      id: card?.landscapeId ?? current.landscapeId,
+      title: title,
+      artist: artist,
+      album: mediaCardAlbum,
+      duration: _timerDuration(current.timer),
+      artUri: card?.artUri,
+      // Reminder of a scheduled start: third line of the notification (Android 12 and older).
+      displayTitle: reminder == null ? null : title,
+      displaySubtitle: reminder == null ? null : artist,
+      displayDescription: reminder,
+    );
+    final signature = item.toString();
+    if (signature == _mediaSignature) return;
+    _mediaSignature = signature;
+    mediaItem.add(item);
+  }
+
+  /// Position of the progress bar: time elapsed since the timer (re)started; full during the
+  /// end-of-timer fade. [counting]: the countdown runs (the system then advances the bar).
+  ({Duration position, bool counting}) _progress() {
+    final current = _current;
+    final total = current == null ? null : _timerDuration(current.timer);
+    if (total == null) return (position: Duration.zero, counting: false);
+    if (_ending != null) return (position: total, counting: false);
+    final remaining = _remainingNow();
+    if (remaining == null) return (position: Duration.zero, counting: false);
+    var elapsed = total - remaining;
+    if (elapsed.isNegative) elapsed = Duration.zero;
+    if (elapsed > total) elapsed = total;
+    return (position: elapsed, counting: _timer != null && _status.playing);
+  }
+
+  /// Time left on the countdown now: frozen during a pause, null before it is armed.
+  Duration? _remainingNow() {
+    final remaining = _timerRemaining;
+    final started = _timerStartedAt;
+    if (remaining == null) return null;
+    if (_timer == null || started == null) return remaining;
+    final left = remaining - _now().difference(started);
+    return left.isNegative ? Duration.zero : left;
   }
 
   // ---- Listening time (sleep tracking)
@@ -238,6 +339,8 @@ class PlaybackHandler extends BaseAudioHandler {
     if (_ending != null) return;
     final ending = _ending = Completer<void>();
     final reason = _timerIsNightLimit ? StopReason.nightLimit : StopReason.timer;
+    // The bar stays full during the fade.
+    _publish(_status);
     try {
       // Fade of 30 s, then a full stop; the screen is not woken up (nothing to do here for that).
       await _engine.fadeOutAndStop(MixRules.timerFadeOut);
@@ -299,7 +402,6 @@ class PlaybackHandler extends BaseAudioHandler {
     final newSession = _current == null;
     if (!wasPlaying && !await _focus.activate()) return false;
     _current = request;
-    _publishMedia(request);
     _publish(_copyStatus(playing: true, paused: false, loading: false, timerEndsAt: _endsAt()));
     try {
       await _engine.start(request.layers, rampUp: request.rampUp);
@@ -339,7 +441,7 @@ class PlaybackHandler extends BaseAudioHandler {
       rampUp: _current!.rampUp,
       scheduleId: _current?.scheduleId,
     );
-    _publishMedia(_current!);
+    _publishMedia();
     if (request.layers.isEmpty) {
       await stop();
       return;
@@ -351,7 +453,8 @@ class PlaybackHandler extends BaseAudioHandler {
   /// Shows a loading state (the notification appears at once, which also satisfies Android's
   /// foreground-service deadline while content is being prepared).
   void markLoading(String title, {String? subtitle, String? landscapeId}) {
-    mediaItem.add(MediaItem(id: landscapeId ?? 'eventide', title: title, artist: subtitle, album: 'Eventide'));
+    _mediaSignature = null;
+    mediaItem.add(MediaItem(id: landscapeId ?? 'eventide', title: title, artist: subtitle, album: mediaCardAlbum));
     _publish(_copyStatus(loading: true, timerEndsAt: _endsAt()));
   }
 
@@ -449,6 +552,44 @@ class PlaybackHandler extends BaseAudioHandler {
     if (!_status.playing) await stop();
   }
 
+  /// The paused card swiped away (while playing, the foreground service keeps it on screen):
+  /// end of the session, as with the app's stop.
+  @override
+  Future<void> onNotificationDeleted() => stop();
+
+  // ---- System media card buttons
+
+  @override
+  Future<void> skipToNext() => _skipLandscape(1);
+
+  @override
+  Future<void> skipToPrevious() => _skipLandscape(-1);
+
+  Future<void> _skipLandscape(int direction) async {
+    final host = _host;
+    // Only for a loaded session: a headset button while idle does nothing.
+    if (host == null || _current == null) return;
+    await host.skipLandscape(direction);
+  }
+
+  @override
+  Future<dynamic> customAction(String name, [Map<String, dynamic>? extras]) async {
+    final host = _host;
+    if (host == null || _current == null) return null;
+    switch (name) {
+      case MediaCardActions.favorite:
+        await host.toggleFavoriteFromCard();
+      case MediaCardActions.timer:
+        await host.cycleTimerFromCard();
+    }
+    return null;
+  }
+
+  /// The progress bar is the timer: it cannot be dragged (no seek action is offered, and a
+  /// seek request from elsewhere is ignored).
+  @override
+  Future<void> seek(Duration position) async {}
+
   Future<void> _finish(StopReason reason) async {
     _timer?.cancel();
     _timer = null;
@@ -457,6 +598,7 @@ class PlaybackHandler extends BaseAudioHandler {
     final listened = _listened;
     final hadSession = _current != null;
     _current = null;
+    _mediaSignature = null;
     _pausedByInterruption = false;
     _publish(const PlaybackStatus());
     await _focus.deactivate();
@@ -490,6 +632,7 @@ class PlaybackHandler extends BaseAudioHandler {
   }
 
   Future<void> dispose() async {
+    _host?.mediaCard.removeListener(_onCard);
     await _focusSub.cancel();
     await _noisySub.cancel();
     _timer?.cancel();

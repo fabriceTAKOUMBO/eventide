@@ -18,6 +18,7 @@ import '../services/account_service.dart';
 import '../services/ads_service.dart';
 import '../services/api_client.dart';
 import '../services/audio/audio_focus.dart';
+import '../services/audio/media_artwork.dart';
 import '../services/audio/playback_handler.dart';
 import '../services/audio/soloud_audio_engine.dart';
 import '../services/billing_service.dart';
@@ -28,11 +29,18 @@ import '../services/native_bridge.dart';
 import '../services/permissions_service.dart';
 import '../services/storage.dart';
 import '../services/voice/speech_recognizer.dart';
+import '../ui/landscape/landscape_artwork.dart';
 import 'app_controller.dart';
 import 'demo_mode.dart';
 import 'env.dart';
 
 /// Registers the handler with audio_service (media notification, background playback).
+///
+/// The media card (docs/app/architecture.md « Carte de lecture »): the foreground service runs
+/// while the sound plays, so the card cannot be swiped away then; on pause the service leaves
+/// the foreground (androidStopForegroundOnPause) and the card can be dismissed, which stops the
+/// session (PlaybackHandler.onNotificationDeleted). Lock screen visibility is public (set by
+/// audio_service on its MediaStyle notification, which carries the session token).
 Future<PlaybackHandler> initPlayback(NativeBridge native) async {
   PlaybackHandler build() => PlaybackHandler(
         engine: SoLoudAudioEngine(),
@@ -43,11 +51,18 @@ Future<PlaybackHandler> initPlayback(NativeBridge native) async {
     return await AudioService.init<PlaybackHandler>(
       builder: build,
       config: const AudioServiceConfig(
+        // Same channel id as before: Android keeps the channel (and the user's choices for it)
+        // created by an earlier version, with its earlier name.
         androidNotificationChannelId: 'be.cinaf.eventide.playback',
         androidNotificationChannelName: 'Lecture',
-        androidNotificationChannelDescription: 'Commandes de lecture des sons',
+        androidNotificationChannelDescription:
+            'Carte de lecture sur l’écran verrouillé et dans les notifications : paysage, '
+            'minuteur et commandes du son',
         androidNotificationIcon: 'drawable/ic_notification',
+        // Opaque accent: some Android 12 and older devices draw the progress bar badly without.
+        notificationColor: Color(0xFF2A3A2C),
         androidStopForegroundOnPause: true,
+        androidNotificationOngoing: false,
         androidNotificationClickStartsActivity: true,
         androidShowNotificationBadge: false,
       ),
@@ -119,14 +134,27 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
     cloudProjectNumber: Env.playCloudProjectNumber,
   );
   final connectivity = HttpConnectivityChecker(client: client, apiBaseUrl: Env.apiBaseUrl, native: native);
+  final bundled = _bundledAssets();
   final content = ContentRepository(
     directory: Directory('${support.path}/content'),
     client: client,
     api: api,
-    bundledAssets: _bundledAssets,
+    bundledAssets: () => bundled,
     connectivity: connectivity,
     devBaseUrl: Env.devContentBaseUrl,
     remoteMedia: _remoteLandscapeMedia,
+  );
+  // Pictures of the media card, kept in the app's cache folder (made again if Android empties it).
+  final cache = await getTemporaryDirectory();
+  final artwork = MediaArtwork(
+    files: IoArtworkFiles(Directory('${cache.path}/media_art')),
+    bundledAssets: () => bundled,
+    loadAsset: (asset) async {
+      final data = await rootBundle.load(asset);
+      return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    },
+    downloadedPoster: (id) => content.cachedPath(LandscapeMediaKeys.image(id)),
+    render: renderLandscapeArtwork,
   );
   late final RealAppModel model;
   final Billing billing = demo
@@ -155,6 +183,7 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
     permissions: PlatformPermissions(native),
     urls: PlatformUrlOpener(),
     config: AppConfig(shareHost: Env.shareHost, forcedPlan: Env.debugForcePlan, demo: demo),
+    artwork: artwork,
   );
   await model.init();
   return model;

@@ -1,10 +1,15 @@
+import 'dart:async';
+
 import 'package:audio_service/audio_service.dart';
+import 'package:eventide/core/media_card.dart';
 import 'package:eventide/core/scene.dart';
 import 'package:eventide/services/audio/audio_engine.dart';
 import 'package:eventide/services/audio/audio_focus.dart';
 import 'package:eventide/services/audio/fake_audio_engine.dart';
+import 'package:eventide/services/audio/media_card_controls.dart';
 import 'package:eventide/services/audio/playback_handler.dart';
 import 'package:fake_async/fake_async.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
@@ -14,6 +19,8 @@ class _Host implements PlaybackHost {
   final List<String?> requested = [];
   final List<(StopReason, Duration)> stops = [];
   final List<PlayRequest> started = [];
+  final List<String> cardCommands = [];
+  final ValueNotifier<MediaCardInfo?> card = ValueNotifier(null);
 
   @override
   Future<PlayRequest?> requestPlay({String? scheduleId}) async {
@@ -26,6 +33,18 @@ class _Host implements PlaybackHost {
 
   @override
   void onPlaybackStopped(StopReason reason, Duration listened) => stops.add((reason, listened));
+
+  @override
+  ValueListenable<MediaCardInfo?> get mediaCard => card;
+
+  @override
+  Future<void> skipLandscape(int direction) async => cardCommands.add('skip:$direction');
+
+  @override
+  Future<void> toggleFavoriteFromCard() async => cardCommands.add('favorite');
+
+  @override
+  Future<void> cycleTimerFromCard() async => cardCommands.add('timer');
 }
 
 /// No audio device (headless emulator, broken audio HAL): the engine cannot start.
@@ -40,6 +59,18 @@ class _NoDeviceEngine extends FakeAudioEngine {
   }) async {
     attempts++;
     throw StateError('audio device unavailable');
+  }
+}
+
+/// The end-of-timer fade lasts until the test completes it.
+class _SlowFadeEngine extends FakeAudioEngine {
+  final Completer<void> fade = Completer<void>();
+
+  @override
+  Future<void> fadeOutAndStop(Duration duration) async {
+    calls.add('fadeOut:${duration.inSeconds}');
+    await fade.future;
+    layers = const [];
   }
 }
 
@@ -200,7 +231,8 @@ void main() {
       async.flushMicrotasks();
       expect(host.requested, ['sched-1']);
       expect(engine.lastRampUp, const Duration(minutes: 10));
-      expect(handler.mediaItem.value?.artist, 'C’est l’heure d’aller dormir');
+      // The reminder is the notification's third line (the card's subtitle is the mix).
+      expect(handler.mediaItem.value?.displayDescription, 'C’est l’heure d’aller dormir');
       expect(handler.status.value.scheduleId, 'sched-1');
     });
   });
@@ -313,6 +345,255 @@ void main() {
       expect(host.stops.single.$1, StopReason.user);
     });
   });
+  group('media card (lock screen, notification shade)', () {
+    const card = MediaCardInfo(
+      landscapeId: 'cascade-foret',
+      title: 'Cascade en forêt',
+      artist: 'Eau vive · Oiseaux · Piano doux',
+      nextId: 'sous-bois',
+    );
+
+    List<MediaAction> actions(PlaybackHandler handler) =>
+        [for (final c in handler.playbackState.value.controls) c.action];
+
+    test('media item: landscape, audible mix, album, timer length as duration', () {
+      fakeAsync((async) {
+        final handler = build(async, t0);
+        host.card.value = card;
+        handler.start(_request(timer: const TimerDuration(30)));
+        async.flushMicrotasks();
+        final item = handler.mediaItem.value!;
+        expect(item.id, 'cascade-foret');
+        expect(item.title, 'Cascade en forêt');
+        expect(item.artist, 'Eau vive · Oiseaux · Piano doux');
+        expect(item.album, 'Eventide');
+        expect(item.duration, const Duration(minutes: 30));
+        expect(item.artUri, isNull);
+        expect(item.displayDescription, isNull);
+      });
+    });
+
+    test('« Toute la nuit »: duration = nuit_max_heures; « Sans minuteur »: no duration (no bar)', () {
+      fakeAsync((async) {
+        final handler = build(async, t0);
+        host.card.value = card;
+        handler.start(_request(timer: const TimerNight()));
+        async.flushMicrotasks();
+        expect(handler.mediaItem.value!.duration, const Duration(hours: 10));
+        handler.setTimer(const TimerNone());
+        expect(handler.mediaItem.value!.duration, isNull);
+        expect(handler.playbackState.value.updatePosition, Duration.zero);
+        expect(handler.playbackState.value.speed, 0);
+        handler.setTimer(const TimerDuration(15));
+        expect(handler.mediaItem.value!.duration, const Duration(minutes: 15));
+      });
+    });
+
+    test('progress = time since the timer (re)started; frozen while paused; restarts at 0 on a change', () {
+      fakeAsync((async) {
+        final handler = build(async, t0);
+        host.card.value = card;
+        handler.start(_request(timer: const TimerDuration(60)));
+        async.flushMicrotasks();
+        var state = handler.playbackState.value;
+        expect(state.updatePosition, Duration.zero);
+        expect(state.speed, 1.0);
+        expect(state.updateTime, t0);
+        async.elapse(const Duration(minutes: 10));
+        handler.pause();
+        async.flushMicrotasks();
+        state = handler.playbackState.value;
+        expect(state.playing, isFalse);
+        expect(state.updatePosition, const Duration(minutes: 10));
+        expect(state.speed, 0);
+        async.elapse(const Duration(hours: 2)); // paused: the timer does not count
+        handler.play();
+        async.flushMicrotasks();
+        state = handler.playbackState.value;
+        expect(state.playing, isTrue);
+        expect(state.updatePosition, const Duration(minutes: 10));
+        expect(state.speed, 1.0);
+        expect(state.updateTime, t0.add(const Duration(hours: 2, minutes: 10)));
+        async.elapse(const Duration(minutes: 5));
+        handler.setTimer(const TimerDuration(30));
+        state = handler.playbackState.value;
+        expect(state.updatePosition, Duration.zero);
+        expect(handler.mediaItem.value!.duration, const Duration(minutes: 30));
+        // A mix change while counting keeps the position.
+        async.elapse(const Duration(minutes: 7));
+        handler.updateLayers(_request(timer: const TimerDuration(30)));
+        async.flushMicrotasks();
+        expect(handler.playbackState.value.updatePosition, const Duration(minutes: 7));
+      });
+    });
+
+    test('a timer changed while paused restarts from 0 and waits for the resume', () {
+      fakeAsync((async) {
+        final handler = build(async, t0);
+        handler.start(_request(timer: const TimerDuration(60)));
+        async.flushMicrotasks();
+        async.elapse(const Duration(minutes: 20));
+        handler.pause();
+        async.flushMicrotasks();
+        handler.setTimer(const TimerDuration(120));
+        expect(handler.playbackState.value.updatePosition, Duration.zero);
+        expect(handler.playbackState.value.speed, 0);
+        expect(handler.mediaItem.value!.duration, const Duration(hours: 2));
+      });
+    });
+
+    test('end-of-timer fade: the bar stays full', () {
+      fakeAsync((async) {
+        final engine = _SlowFadeEngine();
+        final handler = PlaybackHandler(engine: engine, focus: FakeFocus(), native: FakeNativeBridge(), now: () => t0.add(async.elapsed))
+          ..attachHost(_Host());
+        handler.start(_request(timer: const TimerDuration(15)));
+        async.flushMicrotasks();
+        async.elapse(const Duration(minutes: 15));
+        expect(handler.status.value.playing, isTrue); // fading out
+        expect(handler.playbackState.value.updatePosition, const Duration(minutes: 15));
+        expect(handler.playbackState.value.speed, 0);
+        engine.fade.complete();
+        async.flushMicrotasks();
+        expect(handler.status.value.playing, isFalse);
+      });
+    });
+
+    test('no seek: no seek system action, and a seek request changes nothing', () {
+      fakeAsync((async) {
+        final handler = build(async, t0);
+        host.card.value = card;
+        handler.start(_request(timer: const TimerDuration(60)));
+        async.flushMicrotasks();
+        expect(handler.playbackState.value.systemActions, isEmpty);
+        expect(actions(handler), isNot(contains(MediaAction.seek)));
+        async.elapse(const Duration(minutes: 3));
+        handler.seek(const Duration(minutes: 50));
+        async.flushMicrotasks();
+        expect(handler.status.value.timerEndsAt, t0.add(const Duration(minutes: 60)));
+        expect(engine.calls, ['start']);
+      });
+    });
+
+    test('buttons follow the card: neighbours, heart, timer; compact = play/pause + next', () {
+      fakeAsync((async) {
+        final handler = build(async, t0);
+        host.card.value = card;
+        handler.start(_request(timer: const TimerDuration(30)));
+        async.flushMicrotasks();
+        expect(actions(handler), [MediaAction.pause, MediaAction.skipToNext, MediaAction.custom, MediaAction.custom]);
+        expect(handler.playbackState.value.androidCompactActionIndices, [0, 1]);
+        final heart = handler.playbackState.value.controls[2];
+        expect(heart.androidIcon, MediaCardIcons.favoriteBorder);
+        expect(handler.playbackState.value.controls[3].androidIcon, MediaCardIcons.timer30);
+
+        host.card.value = const MediaCardInfo(
+          landscapeId: 'sous-bois',
+          title: 'Sous-bois ensoleillé',
+          artist: 'Vent',
+          previousId: 'cascade-foret',
+          favorite: true,
+        );
+        expect(actions(handler), [MediaAction.skipToPrevious, MediaAction.pause, MediaAction.custom, MediaAction.custom]);
+        expect(handler.playbackState.value.androidCompactActionIndices, [1]);
+        expect(handler.playbackState.value.controls[2].androidIcon, MediaCardIcons.favorite);
+        expect(handler.playbackState.value.controls[2].label, 'Retirer des favoris');
+        // The card shows the landscape the sound is about to follow.
+        expect(handler.mediaItem.value!.title, 'Sous-bois ensoleillé');
+        expect(handler.mediaItem.value!.id, 'sous-bois');
+
+        handler.pause();
+        async.flushMicrotasks();
+        expect(actions(handler)[1], MediaAction.play);
+      });
+    });
+
+    test('picture added later: the media item is sent again, unchanged items are not', () {
+      fakeAsync((async) {
+        final handler = build(async, t0);
+        final items = <MediaItem?>[];
+        final sub = handler.mediaItem.listen(items.add);
+        host.card.value = card;
+        handler.start(_request());
+        async.flushMicrotasks();
+        final before = items.length;
+        expect(items.last!.artUri, isNull);
+        handler.pause();
+        handler.play();
+        async.flushMicrotasks();
+        expect(items, hasLength(before), reason: 'nothing changed in the media item');
+        final art = Uri.file('/cache/media_art/cascade-foret-0123456789ab.jpg');
+        host.card.value = card.withArt(art);
+        async.flushMicrotasks();
+        expect(items, hasLength(before + 1));
+        expect(items.last!.artUri, art);
+        expect(items.last!.title, 'Cascade en forêt');
+        sub.cancel();
+      });
+    });
+
+    test('loading (system start, nothing loaded yet): play/pause only, no heart or timer', () {
+      fakeAsync((async) {
+        final handler = build(async, t0);
+        host.card.value = card;
+        host.next = null;
+        handler.markLoading('Eventide');
+        expect(actions(handler), [MediaAction.pause]);
+        expect(handler.mediaItem.value!.title, 'Eventide');
+      });
+    });
+
+    test('card buttons go to the host: previous/next, heart, timer; headset next too', () {
+      fakeAsync((async) {
+        final handler = build(async, t0);
+        host.card.value = card;
+        handler.start(_request());
+        async.flushMicrotasks();
+        handler.skipToNext();
+        handler.skipToPrevious();
+        handler.customAction(MediaCardActions.favorite);
+        handler.customAction(MediaCardActions.timer);
+        handler.customAction('unknown');
+        handler.click(MediaButton.next);
+        async.flushMicrotasks();
+        expect(host.cardCommands, ['skip:1', 'skip:-1', 'favorite', 'timer', 'skip:1']);
+        // None of them touches the sound.
+        expect(engine.calls, ['start']);
+        expect(handler.status.value.playing, isTrue);
+      });
+    });
+
+    test('without a loaded session the card buttons do nothing', () {
+      fakeAsync((async) {
+        final handler = build(async, t0);
+        host.card.value = card;
+        handler.skipToNext();
+        handler.customAction(MediaCardActions.favorite);
+        handler.click(MediaButton.previous);
+        async.flushMicrotasks();
+        expect(host.cardCommands, isEmpty);
+      });
+    });
+
+    test('pause from the card changes the sound only; the paused card swiped away stops', () {
+      fakeAsync((async) {
+        final handler = build(async, t0);
+        host.card.value = card;
+        handler.start(_request());
+        async.flushMicrotasks();
+        handler.click(); // play/pause button of the card (or headset)
+        async.flushMicrotasks();
+        expect(engine.calls, ['start', 'pause']);
+        expect(host.cardCommands, isEmpty);
+        expect(handler.mediaItem.value!.id, 'cascade-foret');
+        handler.onNotificationDeleted();
+        async.flushMicrotasks();
+        expect(host.stops.single.$1, StopReason.user);
+        expect(handler.playbackState.value.processingState, AudioProcessingState.idle);
+      });
+    });
+  });
+
   test('no audio device: start fails cleanly, back to idle, a retry is possible', () {
     fakeAsync((async) {
       final failing = _NoDeviceEngine();

@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- audio_service looks the notification icon up by name at runtime: keep it from resource shrinking. -->
+<!-- audio_service looks icons up by name at runtime (getIdentifier): keep them from resource
+     shrinking. ic_notification: status bar icon; ic_media_*: the media card's custom actions
+     (favourite and timer buttons, lib/services/audio/media_card_controls.dart). -->
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@drawable/ic_notification" />
+    tools:keep="@drawable/ic_notification,@drawable/ic_media_*" />
