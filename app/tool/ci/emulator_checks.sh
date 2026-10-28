@@ -25,6 +25,18 @@ export PATH="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/pl
 summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
 
 log() { echo "[emulator-checks $(date -u +%H:%M:%S)] $*"; }
+# Every adb call is bounded: an emulator that dies must fail the job, not leave
+# `adb` waiting for the device until the workflow timeout (seen on 28 Oct 2026: 60 min hang).
+adb() { timeout "${ADB_TIMEOUT:-120}" command adb "$@"; }
+device_alive() { [[ "$(timeout 20 command adb get-state 2>/dev/null | tr -d '\r')" == "device" ]]; }
+# Host-side clues when the emulator disappears (memory pressure, emulator crash).
+host_diagnostics() {
+  log "host diagnostics ($1)"
+  free -m || true
+  ps -eo pid,rss,comm --sort=-rss | head -n 8 || true
+  (sudo -n dmesg -T 2>/dev/null || dmesg -T 2>/dev/null || true) | grep -iE 'out of memory|killed process|oom' | tail -n 10 || true
+  ls -la /tmp/android-runner 2>/dev/null | tail -n 5 || true
+}
 annotate() { [[ -n "${GITHUB_ACTIONS:-}" ]] && echo "::$1 title=Emulator API ${api:-?}::$2"; return 0; }
 shot() { adb exec-out screencap -p >"$out/$1.png" 2>/dev/null || log "screenshot $1 failed"; }
 device_ms() { echo $(( $(adb shell date +%s | tr -d '\r') * 1000 )); }
@@ -102,6 +114,8 @@ stage_a() {
   fi
   if [[ -n "$crashes" ]]; then
     echo "$crashes" | head -n 60
+    # Full first stack trace with its causes in the job log (artifacts may not be reachable).
+    grep -m 1 -A 60 'FATAL EXCEPTION' "$out/a-logcat.txt" | grep -E 'FATAL|Process:|Exception|Error|Caused by|at ' | head -n 40 || true
     annotate error "A: crash, ANR or Dart error in logcat (see a-logcat.txt): $(echo "$crashes" | head -n 1)"
     ok=1
   fi
@@ -138,7 +152,12 @@ stage_b() {
   local granter=$!
   adb logcat -c
   local code=0
+  # Reuse the APK built before the emulator started: no Gradle build (and no 3 GB daemon)
+  # competing with the emulator for memory while the test runs.
+  local prebuilt=()
+  if [[ -f "$debug_apk" ]]; then prebuilt=(--use-application-binary "$debug_apk"); fi
   timeout 1200 flutter drive -d "$serial" \
+    "${prebuilt[@]}" \
     --driver=test_driver/integration_test.dart \
     --target=integration_test/demo_flow_test.dart \
     --dart-define=DEMO_MODE=true \
@@ -148,6 +167,12 @@ stage_b() {
   code=${PIPESTATUS[0]}
   kill "$granter" 2>/dev/null || true
   wait "$granter" 2>/dev/null || true
+  if ! device_alive; then
+    host_diagnostics "device lost during stage B"
+    annotate error "B: the emulator disconnected during the integration test (see host diagnostics in the job log)"
+    echo "| B. Integration test (debug demo) | **FAIL** | emulator lost |" >>"$out/rows.md"
+    return 1
+  fi
   shot b-after-flow
   adb logcat -d -v brief >"$out/b-logcat.txt"
   grep -o 'EVENTIDE_IT .*' "$out/b-logcat.txt" | sed 's/\r$//' >"$out/b-report.txt" || true
@@ -173,6 +198,13 @@ stage_b() {
 # C. Scheduled start (app in background)
 # ---------------------------------------------------------------------------------------------
 stage_c() {
+  if ! device_alive; then
+    log "C. skipped: no device"
+    echo fail >"$out/scheduled-start.status"
+    echo "emulator unavailable, scheduled start not tested" >"$out/scheduled-start.txt"
+    echo "| C. Scheduled start (background) | **SKIPPED** | emulator unavailable |" >>"$out/rows.md"
+    return 0
+  fi
   log "C. scheduled start"
   local result="$out/scheduled-start.txt"
   : >"$result"
