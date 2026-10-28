@@ -182,6 +182,22 @@ void main() {
           await settle(tester);
           expect(await result, isFalse);
         }
+        // Permanently denied: the dialog sends to Android's settings instead.
+        for (final kind in const [
+          PermissionKind.microphone,
+          PermissionKind.notifications,
+        ]) {
+          final model3 = FakeAppModel(deniedForever: {kind});
+          final result = explainAndRequestPermission(context, model3, kind);
+          await settle(tester);
+          expect(tester.takeException(), isNull, reason: '${kind.name} denied');
+          expect(find.text('Continuer'), findsNothing);
+          await tester.ensureVisible(find.text('Ouvrir les réglages'));
+          await tester.tap(find.text('Ouvrir les réglages'));
+          await settle(tester);
+          expect(await result, isFalse);
+          expect(model3.calls, ['openAppSettings']);
+        }
         await tearDownApp(tester);
       });
     });

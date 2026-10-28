@@ -237,6 +237,17 @@ abstract class AppModel extends ChangeNotifier {
   bool permissionGranted(PermissionKind kind);
   Future<bool> requestPermission(PermissionKind kind);
 
+  /// Refused with « Ne plus demander » (or refused twice): asking again would show nothing,
+  /// only Android's app settings can grant it now (the UI then offers [openAppSettings]).
+  /// Always false for [PermissionKind.exactAlarm], whose request opens a settings screen.
+  bool permissionPermanentlyDenied(PermissionKind kind);
+
+  // ---- One-time hints (persisted on the phone: shown once per install)
+  bool hintSeen(String id);
+
+  /// Records that the hint [id] was shown. Does not notify listeners (safe during a build).
+  Future<void> markHintSeen(String id);
+
   // ---- Sleep
   Future<void> setSleepTracking(bool enabled);
 
@@ -290,8 +301,17 @@ abstract class AppModel extends ChangeNotifier {
   /// (guide against vendor background killers, screen 9).
   Future<void> openBatteryGuide() async {}
 
-  /// Google's ad privacy options form (« Consentement publicitaire »), free plan only.
+  /// Google's ad privacy options form (« Choix publicitaires »), free plan only.
   Future<void> openAdPrivacyOptions() async {}
+
+  /// This app's page in Android settings, to grant a permanently denied permission.
+  Future<void> openAppSettings() async {}
+
+  /// Google Play's subscriptions page for Eventide (change or cancel the plan).
+  Future<void> openManageSubscription() async {}
+
+  /// The full privacy policy online (`https://<SHARE_HOST>/confidentialite`).
+  Future<void> openPrivacyPolicy() async {}
 
   /// Price of the assistant credits pack from Google Play (lifetime plan), when known.
   String? get creditsPrice => null;

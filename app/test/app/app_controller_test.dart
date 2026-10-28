@@ -39,12 +39,17 @@ class Harness {
   final links = FakeLinks();
   final share = FakeShare();
   final permissions = FakePermissions();
+  final urls = FakeUrlOpener();
   final events = <AppEvent>[];
   DateTime now = DateTime(2026, 10, 28, 21);
   late PlaybackHandler handler;
   late RealAppModel model;
 
-  Future<RealAppModel> start({Plan? plan, Future<http.Response> Function(http.Request)? backend}) async {
+  Future<RealAppModel> start({
+    Plan? plan,
+    Future<http.Response> Function(http.Request)? backend,
+    String shareHost = 'eventide.app',
+  }) async {
     handler = PlaybackHandler(engine: engine, focus: focus, native: native, now: () => now);
     final client = MockClient(backend ?? (request) async => http.Response('', 500));
     final api = ApiClient(
@@ -77,7 +82,8 @@ class Harness {
       links: links,
       share: share,
       permissions: permissions,
-      config: AppConfig(forcedPlan: plan, browseDebounce: const Duration(milliseconds: 60)),
+      urls: urls,
+      config: AppConfig(shareHost: shareHost, forcedPlan: plan, browseDebounce: const Duration(milliseconds: 60)),
       now: () => now,
       random: Random(7),
     );
@@ -637,6 +643,89 @@ void main() {
       final model = await h.start();
       await model.signInWithGoogle();
       expect(model.signedIn, isTrue);
+    });
+  });
+
+  group('hints, permissions and outgoing pages', () {
+    test('a hint stays seen after a restart, until the data is deleted', () async {
+      final model = await h.start();
+      expect(model.hintSeen('home_swipe'), isFalse);
+      await model.markHintSeen('home_swipe');
+      expect(model.hintSeen('home_swipe'), isTrue);
+      expect(jsonDecode(h.store.files[StoreKeys.appState]!)['data']['hints_seen'], ['home_swipe']);
+      model.dispose();
+      final store = h.store;
+      h = Harness()..store = store;
+      final again = await h.start();
+      expect(again.hintSeen('home_swipe'), isTrue);
+      expect(again.hintSeen('other'), isFalse);
+      await again.deleteAccountData();
+      expect(again.hintSeen('home_swipe'), isFalse);
+    });
+
+    test('permanently denied: known at launch, after a request, and cleared from the settings', () async {
+      h.permissions.granted[PermissionKind.microphone] = false;
+      h.permissions.granted[PermissionKind.notifications] = false;
+      h.permissions.deniedForever.add(PermissionKind.microphone);
+      final model = await h.start();
+      expect(model.permissionPermanentlyDenied(PermissionKind.microphone), isTrue);
+      expect(model.permissionPermanentlyDenied(PermissionKind.notifications), isFalse);
+      expect(model.permissionPermanentlyDenied(PermissionKind.exactAlarm), isFalse);
+
+      // Refused with « Ne plus demander » now.
+      h.permissions.deniedForever.add(PermissionKind.notifications);
+      expect(await model.requestPermission(PermissionKind.notifications), isFalse);
+      expect(model.permissionPermanentlyDenied(PermissionKind.notifications), isTrue);
+
+      await model.openAppSettings();
+      expect(h.permissions.settingsOpened, 1);
+
+      // Granted in Android's settings: read again when the app comes back.
+      model.handleLifecycle(AppLifecycleState.resumed);
+      await settle();
+      model.handleLifecycle(AppLifecycleState.paused);
+      h.permissions.granted[PermissionKind.microphone] = true;
+      h.permissions.deniedForever.remove(PermissionKind.microphone);
+      model.handleLifecycle(AppLifecycleState.resumed);
+      await settle();
+      expect(model.permissionGranted(PermissionKind.microphone), isTrue);
+      expect(model.permissionPermanentlyDenied(PermissionKind.microphone), isFalse);
+      expect(model.permissionPermanentlyDenied(PermissionKind.notifications), isTrue);
+    });
+
+    test('Google Play subscriptions and the privacy policy open outside the app', () async {
+      final model = await h.start(plan: Plan.annual);
+      await model.openManageSubscription();
+      await model.openPrivacyPolicy();
+      expect(h.urls.opened.map((u) => u.toString()), [
+        'https://play.google.com/store/account/subscriptions?sku=eventide_premium&package=be.cinaf.eventide',
+        'https://eventide.app/confidentialite',
+      ]);
+      expect(await h.got<ToastEvent>(), isEmpty);
+
+      // Nothing can open links: say where to go instead.
+      h.urls.succeeds = false;
+      await model.openManageSubscription();
+      await model.openPrivacyPolicy();
+      expect((await h.got<ToastEvent>()).map((e) => e.message), [
+        AppMessages.openPlayManually,
+        AppMessages.openPageManually(Uri.parse('https://eventide.app/confidentialite')),
+      ]);
+    });
+
+    test('the privacy policy follows SHARE_HOST', () async {
+      final model = await h.start(shareHost: 'ambiances.example');
+      await model.openPrivacyPolicy();
+      expect(h.urls.opened.single.toString(), 'https://ambiances.example/confidentialite');
+    });
+
+    test('battery guide, ad choices and credits price reach the services', () async {
+      final model = await h.start();
+      await model.openBatteryGuide();
+      await model.openAdPrivacyOptions();
+      expect(h.native.batteryGuides, 1);
+      expect(h.ads.privacyForms, 1);
+      expect(model.creditsPrice, '2,99 €');
     });
   });
 }

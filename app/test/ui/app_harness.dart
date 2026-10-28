@@ -15,7 +15,7 @@ Future<void> pumpApp(
   FakeAppModel model, {
   bool showHint = false,
 }) async {
-  HomeScreen.hintShownThisSession = !showHint;
+  if (!showHint) model.hintsSeen.add(HomeScreen.swipeHintId);
   await tester.pumpWidget(
     RepaintBoundary(
       key: kAppBoundary,

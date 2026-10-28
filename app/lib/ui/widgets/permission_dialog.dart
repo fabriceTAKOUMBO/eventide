@@ -26,14 +26,32 @@ VIconData _permissionIcon(PermissionKind kind) => switch (kind) {
   PermissionKind.exactAlarm => VIcons.alarm,
 };
 
+/// Second sentence when Android will no longer ask (« Ne plus demander »).
+const String permissionSettingsSentence =
+    'Cette autorisation a été refusée : Android ne la demandera plus. Vous pouvez l’accorder dans les réglages, rubrique « Autorisations ».';
+
 /// Explains why, then asks Android. Returns true when the permission is granted.
-/// Already granted: returns true without showing anything.
+/// Already granted: returns true without showing anything. Permanently denied: offers
+/// Android's app settings instead of asking again, and returns false (the model reads
+/// the permission again when the user comes back).
 Future<bool> explainAndRequestPermission(
   BuildContext context,
   AppModel model,
   PermissionKind kind,
 ) async {
   if (model.permissionGranted(kind)) return true;
+  if (model.permissionPermanentlyDenied(kind)) {
+    final open = await showVitreDialog<bool>(
+      context,
+      icon: _permissionIcon(kind),
+      title: permissionTitle(kind),
+      message: '${permissionSentence(kind)} $permissionSettingsSentence',
+      confirm: 'Ouvrir les réglages',
+      cancel: 'Plus tard',
+    );
+    if (open == true) await model.openAppSettings();
+    return false;
+  }
   final go = await showVitreDialog<bool>(
     context,
     icon: _permissionIcon(kind),

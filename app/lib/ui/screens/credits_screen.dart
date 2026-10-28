@@ -32,6 +32,7 @@ class _CreditsScreenState extends State<CreditsScreen> {
     final model = context.model;
     final p = Vitre.of(context);
     final credits = model.entitlements.voice.creditsRemaining;
+    final price = model.creditsPrice;
     return VitreSheet(
       title: 'Crédits d’assistant',
       top: 96,
@@ -93,7 +94,9 @@ class _CreditsScreenState extends State<CreditsScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Le prix s’affiche dans Google Play avant de payer.',
+            price == null
+                ? 'Le prix s’affiche dans Google Play avant de payer.'
+                : 'Prix du pack : $price, payé une fois sur Google Play.',
             textAlign: TextAlign.center,
             style: manrope(16, color: p.text(0.72)),
           ),

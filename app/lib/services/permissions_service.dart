@@ -11,6 +11,13 @@ abstract class Permissions {
   /// Asks Android. For exact alarms this opens the system screen and returns the state at once
   /// (the controller checks again when the app comes back).
   Future<bool> request(PermissionKind kind);
+
+  /// Denied for good (« Ne plus demander », or refused twice): [request] would show nothing.
+  /// Never true for exact alarms, which are granted from a settings screen anyway.
+  Future<bool> isPermanentlyDenied(PermissionKind kind);
+
+  /// Opens this app's page in Android settings. False if nothing was opened.
+  Future<bool> openSettings();
 }
 
 class PlatformPermissions implements Permissions {
@@ -44,6 +51,28 @@ class PlatformPermissions implements Permissions {
           await _native.openExactAlarmSettings();
           return false;
       }
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> isPermanentlyDenied(PermissionKind kind) async {
+    try {
+      return switch (kind) {
+        PermissionKind.microphone => await Permission.microphone.isPermanentlyDenied,
+        PermissionKind.notifications => await Permission.notification.isPermanentlyDenied,
+        PermissionKind.exactAlarm => false,
+      };
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> openSettings() async {
+    try {
+      return await openAppSettings();
     } catch (_) {
       return false;
     }

@@ -75,6 +75,9 @@ abstract final class AppMessages {
   static const deleteOffline = 'Suppression impossible sans connexion. Réessayez plus tard.';
   static const deleteFailed = 'La suppression n’a pas abouti. Réessayez plus tard.';
   static const dataDeleted = 'Vos données ont été supprimées.';
+  static const openPlayManually =
+      'Ouvrez Google Play, touchez votre photo, puis « Paiements et abonnements » et « Abonnements ».';
+  static String openPageManually(Uri uri) => 'La page ne s’ouvre pas. Adresse : $uri';
 
   // Voice
   static const micDenied = 'Autorisez le micro pour parler à l’assistant.';
@@ -127,6 +130,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
     required this._links,
     required this._share,
     required this._permissions,
+    required this._urls,
     this._config = const AppConfig(),
     DateTime Function()? now,
     Random? random,
@@ -155,6 +159,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
   final LinkSource _links;
   final ShareSheet _share;
   final Permissions _permissions;
+  final UrlOpener _urls;
   final AppConfig _config;
   final DateTime Function() _now;
   final Random _random;
@@ -179,6 +184,8 @@ class RealAppModel extends AppModel implements PlaybackHost {
   bool _exactAlarmAllowed = false;
   AlarmMode _alarmMode = AlarmMode.none;
   final Map<PermissionKind, bool> _permissionCache = {};
+  final Map<PermissionKind, bool> _deniedForever = {};
+  final Set<String> _hintsSeen = {};
   final SleepTracker _tracker = SleepTracker();
   final Map<AdPlacement, DateTime> _adLastShown = {};
   final AdPolicy _adPolicy = const AdPolicy();
@@ -283,6 +290,8 @@ class RealAppModel extends AppModel implements PlaybackHost {
         }
       }
       _signedIn = state['signed_in'] == true;
+      final hints = state['hints_seen'];
+      if (hints is List) _hintsSeen.addAll(hints.whereType<String>());
       _tracker.open = OpenNight.fromJson(state['open_night']);
       for (final placement in AdPlacement.values) {
         final at = DateTime.tryParse('${state['ad_${placement.name}']}');
@@ -357,7 +366,9 @@ class RealAppModel extends AppModel implements PlaybackHost {
 
   Future<void> _refreshPermissions() async {
     for (final kind in PermissionKind.values) {
-      _permissionCache[kind] = await _permissions.isGranted(kind);
+      final granted = await _permissions.isGranted(kind);
+      _permissionCache[kind] = granted;
+      _deniedForever[kind] = !granted && await _permissions.isPermanentlyDenied(kind);
     }
     _exactAlarmAllowed = _permissionCache[PermissionKind.exactAlarm] ?? _exactAlarmAllowed;
   }
@@ -411,6 +422,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
         'last_landscape_by_theme': _lastByTheme,
         'signed_in': _signedIn,
         'open_night': _tracker.open?.toJson(),
+        'hints_seen': [..._hintsSeen],
         for (final entry in _adLastShown.entries) 'ad_${entry.key.name}': entry.value.toIso8601String(),
       });
 
@@ -1064,12 +1076,22 @@ class RealAppModel extends AppModel implements PlaybackHost {
   Future<bool> requestPermission(PermissionKind kind) async {
     final granted = await _permissions.request(kind);
     _permissionCache[kind] = granted;
+    _deniedForever[kind] = !granted && await _permissions.isPermanentlyDenied(kind);
     if (kind == PermissionKind.exactAlarm && granted != _exactAlarmAllowed) {
       _exactAlarmAllowed = granted;
       await _syncSchedules();
     }
     notifyListeners();
     return granted;
+  }
+
+  @override
+  bool permissionPermanentlyDenied(PermissionKind kind) => _deniedForever[kind] ?? false;
+
+  /// The answer is read again when the app comes back to the foreground.
+  @override
+  Future<void> openAppSettings() async {
+    await _permissions.openSettings();
   }
 
   @override
@@ -1133,6 +1155,15 @@ class RealAppModel extends AppModel implements PlaybackHost {
 
   @override
   Future<void> completeOnboarding() => updateSettings(_settings.copyWith(onboarded: true));
+
+  @override
+  bool hintSeen(String id) => _hintsSeen.contains(id);
+
+  @override
+  Future<void> markHintSeen(String id) async {
+    if (!_hintsSeen.add(id)) return;
+    await _writeState();
+  }
 
   @override
   Future<void> updateSettings(AppSettings settings) async {
@@ -1554,6 +1585,29 @@ class RealAppModel extends AppModel implements PlaybackHost {
   Future<void> openAdPrivacyOptions() => _ads.showPrivacyOptions();
 
   // ---------------------------------------------------------------------------
+  // Outgoing pages
+  // ---------------------------------------------------------------------------
+
+  /// Google Play's subscriptions page, opened on Eventide's subscription.
+  static final Uri manageSubscriptionUri = Uri.https('play.google.com', '/store/account/subscriptions', {
+    'sku': ProductIds.premium,
+    'package': 'be.cinaf.eventide',
+  });
+
+  Uri get privacyPolicyUri => Uri.https(_config.shareHost, '/confidentialite');
+
+  @override
+  Future<void> openManageSubscription() async {
+    if (!await _urls.open(manageSubscriptionUri)) _emit(const ToastEvent(AppMessages.openPlayManually));
+  }
+
+  @override
+  Future<void> openPrivacyPolicy() async {
+    final uri = privacyPolicyUri;
+    if (!await _urls.open(uri)) _emit(ToastEvent(AppMessages.openPageManually(uri)));
+  }
+
+  // ---------------------------------------------------------------------------
   // Account and data
   // ---------------------------------------------------------------------------
 
@@ -1639,6 +1693,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
     _signedIn = false;
     _tracker.open = null;
     _adLastShown.clear();
+    _hintsSeen.clear();
     await _syncSchedules();
     notifyListeners();
     _emit(const ToastEvent(AppMessages.dataDeleted));

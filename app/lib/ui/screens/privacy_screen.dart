@@ -1,5 +1,5 @@
 // Confidentialité et données (not in the mockup, dossier § 4): what stays on the
-// phone, the online policy, export and deletion.
+// phone, the online policy, ad choices (free plan), export and deletion.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -10,12 +10,6 @@ import '../widgets/permission_dialog.dart';
 import '../widgets/sheet_scaffold.dart';
 import '../widgets/toast.dart';
 import '../widgets/vicons.dart';
-
-/// Address of the online privacy policy, set by the app layer once the domain is
-/// chosen (dossier § 13). While null, the screen points to the Play Store listing.
-abstract final class PrivacyLinks {
-  static String? policyUrl;
-}
 
 class PrivacyScreen extends StatefulWidget {
   const PrivacyScreen({super.key});
@@ -98,6 +92,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
   @override
   Widget build(BuildContext context) {
     final p = Vitre.of(context);
+    final model = context.model;
     Widget section(String title, String body) => Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: GlassCard(
@@ -135,29 +130,19 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
             'Aucune vente de vos données. Aucune publicité pendant l’écoute.',
           ),
           const SizedBox(height: 4),
-          if (PrivacyLinks.policyUrl case final url?) ...[
-            SecondaryButton(
-              label: 'Copier le lien de la politique',
-              icon: VIcons.copy,
-              fontSize: 18,
-              onPressed: () async {
-                await Clipboard.setData(ClipboardData(text: url));
-                if (context.mounted) ToastHost.show(context, 'Lien copié');
-              },
+          LinkRow(
+            title: 'Politique de confidentialité',
+            subtitle: 'Le texte complet, en ligne',
+            onTap: model.openPrivacyPolicy,
+          ),
+          // Ads only exist in the free version (Google's consent form).
+          if (!model.plan.isPremium)
+            LinkRow(
+              title: 'Choix publicitaires',
+              subtitle: 'Revoir votre consentement aux publicités',
+              onTap: model.openAdPrivacyOptions,
             ),
-            const SizedBox(height: 6),
-            Text(
-              'Politique complète en ligne : $url',
-              textAlign: TextAlign.center,
-              style: manrope(16, color: p.text(0.72)),
-            ),
-          ] else
-            Text(
-              'La politique de confidentialité complète est indiquée sur la page de l’application dans Google Play.',
-              textAlign: TextAlign.center,
-              style: manrope(16, height: 1.35, color: p.text(0.72)),
-            ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 18),
           PrimaryButton(
             label: 'Exporter mes données',
             icon: VIcons.download,

@@ -308,6 +308,10 @@ class FakePermissions implements Permissions {
   };
   final List<PermissionKind> requested = [];
 
+  /// Kinds refused with « Ne plus demander ».
+  final Set<PermissionKind> deniedForever = {};
+  int settingsOpened = 0;
+
   @override
   Future<bool> isGranted(PermissionKind kind) async => granted[kind] ?? false;
 
@@ -315,6 +319,28 @@ class FakePermissions implements Permissions {
   Future<bool> request(PermissionKind kind) async {
     requested.add(kind);
     return granted[kind] ?? false;
+  }
+
+  @override
+  Future<bool> isPermanentlyDenied(PermissionKind kind) async => deniedForever.contains(kind);
+
+  @override
+  Future<bool> openSettings() async {
+    settingsOpened++;
+    return true;
+  }
+}
+
+class FakeUrlOpener implements UrlOpener {
+  final List<Uri> opened = [];
+
+  /// False: nothing on the phone can open links.
+  bool succeeds = true;
+
+  @override
+  Future<bool> open(Uri uri) async {
+    opened.add(uri);
+    return succeeds;
   }
 }
 

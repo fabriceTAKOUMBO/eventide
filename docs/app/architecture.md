@@ -16,7 +16,7 @@ Ce document décrit la couche applicative (`app/lib/app`), les services (`app/li
 | `lib/ui/` | Écrans « Vitre » ; ne connaît que `AppModel` et `core` | `app_model.dart`, `core` |
 | `android/app/src/main/kotlin/` | Alarmes exactes, récepteurs, notifications de secours, Play Integrity, canal `be.cinaf.eventide/native` | — |
 
-Services : `storage.dart` (fichiers JSON), `api_client.dart` (API, jeton d'installation), `connectivity.dart`, `content_repository.dart` (sons embarqués, cache, téléchargements), `audio/` (moteur, focus, service de lecture), `voice/` (reconnaissance, chaîne vocale), `billing_service.dart`, `ads_service.dart`, `account_service.dart`, `links_service.dart` (feuille de partage, App Links), `permissions_service.dart`, `native_bridge.dart`.
+Services : `storage.dart` (fichiers JSON), `api_client.dart` (API, jeton d'installation), `connectivity.dart`, `content_repository.dart` (sons embarqués, cache, téléchargements), `audio/` (moteur, focus, service de lecture), `voice/` (reconnaissance, chaîne vocale), `billing_service.dart`, `ads_service.dart`, `account_service.dart`, `links_service.dart` (feuille de partage, App Links, pages externes par `url_launcher`), `permissions_service.dart`, `native_bridge.dart`.
 
 ## 2. Flux de données
 
@@ -51,7 +51,7 @@ Dart ne calcule rien au moment du déclenchement ; tout ce qui doit marcher appl
    - réarme toujours l'occurrence suivante.
 4. Côté Dart, `main()` enregistre le *handler* auprès d'`audio_service` **avant** tout le reste. Le *handler* reçoit le clic, publie aussitôt l'état « chargement » (la notification apparaît, ce qui respecte le délai d'Android pour un service au premier plan), lit `consumePendingStart()`, puis demande au contrôleur quoi jouer : mix par défaut du paysage de la programmation, montée depuis le silence sur `montee_minutes`, texte du rappel dans la notification. Si l'on écoute déjà quelque chose, la programmation ne coupe rien.
 5. **`BootReceiver`** réarme après `BOOT_COMPLETED`, `TIME_SET`, `TIMEZONE_CHANGED`, `MY_PACKAGE_REPLACED` et `SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED`.
-6. Autorisations : l'interface explique, puis `requestPermission(PermissionKind.exactAlarm)` ouvre « Alarmes et rappels » (`ACTION_REQUEST_SCHEDULE_EXACT_ALARM`) ; `PermissionKind.notifications` demande `POST_NOTIFICATIONS` (Android 13+). `openBatteryGuide()` ouvre la fiche de l'application (guide contre les fabricants qui arrêtent les applications).
+6. Autorisations : l'interface explique, puis `requestPermission(PermissionKind.exactAlarm)` ouvre « Alarmes et rappels » (`ACTION_REQUEST_SCHEDULE_EXACT_ALARM`) ; `PermissionKind.notifications` demande `POST_NOTIFICATIONS` (Android 13+). Une autorisation refusée définitivement (« Ne plus demander », `permissionPermanentlyDenied`) n'est plus demandée : l'interface propose « Ouvrir les réglages » (`openAppSettings()`, fiche de l'application), et l'état est relu au retour dans l'application. `openBatteryGuide()` ouvre la fiche de l'application (bouton « Ouvrir les réglages » du guide contre les fabricants qui arrêtent les applications).
 
 Replis, du meilleur au moins bon : alarme exacte + son → alarme inexacte + son (si Android l'autorise) → notification « Lancer » → rien (notifications refusées). Le taux de réussite doit être mesuré pendant la bêta.
 
@@ -73,12 +73,14 @@ Les droits sont mis en cache : Premium marche hors ligne ; un abonnement expiré
 
 ## 7. Publicité
 
-Gratuit seulement : formulaire de consentement de Google (UMP) **avant** toute requête, contenu limité à la catégorie « G », interstitiel à l'ouverture et au retour depuis l'Accueil (`beforeExit()`), jamais pendant une lecture ni un chargement, au plus une fois toutes les 4 h par emplacement. Identifiants de test de Google par défaut. À vérifier avant la soumission : les règles AdMob sur les interstitiels à l'ouverture et à la sortie (le format « App Open » est l'alternative prévue par Google pour l'ouverture).
+Gratuit seulement : formulaire de consentement de Google (UMP) **avant** toute requête, contenu limité à la catégorie « G », interstitiel à l'ouverture et au retour depuis l'Accueil (`beforeExit()`), jamais pendant une lecture ni un chargement, au plus une fois toutes les 4 h par emplacement. Le formulaire de Google reste accessible par « Choix publicitaires » dans Confidentialité et données (`openAdPrivacyOptions()`, gratuit seulement). Identifiants de test de Google par défaut. À vérifier avant la soumission : les règles AdMob sur les interstitiels à l'ouverture et à la sortie (le format « App Open » est l'alternative prévue par Google pour l'ouverture).
 
 ## 8. Compte, données, partage
 
 - Connexion Google facultative (`google_sign_in` 7) : jeton d'identité → `POST /account/google`.
 - Export : tout ce qui est sur le téléphone (sauf le jeton) et, si possible, l'export du serveur, en JSON lisible. Suppression : `DELETE /account` puis effacement local complet (fichiers, contenus téléchargés, jeton, programmations natives).
+- Pages externes (`url_launcher`, intention `ACTION_VIEW`, sans `canLaunchUrl` donc sans `<queries>` dans le manifeste) : « Gérer mon abonnement » ouvre `https://play.google.com/store/account/subscriptions?sku=eventide_premium&package=be.cinaf.eventide` ; la politique de confidentialité est `https://<SHARE_HOST>/confidentialite` (page à publier avec le domaine). Si rien ne peut ouvrir le lien, un message dit où aller.
+- Aides affichées une seule fois (« Balayez pour changer de paysage ») : `hintSeen` / `markHintSeen`, gardées dans `app_state` (`hints_seen`), effacées avec les données.
 - Partage : lien court du serveur `https://<hôte>/m/<code>`, ou lien autonome `https://<hôte>/s#<données>` hors ligne. Réception par App Links (`android:autoVerify="true"`, hôte = propriété Gradle `eventide.shareHost`, à aligner avec `SHARE_HOST` et `/.well-known/assetlinks.json`). Un destinataire gratuit voit les éléments Premium verrouillés et muets (`SharedMixOpenedEvent`) ; un paysage verrouillé est seulement montré, le son en cours continue.
 
 ## 9. Sommeil

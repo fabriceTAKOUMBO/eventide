@@ -7,7 +7,6 @@ import '../model_scope.dart';
 import '../navigation.dart';
 import '../theme/vitre.dart';
 import '../widgets/glass.dart';
-import '../widgets/permission_dialog.dart' show showVitreDialog;
 import '../widgets/sheet_scaffold.dart';
 import '../widgets/toast.dart';
 import '../widgets/vicons.dart';
@@ -208,13 +207,7 @@ class _SubscriptionCard extends StatelessWidget {
             label: 'Gérer mon abonnement sur Google Play',
             height: 56,
             fontSize: 17,
-            onPressed: () => showVitreDialog<bool>(
-              context,
-              icon: VIcons.settings,
-              title: 'Gérer mon abonnement',
-              message: 'Ouvrez l’application Google Play, touchez votre photo en haut à droite, puis « Paiements et abonnements » et « Abonnements ». Vous pouvez y changer ou annuler votre formule.',
-              confirm: 'J’ai compris',
-            ),
+            onPressed: model.openManageSubscription,
           ),
       ]);
     }

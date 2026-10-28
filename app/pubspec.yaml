@@ -49,6 +49,7 @@ dependencies:
   permission_handler: ^13.0.2
   crypto: ^3.0.8
   audio_session: ^0.2.4
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:
@@ -72,7 +73,9 @@ flutter:
     - assets/catalog.json
     - assets/audio/sons/
     - assets/audio/musiques/
-    - assets/brand/
+    # Only what the UI loads (LandscapeImages.discoverAssets): the store icons
+    # (logo_1024.png, SVG sources, wordmark) stay out of the APK.
+    - assets/brand/logo_512.png
   fonts:
     - family: Manrope
       fonts:

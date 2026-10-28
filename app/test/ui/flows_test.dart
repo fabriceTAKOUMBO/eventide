@@ -4,6 +4,10 @@ import 'package:eventide/core/catalog.dart';
 import 'package:eventide/core/plan.dart';
 import 'package:eventide/core/scene.dart';
 import 'package:eventide/ui/navigation.dart';
+import 'package:eventide/ui/screens/battery_guide_screen.dart';
+import 'package:eventide/ui/screens/credits_screen.dart';
+import 'package:eventide/ui/screens/home/home_screen.dart';
+import 'package:eventide/ui/screens/privacy_screen.dart';
 import 'package:eventide/ui/screens/mix_sheet.dart';
 import 'package:eventide/ui/screens/premium_screen.dart';
 import 'package:eventide/ui/screens/schedule_editor_screen.dart';
@@ -12,6 +16,7 @@ import 'package:eventide/ui/screens/settings_screen.dart';
 import 'package:eventide/ui/screens/standby_screen.dart';
 import 'package:eventide/ui/screens/voice_screen.dart';
 import 'package:eventide/ui/screens/landscapes_sheet.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'app_harness.dart';
@@ -650,7 +655,8 @@ void main() {
       await openRoute(tester, Routes.settings, (_) => const SettingsScreen());
       expect(find.text('Mon abonnement · Annuel'), findsOneWidget);
       expect(find.text('Renouvelé le 28 octobre 2027.'), findsOneWidget);
-      expect(find.text('Gérer mon abonnement sur Google Play'), findsOneWidget);
+      await tapText(tester, 'Gérer mon abonnement sur Google Play');
+      expect(model.calls, contains('openManageSubscription'));
       await tapLabel(tester, 'Téléchargements en Wi-Fi seulement');
       expect(model.settings.wifiOnly, isTrue);
       await tearDownApp(tester);
@@ -734,6 +740,143 @@ void main() {
       expect(find.text('Balayez pour changer de paysage'), findsOneWidget);
       await swipe(tester, const Offset(0, -220));
       expect(find.text('Balayez pour changer de paysage'), findsNothing);
+      await tearDownApp(tester);
+    });
+  });
+
+  group('Platform hooks', () {
+    testWidgets('the swipe hint is stored and not shown again', (tester) async {
+      usePhoneView(tester);
+      final model = FakeAppModel();
+      await pumpApp(tester, model, showHint: true);
+      expect(find.text('Balayez pour changer de paysage'), findsOneWidget);
+      expect(model.calls, contains('markHintSeen:${HomeScreen.swipeHintId}'));
+      expect(model.hintSeen(HomeScreen.swipeHintId), isTrue);
+      await tearDownApp(tester);
+
+      // Next launch, same storage: no hint.
+      await pumpApp(tester, model, showHint: true);
+      expect(find.byType(HomeScreen), findsOneWidget);
+      expect(find.text('Balayez pour changer de paysage'), findsNothing);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('back on Accueil: exit interstitial first, then the app closes', (
+      tester,
+    ) async {
+      usePhoneView(tester);
+      final model = FakeAppModel();
+      final platform = <String>[];
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+        if (call.method == 'SystemNavigator.pop') {
+          platform.add('pop after ${model.calls.where((c) => c == 'beforeExit').length}');
+        }
+        return null;
+      });
+      addTearDown(
+        () => messenger.setMockMethodCallHandler(SystemChannels.platform, null),
+      );
+      await pumpApp(tester, model);
+
+      // Back on another screen only closes it.
+      await openRoute(tester, Routes.settings, (_) => const SettingsScreen());
+      await tester.binding.handlePopRoute();
+      await settle(tester);
+      expect(find.byType(SettingsScreen), findsNothing);
+      // Back with the timer menu open only closes the menu.
+      await tapLabel(tester, RegExp('^Minuteur'));
+      expect(label('Durée du minuteur'), findsOneWidget);
+      await tester.binding.handlePopRoute();
+      await settle(tester);
+      expect(label('Durée du minuteur'), findsNothing);
+      expect(model.calls, isNot(contains('beforeExit')));
+      expect(platform, isEmpty);
+
+      await tester.binding.handlePopRoute();
+      await settle(tester);
+      expect(model.calls.where((c) => c == 'beforeExit'), hasLength(1));
+      expect(platform, ['pop after 1']);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('permanently denied: « Ouvrir les réglages » instead of asking', (
+      tester,
+    ) async {
+      usePhoneView(tester);
+      final model = FakeAppModel(deniedForever: {PermissionKind.microphone});
+      await pumpApp(tester, model);
+      await openRoute(tester, Routes.voice, (_) => const VoiceScreen());
+      expect(find.text('Continuer'), findsNothing);
+      expect(
+        find.textContaining('Android ne la demandera plus'),
+        findsOneWidget,
+      );
+      await tapText(tester, 'Ouvrir les réglages');
+      expect(model.calls, contains('openAppSettings'));
+      expect(model.calls, isNot(contains('requestPermission:microphone')));
+      expect(model.calls, isNot(contains('startVoice')));
+      expect(find.text('Le micro n’est pas autorisé'), findsOneWidget);
+
+      // Granted from Android's settings: the next try starts listening.
+      model.deniedForever.clear();
+      await tapText(tester, 'Autoriser le micro');
+      await tapText(tester, 'Continuer');
+      expect(model.calls, contains('requestPermission:microphone'));
+      expect(model.calls, contains('startVoice'));
+      await tearDownApp(tester);
+    });
+
+    testWidgets('Confidentialité: policy for all, ad choices for the free plan', (
+      tester,
+    ) async {
+      usePhoneView(tester);
+      final model = FakeAppModel();
+      await pumpApp(tester, model);
+      await openRoute(tester, Routes.privacy, (_) => const PrivacyScreen());
+      await tapLabel(tester, 'Politique de confidentialité');
+      expect(model.calls, contains('openPrivacyPolicy'));
+      await tapLabel(tester, 'Choix publicitaires');
+      expect(model.calls, contains('openAdPrivacyOptions'));
+      model.plan = Plan.annual;
+      await settle(tester);
+      expect(label('Choix publicitaires'), findsNothing);
+      expect(label('Politique de confidentialité'), findsOneWidget);
+      await tearDownApp(tester);
+    });
+
+    testWidgets('battery guide opens the app settings', (tester) async {
+      usePhoneView(tester);
+      final model = FakeAppModel();
+      await pumpApp(tester, model);
+      await openRoute(
+        tester,
+        Routes.batteryGuide,
+        (_) => const BatteryGuideScreen(),
+      );
+      await tapText(tester, 'Ouvrir les réglages');
+      expect(model.calls, contains('openBatteryGuide'));
+      await tearDownApp(tester);
+    });
+
+    testWidgets('credits show the Google Play price, or a neutral line', (
+      tester,
+    ) async {
+      usePhoneView(tester);
+      final model = FakeAppModel(plan: Plan.lifetime, creditsPrice: '2,99 €');
+      await pumpApp(tester, model);
+      await openRoute(tester, Routes.credits, (_) => const CreditsScreen());
+      expect(
+        find.text('Prix du pack : 2,99 €, payé une fois sur Google Play.'),
+        findsOneWidget,
+      );
+      model.creditsPrice = null;
+      model.plan = Plan.lifetime; // notifies
+      await settle(tester);
+      expect(
+        find.text('Le prix s’affiche dans Google Play avant de payer.'),
+        findsOneWidget,
+      );
       await tearDownApp(tester);
     });
   });

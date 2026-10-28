@@ -5,6 +5,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../../app/app_model.dart';
 import '../../../core/catalog.dart';
@@ -22,9 +23,8 @@ import 'home_menu.dart';
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
-  /// The swipe hint is shown once per app session (the model offers no storage
-  /// for UI hints).
-  static bool hintShownThisSession = false;
+  /// « Balayez pour changer de paysage », shown once per install (stored by the model).
+  static const String swipeHintId = 'home_swipe';
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -35,7 +35,9 @@ class _HomeScreenState extends State<HomeScreen>
   bool _expanded = true;
   bool _timerMenu = false;
   bool _hint = false;
+  bool _hintChecked = false;
   Timer? _hintTimer;
+  bool _exiting = false;
 
   // Slow network detection while sounds load.
   AppModel? _model;
@@ -65,11 +67,6 @@ class _HomeScreenState extends State<HomeScreen>
       final a = _settleAnimation;
       if (a != null) setState(() => _offset = a.value);
     });
-    if (!HomeScreen.hintShownThisSession) {
-      HomeScreen.hintShownThisSession = true;
-      _hint = true;
-      _hintTimer = Timer(const Duration(seconds: 6), _hideHint);
-    }
   }
 
   @override
@@ -80,6 +77,17 @@ class _HomeScreenState extends State<HomeScreen>
       _model?.removeListener(_onModel);
       _model = model..addListener(_onModel);
       _onModel();
+    }
+    if (!_hintChecked) {
+      _hintChecked = true;
+      if (!model.hintSeen(HomeScreen.swipeHintId)) {
+        _hint = true;
+        _hintTimer = Timer(const Duration(seconds: 6), _hideHint);
+        // Recorded once shown, outside the build.
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => unawaited(model.markHintSeen(HomeScreen.swipeHintId)),
+        );
+      }
     }
   }
 
@@ -109,6 +117,26 @@ class _HomeScreenState extends State<HomeScreen>
   void _hideHint() {
     _hintTimer?.cancel();
     if (_hint && mounted) setState(() => _hint = false);
+  }
+
+  /// Back on Accueil: closes the timer menu, otherwise leaves the app. The free plan may
+  /// show its exit interstitial first ([AppModel.beforeExit]); then Android closes or
+  /// minimises the app as usual. The sound, if any, keeps playing in its service.
+  Future<void> _onBack() async {
+    if (_timerMenu) {
+      setState(() => _timerMenu = false);
+      return;
+    }
+    if (_exiting) return;
+    _exiting = true;
+    try {
+      await context.readModel.beforeExit();
+    } catch (_) {
+      // Never keep the user in the app because of an ad.
+    } finally {
+      _exiting = false;
+    }
+    await SystemNavigator.pop();
   }
 
   // ---- Catalog helpers
@@ -398,9 +426,10 @@ class _HomeScreenState extends State<HomeScreen>
     _prewarmNeighbors(model, id, media.devicePixelRatio);
 
     return PopScope(
-      canPop: !_timerMenu,
+      // Accueil is the root route: back would close the app without asking us.
+      canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) setState(() => _timerMenu = false);
+        if (!didPop) unawaited(_onBack());
       },
       child: Scaffold(
         backgroundColor: VitreColors.page,

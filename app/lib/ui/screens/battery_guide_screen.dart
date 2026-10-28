@@ -1,6 +1,7 @@
 // Simple guide for manufacturers that stop apps in background (dossier, screen 9).
 import 'package:flutter/material.dart';
 
+import '../model_scope.dart';
 import '../theme/vitre.dart';
 import '../widgets/glass.dart';
 import '../widgets/sheet_scaffold.dart';
@@ -115,6 +116,12 @@ class BatteryGuideScreen extends StatelessWidget {
             'Les noms des menus changent selon la version d’Android.',
             textAlign: TextAlign.center,
             style: manrope(16, color: p.text(0.72)),
+          ),
+          const SizedBox(height: 20),
+          // Opens Eventide's page in Android settings (first step of every guide).
+          PrimaryButton(
+            label: 'Ouvrir les réglages',
+            onPressed: () => context.readModel.openBatteryGuide(),
           ),
         ],
       ),

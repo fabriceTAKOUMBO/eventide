@@ -32,13 +32,18 @@ class FakeAppModel extends AppModel {
     List<Night>? nights,
     DateTime? now,
     Set<PermissionKind>? granted,
+    Set<PermissionKind>? deniedForever,
+    Set<String>? hintsSeen,
+    this.creditsPrice,
   }) : catalog = catalog ?? loadTestCatalog(),
        // ignore: prefer_initializing_formals
        _plan = plan,
        _now = now ?? DateTime(2026, 10, 28, 20, 30),
        _schedules = [...?schedules],
        _nights = [...?nights],
-       _granted = {...?granted} {
+       _granted = {...?granted},
+       deniedForever = {...?deniedForever},
+       hintsSeen = {...?hintsSeen} {
     rules = ProductRules(this.catalog);
     _settings = AppSettings(onboarded: onboarded);
     _scene = Scene.fromLandscape(this.catalog.defaultLandscape);
@@ -76,6 +81,14 @@ class FakeAppModel extends AppModel {
   bool exactAlarmAllowed;
   @override
   bool signedIn;
+  @override
+  String? creditsPrice;
+
+  /// Permissions refused with « Ne plus demander » (cleared once granted).
+  final Set<PermissionKind> deniedForever;
+
+  /// Hints already shown (stands for the controller's local storage).
+  final Set<String> hintsSeen;
 
   DateTime get now => _now;
 
@@ -202,6 +215,15 @@ class FakeAppModel extends AppModel {
   Stream<AppEvent> get events => _events.stream;
   @override
   bool get onboarded => _settings.onboarded;
+
+  @override
+  bool hintSeen(String id) => hintsSeen.contains(id);
+
+  @override
+  Future<void> markHintSeen(String id) async {
+    _log('markHintSeen:$id');
+    hintsSeen.add(id);
+  }
 
   void _log(String call) => calls.add(call);
 
@@ -384,8 +406,16 @@ class FakeAppModel extends AppModel {
       : _granted.contains(kind);
 
   @override
+  bool permissionPermanentlyDenied(PermissionKind kind) =>
+      deniedForever.contains(kind) && !permissionGranted(kind);
+
+  @override
+  Future<void> openAppSettings() async => _log('openAppSettings');
+
+  @override
   Future<bool> requestPermission(PermissionKind kind) async {
     _log('requestPermission:${kind.name}');
+    if (deniedForever.contains(kind)) return false;
     if (kind == PermissionKind.exactAlarm) {
       exactAlarmAllowed = true;
     } else {
@@ -488,6 +518,24 @@ class FakeAppModel extends AppModel {
 
   @override
   Future<void> restorePurchases() async => _log('restorePurchases');
+
+  @override
+  Future<void> openManageSubscription() async =>
+      _log('openManageSubscription');
+
+  // ---- Platform hooks
+
+  @override
+  Future<void> beforeExit() async => _log('beforeExit');
+
+  @override
+  Future<void> openBatteryGuide() async => _log('openBatteryGuide');
+
+  @override
+  Future<void> openAdPrivacyOptions() async => _log('openAdPrivacyOptions');
+
+  @override
+  Future<void> openPrivacyPolicy() async => _log('openPrivacyPolicy');
 
   @override
   Future<void> signInWithGoogle() async {

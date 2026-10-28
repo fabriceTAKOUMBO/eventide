@@ -27,7 +27,8 @@ val admobAppId: String =
 
 android {
     namespace = "be.cinaf.eventide"
-    compileSdk = 36
+    // 37: required by permission_handler_android. targetSdk stays 36 (Google Play requirement).
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

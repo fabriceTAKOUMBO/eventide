@@ -112,6 +112,7 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
     links: AppLinksSource(),
     share: PlatformShareSheet(),
     permissions: PlatformPermissions(native),
+    urls: PlatformUrlOpener(),
     config: AppConfig(shareHost: Env.shareHost, forcedPlan: Env.debugForcePlan),
   );
   await model.init();
