@@ -2,18 +2,25 @@ name: app
 
 # Flutter app only: analysis, unit tests, debug/release/demo APKs, 16 KB page alignment and
 # Android emulator checks. No cloud credential, no secret, no deployment: nothing here talks to
-# AWS (CINAF, JobMinutes and Candidature Express are never touched).
+# AWS (CINAF, JobMinutes and Candidature Express are never touched), nothing is uploaded to S3
+# (content/ is only copied into the demo APK).
 
 on:
   push:
     paths:
       - "app/**"
       - "content/audio/**"
+      - "content/videos/**"
+      - "content/images/**"
+      - "medias-test/**"
       - ".github/workflows/app.yml"
   pull_request:
     paths:
       - "app/**"
       - "content/audio/**"
+      - "content/videos/**"
+      - "content/images/**"
+      - "medias-test/**"
       - ".github/workflows/app.yml"
   workflow_dispatch:
 
@@ -48,6 +55,11 @@ jobs:
           channel: stable
           flutter-version: 3.47.8
           cache: true
+
+      # medias-test/ is third-party test material (non-distributable): it must never be
+      # committed under content/ (S3) or app/assets/ (every APK).
+      - name: Test-only media stay out of content/ and app/assets/
+        run: bash tool/ci/check_test_media.sh
 
       - name: Dependencies
         run: flutter pub get
@@ -113,18 +125,18 @@ jobs:
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../dist/production/eventide-arm64-v8a-release.apk
           cp build/app/outputs/flutter-apk/app-x86_64-release.apk ../dist/production/eventide-x86_64-release.apk
 
-      - name: Production APK has no Premium audio, package be.cinaf.eventide
+      - name: Production APK has no Premium audio or video, no test media, package be.cinaf.eventide
         run: |
           for apk in ../dist/production/*.apk; do
             bash tool/ci/check_apk_contents.sh production "$apk"
           done
 
-      # The demo bundles every Premium sound and music (ContentRepository prefers bundled
-      # assets), so that it works without the API. Never done for the production build above.
-      - name: Bundle the Premium audio (demo build only)
-        run: |
-          cp ../content/audio/sons/*.ogg assets/audio/sons/
-          cp ../content/audio/musiques/*.ogg assets/audio/musiques/
+      # The demo bundles every Premium sound, music, landscape video and poster
+      # (ContentRepository prefers bundled assets), so that it works without the API, plus the
+      # third-party test-only landscape videos of medias-test/ (non-distributable, internal
+      # tests on the owner's phone). Never done for the production build above.
+      - name: Bundle the Premium audio and landscape media (demo build only)
+        run: bash tool/ci/bundle_demo_media.sh
 
       - name: Demo release APKs (« Eventide Démo », be.cinaf.eventide.demo)
         run: |
@@ -134,7 +146,7 @@ jobs:
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../dist/demo-phone/eventide-demo-galaxy-s24-arm64.apk
           cp build/app/outputs/flutter-apk/app-x86_64-release.apk ../dist/demo-emulator/eventide-demo-emulator-x86_64.apk
 
-      - name: Demo APKs bundle the Premium audio, package be.cinaf.eventide.demo
+      - name: Demo APKs bundle the Premium audio and landscape media, package be.cinaf.eventide.demo
         run: |
           bash tool/ci/check_apk_contents.sh demo ../dist/demo-phone/eventide-demo-galaxy-s24-arm64.apk
           bash tool/ci/check_apk_contents.sh demo ../dist/demo-emulator/eventide-demo-emulator-x86_64.apk
@@ -238,10 +250,8 @@ jobs:
       - name: Dependencies
         run: flutter pub get
 
-      - name: Bundle the Premium audio (demo build only)
-        run: |
-          cp ../content/audio/sons/*.ogg assets/audio/sons/
-          cp ../content/audio/musiques/*.ogg assets/audio/musiques/
+      - name: Bundle the Premium audio and landscape media (demo build only)
+        run: bash tool/ci/bundle_demo_media.sh
 
       - uses: actions/download-artifact@v4
         with:
@@ -264,7 +274,7 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-${{ matrix.api-level }}-${{ env.AVD_TARGET }}-${{ env.AVD_ARCH }}-${{ env.AVD_PROFILE }}-v1
+          key: avd-${{ matrix.api-level }}-${{ env.AVD_TARGET }}-${{ env.AVD_ARCH }}-${{ env.AVD_PROFILE }}-v2
 
       - name: Create the AVD and its snapshot (cache miss)
         if: steps.avd-cache.outputs.cache-hit != 'true'
@@ -276,7 +286,7 @@ jobs:
           profile: ${{ env.AVD_PROFILE }}
           ram-size: 3072M
           force-avd-creation: false
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
           disable-animations: false
           script: echo "Generated AVD snapshot for caching."
 
@@ -291,7 +301,9 @@ jobs:
           profile: ${{ env.AVD_PROFILE }}
           ram-size: 3072M
           force-avd-creation: false
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          # No -noaudio: with it the emulator process died ~55 s after the app started playing
+          # sound, on API 34 and 36 (28 Oct 2026). The default (null) audio backend is used instead.
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
           disable-animations: true
           working-directory: app
           script: bash tool/ci/emulator_checks.sh ../dist/demo-emulator/eventide-demo-emulator-x86_64.apk ../emulator-results/api-${{ matrix.api-level }}
