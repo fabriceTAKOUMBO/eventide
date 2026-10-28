@@ -14,6 +14,13 @@ FAIL_EVENT=db_restore_test_failed
 
 require_vars PGHOST PGPORT MIGRATOR_DB_PASSWORD EV_SQL_COUNT
 require_identifiers EV_DB_NAME EV_RESTORE_DB_NAME EV_MIGRATOR_ROLE
+require_own_databases EV_DB_NAME EV_RESTORE_DB_NAME
+require_own_roles EV_MIGRATOR_ROLE
+# Target: the restore-test database, or the application database itself (incident procedure).
+case "$EV_RESTORE_DB_NAME" in
+  "$EV_DB_NAME" | "${EV_DB_NAME}"_*) ;;
+  *) fail "base de restauration $EV_RESTORE_DB_NAME sans rapport avec $EV_DB_NAME" ;;
+esac
 require_marker download.ok "telechargement en echec (voir le flux download)"
 setup_tls
 

@@ -27,17 +27,48 @@ variable "listener_rule_priorities" {
     ])
     error_message = "Les priorités d'Eventide sont dans 400-409 (production) ou 420-429 (préproduction)."
   }
+
+  # Both rules of one environment in the same block (400-409 or 420-429), never equal.
+  validation {
+    condition = (
+      var.listener_rule_priorities.api != var.listener_rule_priorities.web &&
+      floor(var.listener_rule_priorities.api / 10) == floor(var.listener_rule_priorities.web / 10)
+    )
+    error_message = "Les deux priorités d'un environnement sont distinctes et dans la même plage (400-409 ou 420-429)."
+  }
 }
 
+variable "domain" {
+  description = "Domaine d'Eventide : chaque nom d'hôte de nos règles est ce domaine ou l'un de ses sous-domaines (jamais un nom d'une autre plateforme)."
+  type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", var.domain))
+    error_message = "domain : un domaine en minuscules, sans joker (ex. eventide.app)."
+  }
+}
+
+# Hostnames of our listener rules: exact names (no wildcard), inside our domain only. The shared
+# listener serves CINAF, JobMinutes and Candidature Express: a rule must never match their hosts.
 variable "api_hostname" {
   description = "Hôte de l'API (api.<domaine>)."
   type        = string
+
+  validation {
+    condition     = can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", var.api_hostname))
+    error_message = "api_hostname : un nom d'hôte exact en minuscules, sans joker (* ou ?)."
+  }
 }
 
 variable "web_hostnames" {
   description = "Hôtes des pages web (<domaine>, www.<domaine>), servis par le même service."
   type        = list(string)
   default     = []
+
+  validation {
+    condition     = length(var.web_hostnames) <= 4 && alltrue([for h in var.web_hostnames : can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", h))])
+    error_message = "web_hostnames : au plus 4 noms d'hôte exacts en minuscules, sans joker (* ou ?)."
+  }
 }
 
 variable "certificate_arn" {

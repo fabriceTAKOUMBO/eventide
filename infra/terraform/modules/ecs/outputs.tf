@@ -27,8 +27,13 @@ output "task_families" {
   }
 }
 
+output "register_inputs" {
+  description = "Entrées exactes de RegisterTaskDefinition par famille (api, migrate, jobs), identiques aux révisions Terraform ; le registraire de tâches n'y remplace que l'image."
+  value       = local.register_inputs
+}
+
 output "task_definition_arns" {
-  description = "Révisions enregistrées par Terraform (modèles du workflow Deploy)."
+  description = "Révisions enregistrées par Terraform."
   value = {
     api     = aws_ecs_task_definition.api.arn
     migrate = aws_ecs_task_definition.migrate.arn

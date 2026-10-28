@@ -9,3 +9,5 @@ backend.hcl
 tfplan
 *.tfplan
 crash.log
+# Paquets de fonctions Lambda produits par le fournisseur archive (modules/task_registrar).
+**/.build/

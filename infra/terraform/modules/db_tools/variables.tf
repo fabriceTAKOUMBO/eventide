@@ -39,13 +39,16 @@ variable "master_password_secret_name" {
 
 # --- Nos bases et rôles ---
 
+# Shared instance: Eventide only ever names its own databases (eventide, eventide_*) and roles
+# (ev_*). The task scripts check the same prefixes at run time (files/lib.sh), whatever
+# overrides a task run receives.
 variable "db_name" {
   description = "Base applicative (eventide)."
   type        = string
 
   validation {
-    condition     = can(regex("^[a-z_][a-z0-9_]{0,62}$", var.db_name))
-    error_message = "db_name : minuscules, chiffres et tirets bas."
+    condition     = can(regex("^eventide(_[a-z0-9_]{1,54})?$", var.db_name))
+    error_message = "db_name : eventide ou eventide_<suffixe> (minuscules, chiffres, tirets bas) ; jamais une base d'une autre plateforme."
   }
 }
 
@@ -54,24 +57,39 @@ variable "restore_db_name" {
   type        = string
 
   validation {
-    condition     = can(regex("^[a-z_][a-z0-9_]{0,62}$", var.restore_db_name))
-    error_message = "restore_db_name : minuscules, chiffres et tirets bas."
+    condition     = can(regex("^eventide_[a-z0-9_]{1,54}$", var.restore_db_name))
+    error_message = "restore_db_name : eventide_<suffixe> (minuscules, chiffres, tirets bas) ; jamais une base d'une autre plateforme."
   }
 }
 
 variable "app_role" {
   description = "Rôle de l'application (DML seulement)."
   type        = string
+
+  validation {
+    condition     = can(regex("^ev_[a-z0-9_]{1,60}$", var.app_role))
+    error_message = "app_role : ev_<nom> (préfixe d'Eventide)."
+  }
 }
 
 variable "migrator_role" {
   description = "Rôle propriétaire (migrations, DDL)."
   type        = string
+
+  validation {
+    condition     = can(regex("^ev_[a-z0-9_]{1,60}$", var.migrator_role))
+    error_message = "migrator_role : ev_<nom> (préfixe d'Eventide)."
+  }
 }
 
 variable "backup_role" {
   description = "Rôle en lecture seule des sauvegardes (pg_dump)."
   type        = string
+
+  validation {
+    condition     = can(regex("^ev_[a-z0-9_]{1,60}$", var.backup_role))
+    error_message = "backup_role : ev_<nom> (préfixe d'Eventide)."
+  }
 }
 
 variable "db_secret_arns" {
@@ -119,6 +137,44 @@ variable "role_timeouts" {
     app      = { statement = "30s", lock = "5s", idle_in_transaction = "60s" }
     migrator = { statement = "15min", lock = "10s", idle_in_transaction = "5min" }
     backup   = { statement = "0", lock = "60s", idle_in_transaction = "10min" }
+  }
+}
+
+# Per-role resource caps on the SHARED instance (CINAF, JobMinutes, Candidature Express): memory
+# per sort or hash (work_mem), maintenance memory (maintenance_work_mem), temporary files per
+# session (temp_file_limit) and idle sessions closed by the server (idle_session_timeout). The
+# bootstrap also sets max_parallel_workers_per_gather = 0 and max_parallel_maintenance_workers
+# = 0 for every role: our queries never take the instance's parallel workers.
+# Semantics (PostgreSQL 16, checked against a local 16 with a non-superuser CREATEROLE master
+# account, as on RDS): all are settable by ALTER ROLE ... SET by the role's creator, except
+# temp_file_limit (superuser-only parameter: set only if the master account holds SET privilege
+# on it, otherwise reported by the event db_bootstrap_temp_file_limit_skipped). work_mem,
+# maintenance_work_mem and idle_session_timeout stay user-settable: only our own code could
+# raise them in a session, and it never does. temp_file_limit, once set, cannot be raised.
+variable "role_resource_limits" {
+  description = "Plafonds de ressources par rôle (syntaxe PostgreSQL : 4MB, 1GB, 15min) : work_mem, maintenance_work_mem, temp_file_limit, idle_session_timeout."
+  type = object({
+    app      = object({ work_mem = string, maintenance_work_mem = string, temp_file_limit = string, idle_session_timeout = string })
+    migrator = object({ work_mem = string, maintenance_work_mem = string, temp_file_limit = string, idle_session_timeout = string })
+    backup   = object({ work_mem = string, maintenance_work_mem = string, temp_file_limit = string, idle_session_timeout = string })
+  })
+  default = {
+    # ev_app: short OLTP queries through a connection pool (idle pooled connections are
+    # health-checked by Django before use, CONN_HEALTH_CHECKS, so a server-closed one is replaced).
+    app = { work_mem = "4MB", maintenance_work_mem = "16MB", temp_file_limit = "256MB", idle_session_timeout = "15min" }
+    # ev_migrator: Django migrations (index builds) and the restore test (pg_restore).
+    migrator = { work_mem = "16MB", maintenance_work_mem = "64MB", temp_file_limit = "1GB", idle_session_timeout = "10min" }
+    # ev_backup: pg_dump (COPY only).
+    backup = { work_mem = "4MB", maintenance_work_mem = "16MB", temp_file_limit = "256MB", idle_session_timeout = "10min" }
+  }
+
+  validation {
+    condition = alltrue(flatten([
+      for role in values(var.role_resource_limits) : [
+        for v in values(role) : can(regex("^[1-9][0-9]{0,5}(kB|MB|GB|ms|s|min|h)$", v))
+      ]
+    ]))
+    error_message = "role_resource_limits : valeurs positives avec unité (kB, MB, GB, ms, s, min, h), ex. 4MB ou 15min (0 = illimité est refusé)."
   }
 }
 

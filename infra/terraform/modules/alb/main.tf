@@ -36,6 +36,15 @@ resource "aws_lb_target_group" "api" {
   }
 }
 
+# Every hostname of our rules is our domain or one of its subdomains (exact names: the variables
+# refuse wildcards). Checked again at plan time by .github/scripts/check-plan-additions-only.sh.
+locals {
+  rule_hostnames = concat([var.api_hostname], var.web_hostnames)
+  hostnames_in_our_domain = alltrue([
+    for h in local.rule_hostnames : h == var.domain || endswith(h, ".${var.domain}")
+  ])
+}
+
 # Point de contact n° 1 (ADR) : règles autonomes sur l'écouteur 443 partagé, qui ne
 # correspondent qu'à NOS noms d'hôte.
 resource "aws_lb_listener_rule" "api" {
@@ -51,6 +60,17 @@ resource "aws_lb_listener_rule" "api" {
   action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.api.arn
+  }
+
+  lifecycle {
+    precondition {
+      condition     = local.hostnames_in_our_domain
+      error_message = "Règle d'écouteur partagé : un nom d'hôte (${join(", ", local.rule_hostnames)}) n'est ni ${var.domain} ni l'un de ses sous-domaines. Nos règles ne doivent correspondre qu'à NOS noms."
+    }
+    precondition {
+      condition     = data.aws_lb_listener.shared.port == 443 && data.aws_lb_listener.shared.protocol == "HTTPS"
+      error_message = "L'écouteur partagé visé n'est pas l'écouteur HTTPS 443."
+    }
   }
 }
 
@@ -68,6 +88,13 @@ resource "aws_lb_listener_rule" "web" {
   action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.api.arn
+  }
+
+  lifecycle {
+    precondition {
+      condition     = local.hostnames_in_our_domain
+      error_message = "Règle d'écouteur partagé : un nom d'hôte (${join(", ", local.rule_hostnames)}) n'est ni ${var.domain} ni l'un de ses sous-domaines. Nos règles ne doivent correspondre qu'à NOS noms."
+    }
   }
 }
 

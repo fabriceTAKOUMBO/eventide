@@ -6,7 +6,9 @@ set -eu
 FAIL_EVENT=db_backup_failed
 
 require_vars PGHOST PGPORT PGUSER PGPASSWORD
-require_identifiers PGDATABASE
+require_identifiers PGDATABASE PGUSER
+require_own_databases PGDATABASE
+require_own_roles PGUSER
 require_marker init.ok "volume de travail non prepare"
 setup_tls
 

@@ -106,6 +106,10 @@ if DB_POOL_MAX_SIZE > 0:
         "timeout": env.float("DB_POOL_TIMEOUT_SECONDS", default=10.0),
     }
     DATABASES["default"]["CONN_MAX_AGE"] = 0
+    # Pooled connections are checked before use: the shared instance closes our idle sessions
+    # (idle_session_timeout set on our roles by the bootstrap), and a closed one is replaced
+    # instead of failing a request.
+    DATABASES["default"]["CONN_HEALTH_CHECKS"] = True
 else:
     DATABASES["default"]["CONN_MAX_AGE"] = env.int("DB_CONN_MAX_AGE", default=60)
     DATABASES["default"]["CONN_HEALTH_CHECKS"] = True

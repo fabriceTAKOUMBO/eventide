@@ -9,8 +9,9 @@
 # Adapté de Candidature Express (modules/ecs) : sans web, admin, Service Connect, cache, SMS
 # ni travailleur d'import.
 #
-# Le workflow Deploy enregistre de nouvelles révisions (image du commit déployé) à partir de la
-# révision Terraform ; Terraform reprend le tag déployé via le paramètre SSM image_tag.
+# Le workflow Deploy enregistre de nouvelles révisions (image du commit déployé) par le
+# registraire de tâches (modules/task_registrar), à partir des entrées d'enregistrement de ce
+# module (local.register_inputs) ; Terraform reprend le tag déployé via le paramètre SSM image_tag.
 
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
@@ -287,14 +288,43 @@ locals {
   }
 }
 
+# Shape of each family, shared by the Terraform revisions below and by the register inputs of
+# the deploy (local.register_inputs).
+locals {
+  task_shapes = {
+    api     = { cpu = var.api.cpu, memory = var.api.memory, container = local.api_container }
+    migrate = { cpu = 256, memory = 512, container = local.migrate_container }
+    jobs    = { cpu = 256, memory = 512, container = local.jobs_container }
+  }
+
+  # Exact input of ecs:RegisterTaskDefinition for each family, identical to the Terraform
+  # revision (the deploy only replaces the image). The task registrar (modules/task_registrar)
+  # registers new revisions from it: the deploy never reads a task definition
+  # (ecs:DescribeTaskDefinition only accepts "*" and would expose the task definitions of
+  # CINAF, JobMinutes and Candidature Express) and never names a family itself.
+  register_inputs = {
+    for key, shape in local.task_shapes : key => {
+      family                  = "${var.name}-${key}"
+      executionRoleArn        = aws_iam_role.execution[key].arn
+      networkMode             = "awsvpc"
+      requiresCompatibilities = ["FARGATE"]
+      cpu                     = tostring(shape.cpu)
+      memory                  = tostring(shape.memory)
+      runtimePlatform         = { operatingSystemFamily = "LINUX", cpuArchitecture = var.cpu_architecture }
+      volumes                 = [{ name = "tmp" }]
+      containerDefinitions    = [shape.container]
+    }
+  }
+}
+
 resource "aws_ecs_task_definition" "api" {
-  family                   = "${var.name}-api"
+  family                   = local.register_inputs.api.family
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = var.api.cpu
-  memory                   = var.api.memory
+  cpu                      = local.task_shapes.api.cpu
+  memory                   = local.task_shapes.api.memory
   execution_role_arn       = aws_iam_role.execution["api"].arn
-  container_definitions    = jsonencode([local.api_container])
+  container_definitions    = jsonencode(local.register_inputs.api.containerDefinitions)
 
   runtime_platform {
     operating_system_family = "LINUX"
@@ -307,13 +337,13 @@ resource "aws_ecs_task_definition" "api" {
 }
 
 resource "aws_ecs_task_definition" "migrate" {
-  family                   = "${var.name}-migrate"
+  family                   = local.register_inputs.migrate.family
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = 256
-  memory                   = 512
+  cpu                      = local.task_shapes.migrate.cpu
+  memory                   = local.task_shapes.migrate.memory
   execution_role_arn       = aws_iam_role.execution["migrate"].arn
-  container_definitions    = jsonencode([local.migrate_container])
+  container_definitions    = jsonencode(local.register_inputs.migrate.containerDefinitions)
 
   runtime_platform {
     operating_system_family = "LINUX"
@@ -326,13 +356,13 @@ resource "aws_ecs_task_definition" "migrate" {
 }
 
 resource "aws_ecs_task_definition" "jobs" {
-  family                   = "${var.name}-jobs"
+  family                   = local.register_inputs.jobs.family
   requires_compatibilities = ["FARGATE"]
   network_mode             = "awsvpc"
-  cpu                      = 256
-  memory                   = 512
+  cpu                      = local.task_shapes.jobs.cpu
+  memory                   = local.task_shapes.jobs.memory
   execution_role_arn       = aws_iam_role.execution["jobs"].arn
-  container_definitions    = jsonencode([local.jobs_container])
+  container_definitions    = jsonencode(local.register_inputs.jobs.containerDefinitions)
 
   runtime_platform {
     operating_system_family = "LINUX"

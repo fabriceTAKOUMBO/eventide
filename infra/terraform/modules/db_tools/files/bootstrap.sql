@@ -8,12 +8,16 @@
 --
 -- Crée ou met à jour, sans rien toucher d'autre sur l'instance :
 --   - les rôles <app> (DML seulement), <migrator> (propriétaire, DDL) et <backup> (lecture
---     seule, pg_dump), avec CONNECTION LIMIT et délais propres à chaque rôle ;
+--     seule, pg_dump), avec CONNECTION LIMIT, délais et plafonds de ressources propres à
+--     chaque rôle (work_mem, maintenance_work_mem, temp_file_limit, idle_session_timeout, aucun
+--     worker parallèle) ;
 --   - la base <db> (propriétaire <migrator>, CONNECTION LIMIT = somme des rôles) et la base
 --     de test de restauration <restore_db> ;
 --   - les droits sur ces bases : plus de CONNECT pour PUBLIC.
 -- Nos rôles portent le commentaire 'eventide' : un rôle du même nom sans ce
--- marqueur appartient à une autre application, et le script s'arrête sans le modifier.
+-- marqueur appartient à une autre application, et le script s'arrête sans le modifier. De même
+-- pour une base de l'un de nos noms qui n'appartient pas à <migrator>.
+-- Aucun paramètre de l'instance, aucun autre rôle ni aucune autre base n'est modifié.
 -- Les mots de passe sont envoyés sous forme de vérificateurs SCRAM calculés dans la tâche
 -- (scram_verifiers.py) : ils n'apparaissent dans aucun journal de l'instance.
 -- Les droits sur le schéma public sont posés ensuite par grants.sql, connecté en <migrator> :
@@ -42,6 +46,18 @@
 \getenv backup_statement_timeout EV_BACKUP_STATEMENT_TIMEOUT
 \getenv backup_lock_timeout EV_BACKUP_LOCK_TIMEOUT
 \getenv backup_idle_tx_timeout EV_BACKUP_IDLE_TX_TIMEOUT
+\getenv app_work_mem EV_APP_WORK_MEM
+\getenv app_maintenance_work_mem EV_APP_MAINTENANCE_WORK_MEM
+\getenv app_temp_file_limit EV_APP_TEMP_FILE_LIMIT
+\getenv app_idle_session_timeout EV_APP_IDLE_SESSION_TIMEOUT
+\getenv migrator_work_mem EV_MIGRATOR_WORK_MEM
+\getenv migrator_maintenance_work_mem EV_MIGRATOR_MAINTENANCE_WORK_MEM
+\getenv migrator_temp_file_limit EV_MIGRATOR_TEMP_FILE_LIMIT
+\getenv migrator_idle_session_timeout EV_MIGRATOR_IDLE_SESSION_TIMEOUT
+\getenv backup_work_mem EV_BACKUP_WORK_MEM
+\getenv backup_maintenance_work_mem EV_BACKUP_MAINTENANCE_WORK_MEM
+\getenv backup_temp_file_limit EV_BACKUP_TEMP_FILE_LIMIT
+\getenv backup_idle_session_timeout EV_BACKUP_IDLE_SESSION_TIMEOUT
 \getenv work_dir WORK_DIR
 
 \set app_verifier `cat "$WORK_DIR/app.scram"`
@@ -81,6 +97,20 @@ WHERE p.rolname IN (:'migrator_role', :'app_role', :'backup_role')
   SELECT 1/0 AS arret;
 \endif
 
+-- Same rule for databases, checked BEFORE any change: an existing database with one of our
+-- names must belong to our <migrator> role (which carries the marker, checked above).
+-- Otherwise it belongs to another application of the instance: stop without touching it.
+SELECT count(*) = 0 AS bases_ok,
+       coalesce(string_agg(d.datname, ', ' ORDER BY d.datname), '') AS bases_etrangeres
+FROM pg_database d
+WHERE d.datname IN (:'db_name', :'restore_db_name')
+  AND pg_get_userbyid(d.datdba) IS DISTINCT FROM :'migrator_role' \gset
+\if :bases_ok
+\else
+  \echo '{"event":"db_bootstrap_failed","reason":"base existante dont le proprietaire n est pas notre role de migration : ' :bases_etrangeres '"}'
+  SELECT 1/0 AS arret;
+\endif
+
 -- Création (sans connexion, puis complétée) et marqueur dans la même transaction.
 -- SUPERUSER, REPLICATION et BYPASSRLS ne sont pas cités : désactivés à la création, et le
 -- compte maître RDS (non superutilisateur) n'a pas le droit de les mentionner.
@@ -108,6 +138,36 @@ ALTER ROLE :"migrator_role" SET idle_in_transaction_session_timeout = :'migrator
 ALTER ROLE :"backup_role" SET statement_timeout = :'backup_statement_timeout';
 ALTER ROLE :"backup_role" SET lock_timeout = :'backup_lock_timeout';
 ALTER ROLE :"backup_role" SET idle_in_transaction_session_timeout = :'backup_idle_tx_timeout';
+
+-- Resource caps per role (shared instance): memory per sort or hash and for maintenance, idle
+-- sessions closed by the server, and no parallel workers taken from the instance's pool.
+ALTER ROLE :"app_role" SET work_mem = :'app_work_mem';
+ALTER ROLE :"app_role" SET maintenance_work_mem = :'app_maintenance_work_mem';
+ALTER ROLE :"app_role" SET idle_session_timeout = :'app_idle_session_timeout';
+ALTER ROLE :"app_role" SET max_parallel_workers_per_gather = 0;
+ALTER ROLE :"app_role" SET max_parallel_maintenance_workers = 0;
+ALTER ROLE :"migrator_role" SET work_mem = :'migrator_work_mem';
+ALTER ROLE :"migrator_role" SET maintenance_work_mem = :'migrator_maintenance_work_mem';
+ALTER ROLE :"migrator_role" SET idle_session_timeout = :'migrator_idle_session_timeout';
+ALTER ROLE :"migrator_role" SET max_parallel_workers_per_gather = 0;
+ALTER ROLE :"migrator_role" SET max_parallel_maintenance_workers = 0;
+ALTER ROLE :"backup_role" SET work_mem = :'backup_work_mem';
+ALTER ROLE :"backup_role" SET maintenance_work_mem = :'backup_maintenance_work_mem';
+ALTER ROLE :"backup_role" SET idle_session_timeout = :'backup_idle_session_timeout';
+ALTER ROLE :"backup_role" SET max_parallel_workers_per_gather = 0;
+ALTER ROLE :"backup_role" SET max_parallel_maintenance_workers = 0;
+
+-- temp_file_limit is a superuser-only parameter (a hard cap: our roles cannot raise it). It is
+-- set only when the master account holds SET privilege on it (PostgreSQL 15+, GRANT SET ON
+-- PARAMETER); otherwise the bootstrap reports it and goes on (nothing else is changed).
+SELECT has_parameter_privilege('temp_file_limit', 'SET') AS temp_file_limit_ok \gset
+\if :temp_file_limit_ok
+ALTER ROLE :"app_role" SET temp_file_limit = :'app_temp_file_limit';
+ALTER ROLE :"migrator_role" SET temp_file_limit = :'migrator_temp_file_limit';
+ALTER ROLE :"backup_role" SET temp_file_limit = :'backup_temp_file_limit';
+\else
+  \echo '{"event":"db_bootstrap_temp_file_limit_skipped","reason":"le compte maitre n a pas le droit SET sur temp_file_limit : plafond de fichiers temporaires non pose (les autres plafonds le sont)"}'
+\endif
 
 -- Le compte maître doit pouvoir agir en tant que <migrator> pour créer les bases à son nom
 -- (PostgreSQL 16). Appartenance temporaire, retirée en fin de script ; en cas d'échec avant

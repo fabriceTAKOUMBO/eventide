@@ -89,6 +89,16 @@ locals {
     EV_BACKUP_IDLE_TX_TIMEOUT     = var.role_timeouts.backup.idle_in_transaction
   }
 
+  # Per-role resource caps on the shared instance (variables.tf, role_resource_limits).
+  resource_limits_environment = merge([
+    for key, prefix in { app = "EV_APP", migrator = "EV_MIGRATOR", backup = "EV_BACKUP" } : {
+      "${prefix}_WORK_MEM"             = var.role_resource_limits[key].work_mem
+      "${prefix}_MAINTENANCE_WORK_MEM" = var.role_resource_limits[key].maintenance_work_mem
+      "${prefix}_TEMP_FILE_LIMIT"      = var.role_resource_limits[key].temp_file_limit
+      "${prefix}_IDLE_SESSION_TIMEOUT" = var.role_resource_limits[key].idle_session_timeout
+    }
+  ]...)
+
   identity_environment = {
     EV_DB_NAME             = var.db_name
     EV_RESTORE_DB_NAME     = var.restore_db_name
@@ -451,7 +461,7 @@ resource "aws_ecs_task_definition" "bootstrap" {
       dependsOn              = [{ containerName = "scram", condition = "COMPLETE" }]
       entryPoint             = ["sh", "-c"]
       command                = [join("\n", [local.lib, file("${path.module}/files/bootstrap.sh")])]
-      environment = [for k, v in merge(local.pg_environment, local.identity_environment, local.timeouts_environment, {
+      environment = [for k, v in merge(local.pg_environment, local.identity_environment, local.timeouts_environment, local.resource_limits_environment, {
         PGAPPNAME                = "${var.name}-db-bootstrap"
         EV_SQL_BOOTSTRAP         = file("${path.module}/files/bootstrap.sql")
         EV_SQL_BOOTSTRAP_CLEANUP = file("${path.module}/files/bootstrap_cleanup.sql")

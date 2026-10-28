@@ -28,6 +28,29 @@ require_identifiers() {
   done
 }
 
+# Shared instance (CINAF, JobMinutes, Candidature Express): Eventide only ever names its own
+# databases (eventide, eventide_*) and roles (ev_*), whatever overrides a task run receives.
+# Call after require_identifiers.
+require_own_databases() {
+  for _name in "$@"; do
+    eval "_value=\${$_name:-}"
+    case "$_value" in
+      eventide | eventide_*) ;;
+      *) fail "base $_name hors d'Eventide (eventide ou eventide_* attendu)" ;;
+    esac
+  done
+}
+
+require_own_roles() {
+  for _name in "$@"; do
+    eval "_value=\${$_name:-}"
+    case "$_value" in
+      ev_?*) ;;
+      *) fail "role $_name hors d'Eventide (ev_* attendu)" ;;
+    esac
+  done
+}
+
 require_integers() {
   for _name in "$@"; do
     eval "_value=\${$_name:-}"

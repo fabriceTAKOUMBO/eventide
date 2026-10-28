@@ -91,17 +91,24 @@ run_bootstrap() {
     EV_APP_STATEMENT_TIMEOUT=30s EV_APP_LOCK_TIMEOUT=5s EV_APP_IDLE_TX_TIMEOUT=60s \
     EV_MIGRATOR_STATEMENT_TIMEOUT=15min EV_MIGRATOR_LOCK_TIMEOUT=10s EV_MIGRATOR_IDLE_TX_TIMEOUT=5min \
     EV_BACKUP_STATEMENT_TIMEOUT=0 EV_BACKUP_LOCK_TIMEOUT=60s EV_BACKUP_IDLE_TX_TIMEOUT=10min \
+    EV_APP_WORK_MEM=4MB EV_APP_MAINTENANCE_WORK_MEM=16MB EV_APP_TEMP_FILE_LIMIT=256MB EV_APP_IDLE_SESSION_TIMEOUT=15min \
+    EV_MIGRATOR_WORK_MEM=16MB EV_MIGRATOR_MAINTENANCE_WORK_MEM=64MB EV_MIGRATOR_TEMP_FILE_LIMIT=1GB EV_MIGRATOR_IDLE_SESSION_TIMEOUT=10min \
+    EV_BACKUP_WORK_MEM=4MB EV_BACKUP_MAINTENANCE_WORK_MEM=16MB EV_BACKUP_TEMP_FILE_LIMIT=256MB EV_BACKUP_IDLE_SESSION_TIMEOUT=10min \
     EV_SQL_BOOTSTRAP="$(cat "$files/bootstrap.sql")" EV_SQL_GRANTS="$(cat "$files/grants.sql")" \
     EV_SQL_BOOTSTRAP_CLEANUP="$(cat "$files/bootstrap_cleanup.sql")" \
     "$@" \
     sh -c "$(cat "$files/lib.sh" "$files/bootstrap.sh")"
 }
 
-echo "== Amorçage (1er passage)"
-run_bootstrap
-ok "amorçage terminé"
-echo "== Amorçage (2e passage : idempotence, nouveaux vérificateurs)"
-run_bootstrap
+echo "== Amorçage (1er passage : compte maître sans droit SET sur temp_file_limit)"
+out=$(run_bootstrap 2>&1) || { echo "$out"; ko "amorçage"; }
+grep -q '"event":"db_bootstrap_temp_file_limit_skipped"' <<< "$out" || { echo "$out"; ko "absence du droit SET sur temp_file_limit non signalée"; }
+ok "amorçage terminé (temp_file_limit signalé, non posé)"
+# RDS : le compte maître peut avoir le droit SET sur temp_file_limit (non vérifié) ; simulé ici.
+psql_as postgres "$SUPER_PW" postgres -c "GRANT SET ON PARAMETER temp_file_limit TO app_admin" > /dev/null
+echo "== Amorçage (2e passage : idempotence, nouveaux vérificateurs, droit SET sur temp_file_limit)"
+out=$(run_bootstrap 2>&1) || { echo "$out"; ko "amorçage relancé"; }
+if grep -q 'db_bootstrap_temp_file_limit_skipped' <<< "$out"; then ko "temp_file_limit non posé malgré le droit SET"; fi
 ok "amorçage relancé sans erreur"
 
 # Migration simulée (rôle propriétaire), puis droits du rôle applicatif.
@@ -137,6 +144,15 @@ dblimit=$(psql_as postgres "$SUPER_PW" postgres -At -c "SELECT datconnlimit FROM
 [ "$dblimit" = "14" ] || ko "limite de connexions de la base ($dblimit)"
 ok "limites de connexions (10 / 2 / 2, base 14) et délais par rôle"
 
+echo "$settings" | grep -q "ev_app 10 .*work_mem=4MB.*maintenance_work_mem=16MB.*idle_session_timeout=15min.*max_parallel_workers_per_gather=0.*max_parallel_maintenance_workers=0.*temp_file_limit=256MB" || ko "plafonds de ressources de ev_app"
+echo "$settings" | grep -q "ev_migrator 2 .*work_mem=16MB.*maintenance_work_mem=64MB.*idle_session_timeout=10min.*max_parallel_workers_per_gather=0.*temp_file_limit=1GB" || ko "plafonds de ressources de ev_migrator"
+echo "$settings" | grep -q "ev_backup 2 .*work_mem=4MB.*idle_session_timeout=10min.*max_parallel_workers_per_gather=0.*temp_file_limit=256MB" || ko "plafonds de ressources de ev_backup"
+effective=$(psql_as ev_app "$APP_PW" eventide -At -c \
+  "SELECT string_agg(name || '=' || setting, ' ' ORDER BY name) FROM pg_settings WHERE name IN ('work_mem', 'temp_file_limit', 'idle_session_timeout', 'max_parallel_workers_per_gather')")
+[ "$effective" = "idle_session_timeout=900000 max_parallel_workers_per_gather=0 temp_file_limit=262144 work_mem=4096" ] || ko "plafonds effectifs de ev_app ($effective)"
+if psql_as ev_app "$APP_PW" eventide -c "SET temp_file_limit = '10GB'" > /dev/null 2>&1; then ko "ev_app a relevé son temp_file_limit"; fi
+ok "plafonds par rôle (work_mem, maintenance_work_mem, temp_file_limit, idle_session_timeout, aucun worker parallèle) ; temp_file_limit non relevable"
+
 member=$(psql_as postgres "$SUPER_PW" postgres -At -c \
   "SELECT count(*) FROM pg_auth_members m JOIN pg_roles r ON r.oid = m.roleid JOIN pg_roles u ON u.oid = m.member WHERE r.rolname = 'ev_migrator' AND u.rolname = 'app_admin' AND m.set_option")
 [ "$member" = "0" ] || ko "le compte maître garde SET sur ev_migrator"
@@ -147,20 +163,41 @@ markers=$(psql_as postgres "$SUPER_PW" postgres -At -c \
 [ "$markers" = "3" ] || ko "marqueur eventide absent ($markers rôle(s) sur 3)"
 ok "nos rôles portent le marqueur eventide"
 
-echo "== Amorçage refusé : rôle du même nom créé par une autre application"
-if out=$(run_bootstrap EV_APP_ROLE=cinaf_app 2>&1); then echo "$out"; ko "l'amorçage a accepté un rôle étranger"; fi
-grep -q 'non cree par cet amorcage : .*cinaf_app' <<< "$out" || { echo "$out"; ko "motif du refus absent des journaux"; }
+echo "== Amorçage refusé : nom de rôle ou de base hors des préfixes d'Eventide"
+if out=$(run_bootstrap EV_APP_ROLE=cinaf_app 2>&1); then echo "$out"; ko "l'amorçage a accepté le rôle cinaf_app"; fi
+grep -q 'role EV_APP_ROLE hors d' <<< "$out" || { echo "$out"; ko "motif du refus (nom de rôle) absent"; }
+if out=$(run_bootstrap EV_DB_NAME=appdb 2>&1); then echo "$out"; ko "l'amorçage a accepté la base appdb"; fi
+grep -q 'base EV_DB_NAME hors d' <<< "$out" || { echo "$out"; ko "motif du refus (nom de base) absent"; }
 foreign=$(psql_as postgres "$SUPER_PW" postgres -At -c \
   "SELECT rolconnlimit || ' ' || coalesce(shobj_description(oid, 'pg_authid'), 'sans-commentaire') FROM pg_roles WHERE rolname = 'cinaf_app'")
 [ "$foreign" = "-1 sans-commentaire" ] || ko "le rôle étranger a été modifié ($foreign)"
-psql_as cinaf_app "$OTHER_PW" postgres -c "SELECT 1" > /dev/null || ko "mot de passe du rôle étranger modifié"
+ok "noms hors d'Eventide refusés avant toute connexion"
+
+echo "== Amorçage refusé : rôle ev_* du même nom créé par une autre application (sans marqueur)"
+psql_as postgres "$SUPER_PW" postgres -c "SET log_statement = 'none'" -c "CREATE ROLE ev_foreign LOGIN PASSWORD '$OTHER_PW'" > /dev/null
+if out=$(run_bootstrap EV_APP_ROLE=ev_foreign 2>&1); then echo "$out"; ko "l'amorçage a accepté un rôle étranger"; fi
+grep -q 'non cree par cet amorcage : .*ev_foreign' <<< "$out" || { echo "$out"; ko "motif du refus absent des journaux"; }
+foreign=$(psql_as postgres "$SUPER_PW" postgres -At -c \
+  "SELECT r.rolconnlimit || ' ' || coalesce(shobj_description(r.oid, 'pg_authid'), 'sans-commentaire') || ' ' || (SELECT count(*) FROM pg_db_role_setting s WHERE s.setrole = r.oid) FROM pg_roles r WHERE r.rolname = 'ev_foreign'")
+[ "$foreign" = "-1 sans-commentaire 0" ] || ko "le rôle étranger a été modifié ($foreign)"
+psql_as ev_foreign "$OTHER_PW" postgres -c "SELECT 1" > /dev/null || ko "mot de passe du rôle étranger modifié"
 ok "rôle étranger laissé intact, amorçage arrêté"
+
+echo "== Amorçage refusé : base eventide_* qui appartient à une autre application"
+psql_as postgres "$SUPER_PW" postgres -c "CREATE DATABASE eventide_other OWNER app_admin CONNECTION LIMIT -1" > /dev/null
+if out=$(run_bootstrap EV_APP_ROLE=ev_o_app EV_MIGRATOR_ROLE=ev_o_migrator EV_BACKUP_ROLE=ev_o_backup \
+  EV_DB_NAME=eventide_other EV_RESTORE_DB_NAME=eventide_other_restore 2>&1); then echo "$out"; ko "l'amorçage a accepté une base étrangère"; fi
+grep -q "proprietaire n est pas notre role de migration : .*eventide_other" <<< "$out" || { echo "$out"; ko "motif du refus (base étrangère) absent"; }
+state=$(psql_as postgres "$SUPER_PW" postgres -At -c \
+  "SELECT (SELECT datconnlimit || ' ' || pg_get_userbyid(datdba) || ' ' || coalesce(datacl::text, 'acl-defaut') FROM pg_database WHERE datname = 'eventide_other') || ' ' || (SELECT count(*) FROM pg_roles WHERE rolname LIKE 'ev\_o\_%') || ' ' || (SELECT count(*) FROM pg_database WHERE datname = 'eventide_other_restore')")
+[ "$state" = "-1 app_admin acl-defaut 0 0" ] || ko "la base étrangère ou l'instance a été modifiée ($state)"
+ok "base étrangère laissée intacte, aucun rôle ni base créés"
 
 echo "== Échec après l'appartenance temporaire : nettoyage (compte maître sans CREATEDB)"
 psql_as postgres "$SUPER_PW" postgres -c "SET log_statement = 'none'" -c "CREATE ROLE app_admin_nodb LOGIN CREATEROLE PASSWORD '$NODB_PW'" > /dev/null
 if out=$(run_bootstrap EV_MASTER_USER=app_admin_nodb EV_MASTER_PASSWORD="$NODB_PW" \
   EV_APP_ROLE=ev_t_app EV_MIGRATOR_ROLE=ev_t_migrator EV_BACKUP_ROLE=ev_t_backup \
-  EV_DB_NAME=ev_t_db EV_RESTORE_DB_NAME=ev_t_restore 2>&1); then echo "$out"; ko "l'amorçage sans CREATEDB a réussi"; fi
+  EV_DB_NAME=eventide_t EV_RESTORE_DB_NAME=eventide_t_restore 2>&1); then echo "$out"; ko "l'amorçage sans CREATEDB a réussi"; fi
 grep -q '"event":"db_bootstrap_cleanup_done"' <<< "$out" || { echo "$out"; ko "nettoyage non signalé"; }
 grep -q '"event":"db_bootstrap_failed","reason":"bootstrap.sql"' <<< "$out" || { echo "$out"; ko "cause d'origine non signalée"; }
 left=$(psql_as postgres "$SUPER_PW" postgres -At -c \
@@ -183,6 +220,19 @@ restore() { # restore_test.sh, NOM=valeur en surcharge
 echo "== Sauvegarde (pg_dump, rôle ev_backup)"
 backup
 ok "sauvegarde produite et relue"
+
+echo "== Sauvegarde et restauration refusées hors des bases d'Eventide"
+rm -rf "${work:?}"/* && touch "$work/init.ok"
+if out=$(env -i PATH="$PATH" PGHOST=127.0.0.1 PGPORT="$PORT" PGSSLMODE=disable RDS_CA_URL= WORK_DIR="$work" \
+  PGDATABASE=appdb PGUSER=ev_backup PGPASSWORD="$BAK_PW" sh -c "$(cat "$files/lib.sh" "$files/backup_dump.sh")" 2>&1); then
+  echo "$out"; ko "sauvegarde d'une base étrangère acceptée"
+fi
+grep -q 'base PGDATABASE hors d' <<< "$out" || { echo "$out"; ko "motif du refus (sauvegarde) absent"; }
+[ ! -f "$work/dump.pgc" ] || ko "un fichier de sauvegarde a été produit"
+if out=$(restore EV_RESTORE_DB_NAME=appdb 2>&1); then echo "$out"; ko "restauration dans une base étrangère acceptée"; fi
+grep -q 'base EV_RESTORE_DB_NAME hors d' <<< "$out" || { echo "$out"; ko "motif du refus (restauration) absent"; }
+ok "aucune sauvegarde ni restauration possible hors des bases d'Eventide"
+backup > /dev/null
 
 echo "== Test de restauration (base eventide_restore)"
 restore

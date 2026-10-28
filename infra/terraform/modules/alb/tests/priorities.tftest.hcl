@@ -1,5 +1,7 @@
 # Règles sur l'écouteur PARTAGÉ : seulement la plage d'Eventide (400-409, préproduction 420-429),
 # seulement nos noms d'hôte, notre certificat ajouté (SNI). Sans AWS (fournisseur simulé).
+# Shared listener: never a host of another platform, never a wildcard, never a lookalike
+# suffix, never a priority outside our blocks, only the HTTPS 443 listener.
 
 mock_provider "aws" {
   mock_data "aws_lb_listener" {
@@ -7,6 +9,8 @@ mock_provider "aws" {
       arn               = "arn:aws:elasticloadbalancing:us-east-1:466494951409:listener/app/cinaf-streaming-prod-alb/0123456789abcdef/fedcba9876543210"
       load_balancer_arn = "arn:aws:elasticloadbalancing:us-east-1:466494951409:loadbalancer/app/cinaf-streaming-prod-alb/0123456789abcdef"
       ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+      port              = 443
+      protocol          = "HTTPS"
     }
   }
   mock_data "aws_lb" {
@@ -24,6 +28,7 @@ variables {
   name               = "ev-prod"
   vpc_id             = "vpc-0fbfe87b34e2b3903"
   https_listener_arn = "arn:aws:elasticloadbalancing:us-east-1:466494951409:listener/app/cinaf-streaming-prod-alb/0123456789abcdef/fedcba9876543210"
+  domain             = "eventide.example"
   api_hostname       = "api.eventide.example"
   web_hostnames      = ["eventide.example", "www.eventide.example"]
   certificate_arn    = "arn:aws:acm:us-east-1:466494951409:certificate/00000000-0000-0000-0000-000000000000"
@@ -75,4 +80,104 @@ run "preprod_range_is_accepted" {
   variables {
     listener_rule_priorities = { api = 420, web = 421 }
   }
+}
+
+run "preprod_hosts_inside_the_domain_are_accepted" {
+  command = plan
+
+  variables {
+    listener_rule_priorities = { api = 420, web = 421 }
+    api_hostname             = "api.preprod.eventide.example"
+    web_hostnames            = ["preprod.eventide.example"]
+  }
+
+  assert {
+    condition     = one(aws_lb_listener_rule.api.condition).host_header[0].values == toset(["api.preprod.eventide.example"])
+    error_message = "Préproduction : api.preprod.<domaine>."
+  }
+}
+
+run "host_of_another_platform_is_refused" {
+  command = plan
+
+  variables {
+    listener_rule_priorities = { api = 400, web = 401 }
+    api_hostname             = "api.candidatureexpress.com"
+  }
+
+  expect_failures = [aws_lb_listener_rule.api, aws_lb_listener_rule.web]
+}
+
+run "lookalike_suffix_is_refused" {
+  command = plan
+
+  variables {
+    listener_rule_priorities = { api = 400, web = 401 }
+    web_hostnames            = ["eventide.example", "noteventide.example"]
+  }
+
+  expect_failures = [aws_lb_listener_rule.api, aws_lb_listener_rule.web]
+}
+
+run "wildcard_api_host_is_refused" {
+  command = plan
+
+  variables {
+    listener_rule_priorities = { api = 400, web = 401 }
+    api_hostname             = "*.eventide.example"
+  }
+
+  expect_failures = [var.api_hostname]
+}
+
+run "wildcard_web_host_is_refused" {
+  command = plan
+
+  variables {
+    listener_rule_priorities = { api = 400, web = 401 }
+    web_hostnames            = ["eventide.example", "*.example"]
+  }
+
+  expect_failures = [var.web_hostnames]
+}
+
+run "priorities_across_blocks_are_refused" {
+  command = plan
+
+  variables {
+    listener_rule_priorities = { api = 409, web = 420 }
+  }
+
+  expect_failures = [var.listener_rule_priorities]
+}
+
+run "equal_priorities_are_refused" {
+  command = plan
+
+  variables {
+    listener_rule_priorities = { api = 400, web = 400 }
+  }
+
+  expect_failures = [var.listener_rule_priorities]
+}
+
+run "listener_other_than_https_443_is_refused" {
+  command = plan
+
+  variables {
+    listener_rule_priorities = { api = 400, web = 401 }
+  }
+
+  override_data {
+    target = data.aws_lb_listener.shared
+    values = {
+      arn               = "arn:aws:elasticloadbalancing:us-east-1:466494951409:listener/app/cinaf-streaming-prod-alb/0123456789abcdef/0000000000000080"
+      load_balancer_arn = "arn:aws:elasticloadbalancing:us-east-1:466494951409:loadbalancer/app/cinaf-streaming-prod-alb/0123456789abcdef"
+      ssl_policy        = ""
+      port              = 80
+      protocol          = "HTTP"
+    }
+  }
+
+  expect_failures = [aws_lb_listener_rule.api]
 }
