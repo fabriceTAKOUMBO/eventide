@@ -1,0 +1,379 @@
+name: Deploy
+
+# Déploiement MANUEL de l'API d'Eventide vers AWS (ECS Fargate ARM64, hébergement mutualisé dans
+# le compte principal). Adapté du workflow Deploy de Candidature Express (une seule image).
+#
+# Prérequis (docs/runbooks/premier-deploiement.md) :
+#   - environnement GitHub "prod" (branche main seulement, relecteur si le plan GitHub le permet)
+#     et, si la préproduction existe, "preprod" ;
+#   - variables de l'environnement GitHub (pas des secrets) :
+#       AWS_REGION               us-east-1
+#       AWS_DEPLOY_ROLE_ARN      sortie Terraform prod.github_deploy_role_arn
+#       DEPLOY_CONFIG_PARAMETER  (facultatif) sortie Terraform prod.deploy_config_parameter
+#   - aucune clé AWS : OIDC, rôle ev-<env>-github-deploy restreint au dépôt
+#     fabriceTAKOUMBO/eventide (sujet immuable), à l'environnement GitHub et, en production, à main.
+#
+# Étapes : image linux/arm64 construite et poussée dans ECR (tag = SHA du commit, immuable) ->
+# scan ECR (bloquant en production sur toute CRITICAL absente de .github/accepted-cves.txt) ->
+# nouvelles révisions des familles api, migrate et jobs (modèle = révision Terraform, seule
+# l'image change) -> migrations (tâche ponctuelle, rôle ev_migrator ; arrêt si échec) ->
+# service api (s'il existe : il n'existe qu'avec un domaine) -> tag enregistré dans SSM ->
+# tests de fumée -> résumé.
+#
+# Retour arrière : relancer avec image_tag = « Tag précédent » du résumé, migrations décochées.
+
+run-name: Deploy ${{ inputs.environment }} @ ${{ inputs.image_tag || github.sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environnement cible
+        type: choice
+        options: [prod, preprod]
+        default: prod
+        required: true
+      image_tag:
+        description: "Retour arrière : « Tag précédent » d'un résumé de déploiement (SHA complet). Vide = construire et déployer le commit sélectionné."
+        type: string
+        required: false
+        default: ""
+      run_migrations:
+        description: Lancer les migrations Django avant la mise à jour du service
+        type: boolean
+        default: true
+
+permissions: {}
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to ${{ inputs.environment }}
+    runs-on: ${{ vars.DEPLOY_RUNNER || 'ubuntu-24.04-arm' }}
+    timeout-minutes: 45
+    environment:
+      name: ${{ inputs.environment }}
+    permissions:
+      contents: read
+      id-token: write # OIDC vers AWS
+    env:
+      TARGET_ENV: ${{ inputs.environment }}
+      INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
+      RUN_MIGRATIONS: ${{ inputs.run_migrations }}
+      ACCEPTED_CVES_FILE: .github/accepted-cves.txt
+      AWS_PAGER: ""
+
+    steps:
+      - name: Validate inputs
+        env:
+          ROLE_ARN: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          REGION: ${{ vars.AWS_REGION }}
+        run: |
+          set -euo pipefail
+          if [ -z "$ROLE_ARN" ] || [ -z "$REGION" ]; then
+            echo "::error::Variables AWS_DEPLOY_ROLE_ARN et AWS_REGION absentes de l'environnement GitHub '$TARGET_ENV'."
+            exit 1
+          fi
+          if [ "$TARGET_ENV" = "prod" ] && [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::La production se déploie uniquement depuis main (ref : $GITHUB_REF)."
+            exit 1
+          fi
+          if [ -n "$INPUT_IMAGE_TAG" ]; then
+            if ! [[ "$INPUT_IMAGE_TAG" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::image_tag doit être un SHA complet (40 caractères hexadécimaux)."
+              exit 1
+            fi
+            echo "IMAGE_TAG=$INPUT_IMAGE_TAG" >> "$GITHUB_ENV"
+            echo "ROLLBACK=true" >> "$GITHUB_ENV"
+          else
+            echo "IMAGE_TAG=$GITHUB_SHA" >> "$GITHUB_ENV"
+            echo "ROLLBACK=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: gha-deploy-eventide-${{ inputs.environment }}-${{ github.run_id }}
+          role-duration-seconds: 3600
+          mask-aws-account-id: true
+
+      - name: Load deployment configuration (SSM, written by Terraform)
+        env:
+          CONFIG_PARAMETER: ${{ vars.DEPLOY_CONFIG_PARAMETER }}
+        run: |
+          set -euo pipefail
+          param="${CONFIG_PARAMETER:-/eventide/${TARGET_ENV}/deploy/config}"
+          cfg="$RUNNER_TEMP/deploy-config.json"
+          aws ssm get-parameter --name "$param" --query Parameter.Value --output text > "$cfg"
+          if ! jq -e --arg env "$TARGET_ENV" '.environment == $env and .hosting == "shared"' "$cfg" > /dev/null; then
+            echo "::error::Le paramètre $param ne décrit pas l'environnement mutualisé $TARGET_ENV."
+            exit 1
+          fi
+          arch=$(jq -r '.cpu_architecture' "$cfg")
+          case "$arch" in
+            ARM64) platform=linux/arm64 ;;
+            X86_64) platform=linux/amd64 ;;
+            *) echo "::error::cpu_architecture inconnue dans $param : $arch"; exit 1 ;;
+          esac
+          case "$(uname -m)" in
+            aarch64 | arm64) runner_platform=linux/arm64 ;;
+            *) runner_platform=linux/amd64 ;;
+          esac
+          {
+            echo "IMAGE_ARCH=$arch"
+            echo "IMAGE_PLATFORM=$platform"
+            echo "NEEDS_QEMU=$([ "$platform" = "$runner_platform" ] && echo false || echo true)"
+            echo "CLUSTER=$(jq -r '.cluster' "$cfg")"
+            echo "API_SERVICE=$(jq -r '.services.api // ""' "$cfg")"
+            echo "API_FAMILY=$(jq -r '.task_families.api' "$cfg")"
+            echo "MIGRATE_FAMILY=$(jq -r '.task_families.migrate' "$cfg")"
+            echo "JOBS_FAMILY=$(jq -r '.task_families.jobs' "$cfg")"
+            echo "API_TEMPLATE=$(jq -r '.task_definition_templates.api' "$cfg")"
+            echo "MIGRATE_TEMPLATE=$(jq -r '.task_definition_templates.migrate' "$cfg")"
+            echo "JOBS_TEMPLATE=$(jq -r '.task_definition_templates.jobs' "$cfg")"
+            echo "API_CONTAINER=$(jq -r '.containers.api' "$cfg")"
+            echo "MIGRATE_CONTAINER=$(jq -r '.containers.migrate' "$cfg")"
+            echo "JOBS_CONTAINER=$(jq -r '.containers.jobs' "$cfg")"
+            echo "ECR_API=$(jq -r '.ecr.api' "$cfg")"
+            echo "SUBNETS=$(jq -r '.network.subnets | join(",")' "$cfg")"
+            echo "SECURITY_GROUPS=$(jq -r '.network.security_groups | join(",")' "$cfg")"
+            echo "JOBS_LOG_GROUP=$(jq -r '.jobs_log_group' "$cfg")"
+            echo "IMAGE_TAG_PARAMETER=$(jq -r '.image_tag_parameter' "$cfg")"
+            echo "API_URL=$(jq -r '.urls.api // ""' "$cfg")"
+            echo "WEB_URL=$(jq -r '.urls.web // ""' "$cfg")"
+          } >> "$GITHUB_ENV"
+          echo "PREVIOUS_TAG=$(aws ssm get-parameter --name "$(jq -r '.image_tag_parameter' "$cfg")" --query Parameter.Value --output text)" >> "$GITHUB_ENV"
+
+      - name: Resolve image (already in ECR?)
+        run: |
+          set -euo pipefail
+          if aws ecr describe-images --repository-name "${ECR_API#*/}" --image-ids "imageTag=$IMAGE_TAG" > /dev/null 2>&1; then
+            echo "BUILD=false" >> "$GITHUB_ENV"
+          elif [ "$ROLLBACK" = "true" ]; then
+            echo "::error::Retour arrière impossible : l'image $IMAGE_TAG n'existe pas (ou plus) dans ECR."
+            exit 1
+          else
+            echo "BUILD=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Login to Amazon ECR
+        if: env.BUILD == 'true'
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2.1.7
+
+      - name: Set up QEMU (runner architecture differs from the image)
+        if: env.BUILD == 'true' && env.NEEDS_QEMU == 'true'
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: ${{ env.IMAGE_PLATFORM }}
+
+      - name: Set up Docker Buildx
+        if: env.BUILD == 'true'
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build and push API image
+        if: env.BUILD == 'true'
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: backend
+          platforms: ${{ env.IMAGE_PLATFORM }}
+          push: true
+          tags: ${{ env.ECR_API }}:${{ env.IMAGE_TAG }}
+          labels: org.opencontainers.image.revision=${{ env.IMAGE_TAG }}
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=api-${{ env.IMAGE_ARCH }}
+          cache-to: type=gha,mode=max,scope=api-${{ env.IMAGE_ARCH }}
+
+      - name: Image scan findings (ECR scan on push)
+        # Production (hors retour arrière) : bloque sur toute CRITICAL absente de
+        # .github/accepted-cves.txt, sur une CRITICAL comptée mais non identifiée et sur un scan
+        # indisponible. Préproduction : informatif.
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          [ -f "$ACCEPTED_CVES_FILE" ] || { echo "::error::$ACCEPTED_CVES_FILE introuvable."; exit 1; }
+          today=$(date -u +%F)
+          accepted='[]'
+          while IFS= read -r line || [ -n "$line" ]; do
+            line="${line%%#*}"
+            [[ "$line" =~ ^[[:space:]]*$ ]] && continue
+            if [[ "$line" =~ ^[[:space:]]*(CVE-[0-9]{4}-[0-9]{4,})[[:space:]]+(api|\*)[[:space:]]+[0-9]{4}-[0-9]{2}-[0-9]{2}[[:space:]]+([0-9]{4}-[0-9]{2}-[0-9]{2})[[:space:]]+[^[:space:]] ]]; then
+              cve="${BASH_REMATCH[1]}"; until="${BASH_REMATCH[3]}"
+              if [ "$(date -u -d "$until" +%F 2>/dev/null || true)" != "$until" ]; then
+                echo "::error file=$ACCEPTED_CVES_FILE::Date d'expiration invalide : $line"; exit 1
+              fi
+              if [[ "$today" > "$until" ]]; then
+                echo "::warning::Acceptance expirée, non appliquée : $cve ($until)."
+              else
+                accepted=$(jq -c --arg c "$cve" '. + [$c]' <<< "$accepted")
+              fi
+            else
+              echo "::error file=$ACCEPTED_CVES_FILE::Ligne mal formée : $line"; exit 1
+            fi
+          done < "$ACCEPTED_CVES_FILE"
+          name="${ECR_API#*/}"
+          aws ecr wait image-scan-complete --repository-name "$name" --image-id "imageTag=$IMAGE_TAG" || true
+          result=$(aws ecr describe-image-scan-findings --repository-name "$name" --image-id "imageTag=$IMAGE_TAG" \
+            --no-paginate --query '{status: imageScanStatus.status, counts: imageScanFindings.findingSeverityCounts}' \
+            --output json 2>/dev/null || echo '{}')
+          status=$(jq -r '.status // "INDISPONIBLE"' <<< "$result")
+          counts=$(jq -c '.counts // {}' <<< "$result")
+          ids=$(aws ecr describe-image-scan-findings --repository-name "$name" --image-id "imageTag=$IMAGE_TAG" \
+            --output json 2>/dev/null | jq -c '
+              [(.imageScanFindings.findings // [])[] | select(.severity == "CRITICAL") | .name]
+              + [(.imageScanFindings.enhancedFindings // [])[] | select(.severity == "CRITICAL")
+                 | .packageVulnerabilityDetails.vulnerabilityId] | unique' || echo '[]')
+          [ -n "$ids" ] || ids='[]'
+          missing=$(jq -n --argjson c "$counts" --argjson i "$ids" '[($c.CRITICAL // 0) - ($i | length), 0] | max')
+          rejected=$(jq -c --argjson a "$accepted" '[.[] | select(IN($a[]) | not)]' <<< "$ids")
+          {
+            echo "### Scan ECR de l'image api"
+            echo ""
+            echo "| Tag | Scan | Sévérités | CRITICAL non acceptées |"
+            echo "|---|---|---|---|"
+            echo "| \`$IMAGE_TAG\` | $status | \`$counts\` | $(jq -r 'join(", ")' <<< "$rejected")$([ "$missing" -gt 0 ] && echo " + $missing non identifiée(s)") |"
+          } > "$RUNNER_TEMP/scan.md"
+          if [ "$TARGET_ENV" = "prod" ] && [ "$ROLLBACK" != "true" ]; then
+            if [ "$status" != "COMPLETE" ]; then
+              echo "::error::Résultat du scan ECR indisponible : relancer le déploiement (image réutilisée)."; exit 1
+            fi
+            if [ "$rejected" != "[]" ] || [ "$missing" -gt 0 ]; then
+              echo "::error::Vulnérabilité(s) CRITICAL non acceptée(s) : $(jq -r 'join(", ")' <<< "$rejected") (non identifiées : $missing). Mettre à jour l'image ou, sur décision du PO, ajouter la CVE à $ACCEPTED_CVES_FILE par une pull request."
+              exit 1
+            fi
+          elif [ "$status" != "COMPLETE" ] || [ "$rejected" != "[]" ] || [ "$missing" -gt 0 ]; then
+            echo "::warning::Scan ECR : CRITICAL non acceptées $(jq -r 'join(", ")' <<< "$rejected") ; statut $status (non bloquant ici)."
+          fi
+
+      - name: Register new task definition revisions (api, migrate, jobs)
+        run: |
+          set -euo pipefail
+          register() {
+            local template="$1" family="$2" container="$3" var="$4"
+            local current="$RUNNER_TEMP/$family.current.json" next="$RUNNER_TEMP/$family.next.json"
+            aws ecs describe-task-definition --task-definition "$template" --query taskDefinition --output json > "$current"
+            jq -e --arg f "$family" '.family == $f' "$current" > /dev/null ||
+              { echo "::error::Le modèle $template n'appartient pas à la famille $family."; exit 1; }
+            jq -e --arg c "$container" 'any(.containerDefinitions[]; .name == $c)' "$current" > /dev/null ||
+              { echo "::error::Conteneur $container introuvable dans $family."; exit 1; }
+            jq --arg c "$container" --arg img "$ECR_API:$IMAGE_TAG" '
+              (.containerDefinitions[] | select(.name == $c) | .image) = $img
+              | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities,
+                    .registeredAt, .registeredBy, .deregisteredAt)
+            ' "$current" > "$next"
+            local arn
+            arn=$(aws ecs register-task-definition --cli-input-json "file://$next" \
+              --query taskDefinition.taskDefinitionArn --output text)
+            echo "$var=$arn" >> "$GITHUB_ENV"
+            echo "$family -> $arn"
+          }
+          register "$API_TEMPLATE" "$API_FAMILY" "$API_CONTAINER" API_TASKDEF
+          register "$MIGRATE_TEMPLATE" "$MIGRATE_FAMILY" "$MIGRATE_CONTAINER" MIGRATE_TASKDEF
+
+      - name: Run Django migrations (one-off ECS task, role ev_migrator)
+        if: env.RUN_MIGRATIONS == 'true'
+        run: |
+          set -euo pipefail
+          network="awsvpcConfiguration={subnets=[$SUBNETS],securityGroups=[$SECURITY_GROUPS],assignPublicIp=DISABLED}"
+          result=$(aws ecs run-task --cluster "$CLUSTER" --task-definition "$MIGRATE_TASKDEF" \
+            --capacity-provider-strategy capacityProvider=FARGATE,weight=1 \
+            --network-configuration "$network" --started-by "gha-deploy-${GITHUB_RUN_ID}" --output json)
+          task_arn=$(echo "$result" | jq -r '.tasks[0].taskArn // empty')
+          [ -n "$task_arn" ] || { echo "::error::Tâche de migration non lancée : $(echo "$result" | jq -c '.failures')"; exit 1; }
+          for attempt in 1 2 3; do
+            aws ecs wait tasks-stopped --cluster "$CLUSTER" --tasks "$task_arn" && break
+            echo "Toujours en cours (tentative $attempt)..."
+          done
+          desc=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$task_arn" --output json)
+          exit_code=$(echo "$desc" | jq -r --arg c "$MIGRATE_CONTAINER" '.tasks[0].containers[] | select(.name == $c) | .exitCode // "aucun"')
+          echo "::group::Journaux de la migration"
+          aws logs get-log-events --log-group-name "$JOBS_LOG_GROUP" \
+            --log-stream-name "migrate/$MIGRATE_CONTAINER/${task_arn##*/}" \
+            --start-from-head --query 'events[].message' --output text | tr '\t' '\n' || true
+          echo "::endgroup::"
+          echo "MIGRATION_EXIT=$exit_code" >> "$GITHUB_ENV"
+          if [ "$exit_code" != "0" ]; then
+            echo "::error::Migrations en échec (code $exit_code). Le service n'a pas été modifié."
+            exit 1
+          fi
+
+      - name: Deploy API service
+        run: |
+          set -euo pipefail
+          if [ -z "$API_SERVICE" ]; then
+            echo "::notice title=Service api absent::Pas encore de domaine : le service api n'existe pas (seules les révisions et les migrations sont faites)."
+            echo "SERVICE_DEPLOYED=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          aws ecs update-service --cluster "$CLUSTER" --service "$API_SERVICE" \
+            --task-definition "$API_TASKDEF" --query 'service.serviceName' --output text
+          bash .github/scripts/ecs-wait-deployment.sh "$CLUSTER" "$API_SERVICE" "$API_TASKDEF"
+          echo "SERVICE_DEPLOYED=true" >> "$GITHUB_ENV"
+
+      - name: Register scheduled-tasks revision (jobs)
+        # Les planifications visent la FAMILLE jobs : enregistrée après les migrations et le
+        # service stable, jamais de nouveau code planifié sur un ancien schéma.
+        run: |
+          set -euo pipefail
+          current="$RUNNER_TEMP/jobs.current.json" next="$RUNNER_TEMP/jobs.next.json"
+          aws ecs describe-task-definition --task-definition "$JOBS_TEMPLATE" --query taskDefinition --output json > "$current"
+          jq -e --arg f "$JOBS_FAMILY" '.family == $f' "$current" > /dev/null || { echo "::error::Modèle jobs inattendu."; exit 1; }
+          jq --arg c "$JOBS_CONTAINER" --arg img "$ECR_API:$IMAGE_TAG" '
+            (.containerDefinitions[] | select(.name == $c) | .image) = $img
+            | del(.taskDefinitionArn, .revision, .status, .requiresAttributes, .compatibilities,
+                  .registeredAt, .registeredBy, .deregisteredAt)
+          ' "$current" > "$next"
+          arn=$(aws ecs register-task-definition --cli-input-json "file://$next" --query taskDefinition.taskDefinitionArn --output text)
+          echo "JOBS_TASKDEF=$arn" >> "$GITHUB_ENV"
+
+      - name: Record deployed image tag
+        run: |
+          aws ssm put-parameter --name "$IMAGE_TAG_PARAMETER" --value "$IMAGE_TAG" --type String --overwrite > /dev/null
+          echo "Tag déployé ($IMAGE_TAG) enregistré dans $IMAGE_TAG_PARAMETER"
+
+      - name: Smoke tests
+        if: env.SERVICE_DEPLOYED == 'true' && env.API_URL != ''
+        run: |
+          set -euo pipefail
+          check() {
+            local url="$1" expected="$2" code
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --retry 5 --retry-delay 5 --retry-all-errors --max-time 10 "$url" || echo "000")
+            echo "$url -> $code (attendu $expected)"
+            [ "$code" = "$expected" ]
+          }
+          check "$API_URL/v1/health" 200
+          check "$API_URL/v1/health/ready" 200
+          check "$API_URL/v1/entitlements" 401
+          check "$WEB_URL/confidentialite" 200
+          check "$WEB_URL/s" 200
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Déploiement Eventide $TARGET_ENV — ${{ job.status }}"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Image api | \`${IMAGE_TAG:-?}\` (${IMAGE_PLATFORM:-?}, construite : ${BUILD:-?}) |"
+            echo "| Tag précédent (pour un retour arrière) | \`${PREVIOUS_TAG:-?}\` |"
+            echo "| Retour arrière | ${ROLLBACK:-?} |"
+            echo "| Migrations | ${RUN_MIGRATIONS} (code de sortie : ${MIGRATION_EXIT:-non lancées}) |"
+            echo "| Service api | ${SERVICE_DEPLOYED:-?} (\`${API_TASKDEF:-?}\`) |"
+            echo "| Tâches planifiées | \`${JOBS_TASKDEF:-non enregistrée}\` |"
+            echo "| API | ${API_URL:-pas de domaine} |"
+            echo ""
+            [ -f "$RUNNER_TEMP/scan.md" ] && cat "$RUNNER_TEMP/scan.md"
+            echo ""
+            echo "Retour arrière : relancer **Deploy** avec \`image_tag=${PREVIOUS_TAG:-<sha précédent>}\` et migrations décochées."
+          } >> "$GITHUB_STEP_SUMMARY"

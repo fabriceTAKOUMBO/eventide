@@ -1,0 +1,13 @@
+# Vulnérabilités CRITICAL acceptées par le product owner pour le scan ECR du workflow Deploy.
+#
+# En production, le déploiement échoue sur toute vulnérabilité CRITICAL qui n'est pas dans cette
+# liste (et sur un résultat de scan indisponible). Seul le fichier de la branche déployée compte
+# (production : main) : toute dérogation passe par une pull request.
+#
+# Format : une ligne par vulnérabilité, cinq champs séparés par des espaces :
+#   <identifiant CVE>  <image : api ou *>  <décision du PO, AAAA-MM-JJ>  <expiration, AAAA-MM-JJ>  <raison>
+# L'acceptance ne vaut que jusqu'au jour d'expiration inclus (date UTC). Durée maximale
+# recommandée : 3 mois. Les lignes vides et le texte après « # » sont ignorés ; une ligne mal
+# formée fait échouer le déploiement (pas de dérogation implicite).
+
+# (Aucune entrée.)

@@ -88,8 +88,9 @@ class ApiClient {
   static String deviceHash(String androidId, String salt) =>
       sha256.convert(utf8.encode(androidId + salt)).toString();
 
-  /// base64url (no padding) of SHA-256(nonce). Also used as the Play Integrity nonce, so the
-  /// server can match the token's `requestDetails.nonce` with `request_hash`.
+  /// base64url (no padding, 43 characters) of SHA-256(nonce). It is also what the token is bound
+  /// to (standard request `requestHash`, or classic `nonce`), so the server can match the token's
+  /// `requestDetails` with `request_hash`.
   static String requestHash(String nonce) =>
       base64Url.encode(sha256.convert(utf8.encode(nonce)).bytes).replaceAll('=', '');
 

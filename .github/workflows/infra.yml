@@ -1,0 +1,111 @@
+name: Infra CI
+
+# Vérifications Terraform (aucun accès AWS) : format, validation des piles bootstrap et
+# envs/shared-prod et de chaque module, tests de plan avec fournisseurs simulés
+# (terraform test, mock_provider : aucun identifiant ni appel AWS), garde des ressources à
+# l'échelle du compte partagé ; scripts PostgreSQL de modules/db_tools (amorçage, sauvegarde,
+# restauration) contre un vrai PostgreSQL 16, puis les migrations Django réelles.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "infra/**"
+      - "backend/apps/**/migrations/**"
+      - ".github/workflows/infra.yml"
+      - ".github/scripts/check-shared-account-resources.sh"
+  pull_request:
+    paths:
+      - "infra/**"
+      - "backend/apps/**/migrations/**"
+      - ".github/workflows/infra.yml"
+      - ".github/scripts/check-shared-account-resources.sh"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: infra-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  terraform:
+    name: Terraform fmt + validate + test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: infra/terraform
+    env:
+      # Aucun identifiant AWS dans ce job : un fournisseur non simulé échouerait sans rien joindre.
+      AWS_EC2_METADATA_DISABLED: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+        with:
+          terraform_version: "1.16.5"
+          terraform_wrapper: false
+
+      - name: No account-wide resources (shared AWS account)
+        working-directory: .
+        run: bash .github/scripts/check-shared-account-resources.sh infra/terraform
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive -diff
+
+      - name: terraform validate and test (bootstrap, shared-prod, modules)
+        run: |
+          set -euo pipefail
+          for stack in bootstrap envs/shared-prod modules/*; do
+            echo "::group::$stack"
+            terraform -chdir="$stack" init -backend=false -input=false
+            terraform -chdir="$stack" validate
+            if [ -n "$(find "$stack/tests" -name '*.tftest.hcl' 2>/dev/null)" ]; then
+              terraform -chdir="$stack" test
+            fi
+            echo "::endgroup::"
+          done
+
+  db-tools:
+    name: PostgreSQL bootstrap / backup / restore scripts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: PostgreSQL 16 binaries
+        run: |
+          if [ ! -x /usr/lib/postgresql/16/bin/initdb ]; then
+            sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-16
+          fi
+          /usr/lib/postgresql/16/bin/postgres --version
+
+      - name: Install uv and Python (Django migrations check)
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: "0.12.24"
+          python-version: "3.12"
+          working-directory: backend
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install backend dependencies (locked)
+        working-directory: backend
+        run: uv sync --frozen
+
+      - name: Run db_tools scripts against PostgreSQL 16
+        env:
+          API_CHECK: "true"
+        run: bash infra/terraform/modules/db_tools/tests/run-local.sh

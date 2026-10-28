@@ -8,6 +8,8 @@ import android.os.Build
 import android.provider.Settings
 import com.google.android.play.core.integrity.IntegrityManagerFactory
 import com.google.android.play.core.integrity.IntegrityTokenRequest
+import com.google.android.play.core.integrity.StandardIntegrityManager.PrepareIntegrityTokenRequest
+import com.google.android.play.core.integrity.StandardIntegrityManager.StandardIntegrityTokenRequest
 import com.ryanheise.audioservice.AudioServicePlugin
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -111,18 +113,33 @@ class NativeBridgePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         }
     }
 
-    /** Play Integrity, classic request. The nonce is the request_hash sent to POST /installations. */
+    /**
+     * Play Integrity token bound to [nonce] (the request_hash of POST /installations).
+     * With a cloud project number: standard request (`requestDetails.requestHash`, what the API
+     * checks). Without one: classic request (`requestDetails.nonce`), for builds not yet linked.
+     */
     private fun requestIntegrityToken(ctx: Context, call: MethodCall, result: MethodChannel.Result) {
         val nonce = call.argument<String>("nonce")
         if (nonce.isNullOrEmpty()) {
             result.error("invalid_nonce", "Missing nonce", null)
             return
         }
-        val builder = IntegrityTokenRequest.builder().setNonce(nonce)
         val projectNumber = call.argument<String>("cloudProjectNumber")?.toLongOrNull()
-        if (projectNumber != null) builder.setCloudProjectNumber(projectNumber)
+        if (projectNumber != null) {
+            IntegrityManagerFactory.createStandard(ctx)
+                .prepareIntegrityToken(
+                    PrepareIntegrityTokenRequest.builder().setCloudProjectNumber(projectNumber).build(),
+                )
+                .addOnSuccessListener { provider ->
+                    provider.request(StandardIntegrityTokenRequest.builder().setRequestHash(nonce).build())
+                        .addOnSuccessListener { token -> result.success(token.token()) }
+                        .addOnFailureListener { e -> result.error("integrity_unavailable", e.message, null) }
+                }
+                .addOnFailureListener { e -> result.error("integrity_unavailable", e.message, null) }
+            return
+        }
         IntegrityManagerFactory.create(ctx)
-            .requestIntegrityToken(builder.build())
+            .requestIntegrityToken(IntegrityTokenRequest.builder().setNonce(nonce).build())
             .addOnSuccessListener { response -> result.success(response.token()) }
             .addOnFailureListener { e -> result.error("integrity_unavailable", e.message, null) }
     }
@@ -130,9 +147,9 @@ class NativeBridgePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     companion object {
         const val CHANNEL = "be.cinaf.eventide/native"
 
+        /** The plugin attached to the running engine (set by onAttachedToEngine). */
         @Volatile
         var instance: NativeBridgePlugin? = null
-            private set
 
         fun attachTo(engine: FlutterEngine) {
             if (!engine.plugins.has(NativeBridgePlugin::class.java)) {

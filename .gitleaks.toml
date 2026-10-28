@@ -1,0 +1,56 @@
+# Configuration gitleaks (pre-commit + CI), reprise de Candidature Express. Les règles par défaut
+# restent toutes actives ; seules des exceptions étroites et documentées sont ajoutées.
+#
+# Vérifier localement : gitleaks git --config .gitleaks.toml --redact --verbose .
+# Fichiers non suivis :  gitleaks dir --config .gitleaks.toml --redact --verbose .
+#
+# Les exceptions portent sur la VALEUR détectée (stopwords), pas sur le chemin : une vraie clé
+# collée dans un fichier *.example reste détectée.
+
+title = "Eventide"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Valeurs factices des modèles *.example et valeurs de développement/CI documentées"
+stopwords = [
+  # Développement local et CI (backend/.env.example, backend.yml, settings de test) : protègent
+  # uniquement des bases locales ou éphémères, jamais la production.
+  "ev_local_dev_only",
+  "ev_ci_only",
+  "test-only",
+  "ci-placeholder",
+  # Marqueurs de valeurs factices.
+  "change-me",
+  "changeme",
+  "change_me",
+  "replace-me",
+  "replace_me",
+  "a_remplacer",
+  "a-remplacer",
+  "remplacer",
+  "placeholder",
+  "not-a-secret",
+  "dummy",
+  "factice",
+]
+
+[[allowlists]]
+description = "Fichiers générés (verrous de dépendances) et binaires"
+paths = [
+  '''(^|/)uv\.lock$''',
+  '''(^|/)pubspec\.lock$''',
+  '''(^|/)\.terraform\.lock\.hcl$''',
+  '''\.(png|jpe?g|gif|ico|webp|ogg|mp3|pdf)$''',
+]
+
+[[allowlists]]
+description = "Tests : jetons et mots de passe factices des jeux d'essai (règle générique uniquement)"
+targetRules = ["generic-api-key"]
+paths = [
+  '''(^|/)tests/''',
+  '''(^|/)test/''',
+  '''(^|/)conftest\.py$''',
+  '''(^|/)shared/test-vectors/''',
+]

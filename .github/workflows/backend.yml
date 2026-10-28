@@ -1,0 +1,157 @@
+name: Backend CI
+
+# API Django (backend/) : lint, sécurité, migrations, réglages de production, tests contre
+# PostgreSQL 16 (la version de l'instance partagée), audit des dépendances, image ARM64.
+# Lancé aussi quand le catalogue de l'application ou les cas partagés du validateur changent :
+# les tests vérifient que backend/eventide/catalog.json est la copie exacte de
+# app/assets/catalog.json et jouent shared/test-vectors/ops-validation.json.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "app/assets/catalog.json"
+      - "shared/test-vectors/**"
+      - ".github/workflows/backend.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - "app/assets/catalog.json"
+      - "shared/test-vectors/**"
+      - ".github/workflows/backend.yml"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  UV_VERSION: "0.12.24"
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  checks:
+    name: Lint, sécurité, migrations, tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: backend
+
+    services:
+      postgres:
+        # Version majeure de l'instance de production partagée (PostgreSQL 16).
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: eventide
+          POSTGRES_USER: ev_app
+          POSTGRES_PASSWORD: ev_ci_only
+        # Même port hôte qu'en local : les valeurs par défaut des réglages de test fonctionnent.
+        ports:
+          - 55433:5432
+        options: >-
+          --health-cmd "pg_isready -U ev_app -d eventide"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      DJANGO_READ_DOT_ENV: "false"
+      DATABASE_URL: postgres://ev_app:ev_ci_only@127.0.0.1:55433/eventide
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install uv and Python
+        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+        with:
+          version: ${{ env.UV_VERSION }}
+          python-version: ${{ env.PYTHON_VERSION }}
+          working-directory: backend
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+
+      - name: Install dependencies (locked)
+        run: uv sync --frozen
+
+      - name: Ruff (lint)
+        run: uv run --frozen ruff check --output-format=github .
+
+      - name: Ruff (format)
+        run: uv run --frozen ruff format --check .
+
+      - name: Bandit
+        run: uv run --frozen bandit -c pyproject.toml -r apps config -q
+
+      - name: Migrations are up to date
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.test
+        run: uv run --frozen python manage.py makemigrations --check --dry-run
+
+      - name: Deployment checks (prod settings)
+        # Valeurs jetables propres à ce job : aucun secret statique dans le dépôt.
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.prod
+          ALLOWED_HOSTS: api.example.invalid
+          PUBLIC_WEB_BASE_URL: https://example.invalid
+          VOICE_ROUTER: rules-only
+        run: |
+          DJANGO_SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(64))')" \
+            uv run --frozen python manage.py check --deploy --fail-level WARNING
+
+      - name: Tests with coverage
+        env:
+          DJANGO_SETTINGS_MODULE: config.settings.test
+        run: >-
+          uv run --frozen pytest
+          --cov --cov-report=term-missing:skip-covered --cov-report=xml:coverage.xml
+
+      - name: Dependency audit (pip-audit on the exported lockfile)
+        run: |
+          uv export --frozen --format requirements-txt --no-emit-project --output-file "$RUNNER_TEMP/requirements.txt"
+          uv run --frozen pip-audit --strict --disable-pip --require-hashes -r "$RUNNER_TEMP/requirements.txt"
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: backend-coverage
+          path: backend/coverage.xml
+          if-no-files-found: ignore
+          retention-days: 14
+
+  image:
+    # Construit backend/Dockerfile comme le workflow Deploy, sans rien pousser (aucun accès AWS),
+    # en linux/arm64 (Fargate Graviton) sur le runner arm64 natif.
+    name: Image Docker (linux/arm64, sans envoi)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build API image (no push)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: backend
+          platforms: linux/arm64
+          push: false
+          provenance: false
+          sbom: false
+          cache-from: type=gha,scope=api-ARM64
+          cache-to: ${{ github.event_name != 'pull_request' && 'type=gha,mode=max,scope=api-ARM64' || '' }}

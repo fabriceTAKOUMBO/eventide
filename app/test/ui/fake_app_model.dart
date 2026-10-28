@@ -31,6 +31,7 @@ class FakeAppModel extends AppModel {
     DateTime? now,
     Set<PermissionKind>? granted,
   })  : catalog = catalog ?? loadTestCatalog(),
+        // ignore: prefer_initializing_formals
         _plan = plan,
         _now = now ?? DateTime(2026, 10, 28, 20, 30),
         _schedules = [...?schedules],

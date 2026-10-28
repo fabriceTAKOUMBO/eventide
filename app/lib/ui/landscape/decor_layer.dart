@@ -2,7 +2,6 @@
 // One Ticker drives every effect; particle positions are pure functions of time, so
 // nothing is allocated per frame. Counts are capped; intensity = level / 100.
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';

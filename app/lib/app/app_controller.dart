@@ -249,12 +249,9 @@ class RealAppModel extends AppModel implements PlaybackHost {
   Future<void> _load() async {
     final sceneJson = await _store.readMap(StoreKeys.scene);
     if (sceneJson != null) {
-      try {
-        final scene = Scene.fromJson(sceneJson);
-        if (_catalog.landscape(scene.landscapeId) != null) _scene = scene;
-      } on FormatException {
-        // keep the default scene
-      }
+      // An unreadable or unknown scene keeps the default one.
+      final scene = _tryParse(() => Scene.fromJson(sceneJson));
+      if (scene != null && _catalog.landscape(scene.landscapeId) != null) _scene = scene;
     }
     _browsedId = _scene.landscapeId;
     _schedules = [
@@ -721,7 +718,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
       for (final s in _schedules) {
         if (s.id == scheduleId) schedule = s;
       }
-      if (schedule == null) return null; // deleted meanwhile
+      if (schedule == null || !schedule.active) return null; // deleted or switched off meanwhile
       var landscape = _catalog.landscape(schedule.landscapeId);
       if (landscape == null || !_rules.canUseLandscape(_plan, landscape)) {
         // Premium ended since the schedule was made: fall back to a free landscape.
@@ -1528,6 +1525,8 @@ class RealAppModel extends AppModel implements PlaybackHost {
   // ---------------------------------------------------------------------------
 
   Future<void> _maybeShowAd(AdPlacement placement) async {
+    // Never on the very first launch: the welcome screen comes first (dossier, screen 1).
+    if (!_settings.onboarded) return;
     final allowed = _adPolicy.canShow(
       showsAds: _rules.showsAds(_plan),
       playing: playing || loadingAudio,

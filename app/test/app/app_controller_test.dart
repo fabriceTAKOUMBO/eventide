@@ -542,6 +542,10 @@ void main() {
     });
 
     test('free: interstitial at opening and at exit, capped; never during playback', () async {
+      h.store.files[StoreKeys.settings] = jsonEncode({
+        'version': 1,
+        'data': const AppSettings(onboarded: true).toJson(),
+      });
       final model = await h.start();
       model.handleLifecycle(AppLifecycleState.resumed);
       await settle();
@@ -554,6 +558,14 @@ void main() {
       await model.play();
       await model.beforeExit();
       expect(h.ads.shown, hasLength(2));
+    });
+
+    test('no ad before the welcome screen is done', () async {
+      final model = await h.start();
+      model.handleLifecycle(AppLifecycleState.resumed);
+      await settle();
+      await model.beforeExit();
+      expect(h.ads.shown, isEmpty);
     });
 
     test('Premium: no ads at all', () async {
@@ -605,6 +617,20 @@ void main() {
       expect(model.settings, const AppSettings());
       expect(h.account.signOuts, 1);
       expect((await h.got<ToastEvent>()).last.message, AppMessages.dataDeleted);
+    });
+
+    test('a cached subscription works offline, until 7 days after its expiry', () async {
+      final expired = Entitlements(
+        plan: Plan.annual,
+        premium: true,
+        expiresAt: h.now.subtract(const Duration(days: 3)),
+        voice: const VoiceQuota(mode: VoiceMode.included),
+      );
+      h.store.files[StoreKeys.entitlements] = jsonEncode({'version': 1, 'data': expired.toJson()});
+      final model = await h.start();
+      expect(model.plan, Plan.annual);
+      h.now = h.now.add(const Duration(days: 5));
+      expect(model.plan, Plan.free);
     });
 
     test('Google sign-in without backend only marks the account locally', () async {
