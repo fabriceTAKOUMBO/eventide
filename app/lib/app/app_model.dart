@@ -279,4 +279,20 @@ abstract class AppModel extends ChangeNotifier {
   Future<bool> retryConnection();
   Future<String> exportData();
   Future<void> deleteAccountData();
+
+  // ---- Optional hooks (concrete defaults: fakes and previews need not implement them)
+
+  /// Back pressed on the home screen, just before the app closes: the free plan may show its
+  /// exit interstitial here (never during playback). Completes when the app may close.
+  Future<void> beforeExit() async {}
+
+  /// Opens Android's app settings, from which the user reaches battery optimisation
+  /// (guide against vendor background killers, screen 9).
+  Future<void> openBatteryGuide() async {}
+
+  /// Google's ad privacy options form (« Consentement publicitaire »), free plan only.
+  Future<void> openAdPrivacyOptions() async {}
+
+  /// Price of the assistant credits pack from Google Play (lifetime plan), when known.
+  String? get creditsPrice => null;
 }

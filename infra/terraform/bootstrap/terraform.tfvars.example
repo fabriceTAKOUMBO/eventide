@@ -1,0 +1,7 @@
+# Copier en terraform.tfvars (ignoré par git) puis : terraform init && terraform plan -out=tfplan
+aws_account_id = "466494951409" # compte principal partagé (CINAF, JobMinutes, Candidature Express)
+region         = "us-east-1"
+# state_bucket_name = ""         # vide = eventide-tfstate-<compte>
+# Seuls principaux qui lisent, écrivent et déchiffrent l'état ; vide = rôles Identity Center
+# AdministratorAccess du compte.
+# state_access_principal_arns = []

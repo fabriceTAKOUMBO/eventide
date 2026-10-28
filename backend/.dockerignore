@@ -1,0 +1,27 @@
+# Contexte de construction de l'image API : uniquement le code nécessaire.
+.env
+.env.*
+*.pem
+*.key
+.venv/
+venv/
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+staticfiles/
+*.sqlite3
+*.log
+**/tests/
+conftest.py
+.git/
+.gitignore
+.dockerignore
+Dockerfile
+.python-version
+.idea/
+.vscode/

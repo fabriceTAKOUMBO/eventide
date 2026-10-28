@@ -1,0 +1,41 @@
+/* Eventide — pages web (verre sombre, texte lisible, cibles de 48 px). */
+:root { color-scheme: dark; }
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 18px;
+  line-height: 1.5;
+  color: #f5f7fa;
+  background: linear-gradient(160deg, #0f1f1a 0%, #13212e 60%, #0b1118 100%);
+  display: flex;
+  justify-content: center;
+  padding: 24px 16px;
+}
+.vitre {
+  width: 100%;
+  max-width: 640px;
+  background: rgba(10, 16, 22, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 20px;
+  padding: 24px;
+}
+.marque { font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.8; margin: 0 0 8px; }
+h1 { font-size: 26px; margin: 0 0 12px; }
+h2 { font-size: 19px; margin: 20px 0 8px; }
+ul { padding-left: 20px; }
+li { margin: 4px 0; }
+.paysage { font-size: 20px; }
+.niveau { opacity: 0.75; }
+.premium { font-size: 14px; border: 1px solid #d9b45a; color: #f2d28a; border-radius: 8px; padding: 1px 6px; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.bouton {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-height: 48px; padding: 0 20px; border-radius: 24px;
+  background: #f5f7fa; color: #0b1118; font-weight: 600; text-decoration: none;
+}
+.bouton.secondaire { background: transparent; color: #f5f7fa; border: 1px solid rgba(255, 255, 255, 0.5); }
+.note { font-size: 16px; opacity: 0.8; }
+.texte p, .texte li { font-size: 17px; }
+a { color: #cfe6ff; }

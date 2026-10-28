@@ -1,0 +1,11 @@
+# Terraform : jamais de variables, d'état, de plan ni de configuration de backend dans git.
+**/.terraform/
+*.tfstate
+*.tfstate.*
+**/terraform.tfstate.d/
+*.tfvars
+!*.tfvars.example
+backend.hcl
+tfplan
+*.tfplan
+crash.log

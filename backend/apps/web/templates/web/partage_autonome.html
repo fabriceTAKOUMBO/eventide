@@ -1,0 +1,16 @@
+{% extends "web/base.html" %}
+{% load static %}
+{% block title %}Un mix Eventide{% endblock %}
+{% block content %}
+  <h1>On vous a partagé un mix</h1>
+  <div id="mix" hidden>
+    <p class="paysage" id="mix-paysage"></p>
+    <ul id="mix-couches"></ul>
+  </div>
+  <p id="mix-absent">Si Eventide est installé sur votre téléphone Android, ce lien l'ouvre directement.</p>
+  <p class="actions">
+    <a class="bouton" href="{{ store_url }}">Télécharger sur Google Play</a>
+  </p>
+  {{ catalogue|json_script:"catalogue" }}
+{% endblock %}
+{% block scripts %}<script src="{% static 'web/partage.js' %}"></script>{% endblock %}

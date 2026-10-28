@@ -1,0 +1,73 @@
+[project]
+name = "eventide-api"
+version = "0.1.0"
+description = "Eventide — API Django (installations, droits et achats Google Play, assistant vocal, partage, contenu)."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "django>=5.2,<5.3",
+    "djangorestframework>=3.16",
+    "django-environ>=0.12",
+    "psycopg[binary,pool]>=3.2",
+    "gunicorn>=23.0",
+    "whitenoise>=6.9",
+    "google-auth>=2.40",
+    "requests>=2.32",
+    "cryptography>=45.0",
+    "python-json-logger>=3.3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4",
+    "pytest-django>=4.11",
+    "pytest-cov>=6.2",
+    "responses>=0.25",
+    "ruff>=0.12",
+    "bandit>=1.8",
+    "pip-audit>=2.9",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+python_files = ["test_*.py"]
+testpaths = ["apps"]
+addopts = "-ra --strict-markers"
+filterwarnings = [
+    "error::RuntimeWarning",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["apps", "config"]
+omit = ["*/migrations/*", "*/tests/*", "config/asgi.py", "config/wsgi.py"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W", "F", "I", "B", "UP", "S", "DJ", "C4", "SIM", "RUF", "PT", "T20", "N",
+]
+ignore = [
+    "RUF012", # Django Meta/class attributes are mutable by design
+    "N818",   # API error classes are named after their contract codes
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101", "S105", "S106", "S311", "PT011", "PT018"]
+"conftest.py" = ["S101"]
+"config/settings/*.py" = ["F405", "F403"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["apps", "config"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", "migrations"]

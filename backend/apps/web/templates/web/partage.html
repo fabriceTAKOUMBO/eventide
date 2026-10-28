@@ -1,0 +1,19 @@
+{% extends "web/base.html" %}
+{% block title %}Un mix Eventide{% endblock %}
+{% block content %}
+  <h1>On vous a partagé un mix</h1>
+  <p class="paysage">{{ mix.paysage }}{% if mix.paysage_premium %} <span class="premium">Premium</span>{% endif %}{% if mix.moment %} · {{ mix.moment }}{% endif %}</p>
+  {% for couche in mix.couches %}
+    <h2>{{ couche.titre }}</h2>
+    <ul>
+      {% for element in couche.elements %}
+        <li>{{ element.nom }} <span class="niveau">{{ element.niveau }} %</span>{% if element.premium %} <span class="premium">Premium</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+  {% endfor %}
+  <p class="actions">
+    <a class="bouton" href="{{ intent_url }}">Ouvrir dans Eventide</a>
+    <a class="bouton secondaire" href="{{ store_url }}">Télécharger sur Google Play</a>
+  </p>
+  <p class="note">Les éléments marqués Premium s'écoutent avec l'abonnement.</p>
+{% endblock %}

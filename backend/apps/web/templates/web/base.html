@@ -1,0 +1,17 @@
+{% load static %}<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="{% block robots %}noindex{% endblock %}">
+  <title>{% block title %}Eventide{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'web/style.css' %}">
+</head>
+<body>
+  <main class="vitre">
+    <p class="marque">Eventide</p>
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

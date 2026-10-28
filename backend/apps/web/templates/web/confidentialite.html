@@ -1,0 +1,63 @@
+{% extends "web/base.html" %}
+{% block robots %}index{% endblock %}
+{% block title %}Politique de confidentialité — Eventide{% endblock %}
+{% block content %}
+<article class="texte">
+  <h1>Politique de confidentialité</h1>
+  <p class="note">Mise à jour : {{ updated_on }}.</p>
+
+  <h2>1. Qui sommes-nous</h2>
+  <p>Eventide est une application Android pour se détendre et s'endormir avec des sons de nature. Elle est éditée par {{ publisher }}. Pour toute question sur vos données : {{ contact_email }}.</p>
+
+  <h2>2. Ce qui reste sur votre téléphone</h2>
+  <p>Vos mix, vos favoris, vos programmations, vos réglages et vos nuits de sommeil sont enregistrés uniquement sur votre téléphone. Ils ne sont pas envoyés à notre serveur, sauf le mix que vous choisissez de partager.</p>
+
+  <h2>3. Ce que notre serveur conserve</h2>
+  <ul>
+    <li><strong>Votre installation</strong> : un identifiant d'installation, une empreinte de l'appareil (calculée sur le téléphone à partir de son identifiant Android, sans pouvoir le retrouver), la version de l'application, les dates de création et de dernière utilisation. Le jeton de connexion de l'application n'est conservé que sous forme d'empreinte.</li>
+    <li><strong>Votre compte Google, si vous le liez</strong> : uniquement l'identifiant technique de ce compte chez Google. Ni votre adresse e-mail, ni votre nom.</li>
+    <li><strong>Vos achats</strong> : le produit, son état, ses dates, le numéro de commande et le jeton d'achat de Google Play, pour vérifier vos droits.</li>
+    <li><strong>L'assistant vocal</strong> : le nombre de demandes d'essai utilisées ({{ trial_requests }} au plus en version gratuite), vos crédits, et pour chaque demande sa date, le modèle utilisé, le nombre de jetons et son coût. <strong>Jamais le son de votre voix, jamais le texte de votre phrase.</strong></li>
+    <li><strong>Vos partages</strong> : le mix partagé (paysage, sons, musiques, décors, moment de la journée), sans aucune donnée personnelle.</li>
+    <li><strong>La protection contre les abus</strong> : des compteurs de demandes, rattachés à votre installation ou à une empreinte de votre adresse IP (jamais l'adresse elle-même).</li>
+  </ul>
+
+  <h2>4. L'assistant vocal</h2>
+  <p>La reconnaissance de la parole se fait sur votre téléphone, par Android. Le son n'est jamais envoyé ni conservé. Le texte de la phrase est envoyé à notre serveur puis, si elle n'a pas été comprise par le téléphone, au modèle d'intelligence artificielle Gemini de Google, qui la transforme en réglages de l'application. Nous ne conservons ni ce texte ni la réponse en clair, et nos journaux techniques ne les contiennent pas. Nous utilisons l'offre payante de l'API Gemini ; selon ses conditions, Google n'utilise pas ces demandes pour améliorer ses produits et ne les garde que pour une durée limitée, pour détecter les abus.</p>
+  <p>L'assistant ne peut jamais acheter, abonner, résilier ni supprimer votre compte.</p>
+
+  <h2>5. Où sont vos données</h2>
+  <p>Notre serveur et ses sauvegardes sont hébergés par Amazon Web Services dans la région <strong>États-Unis (Virginie du Nord)</strong>. Les sons et les images sont diffusés par le réseau CloudFront d'Amazon Web Services. Ces transferts hors de l'Union européenne reposent sur le cadre de protection des données UE–États-Unis (Data Privacy Framework) auquel ces fournisseurs adhèrent, et à défaut sur les clauses contractuelles types de la Commission européenne.</p>
+
+  <h2>6. Nos sous-traitants</h2>
+  <ul>
+    <li>Amazon Web Services : hébergement, base de données, sauvegardes, diffusion du contenu.</li>
+    <li>Google : Google Play (achats, abonnements, vérification de l'intégrité de l'appareil), connexion avec Google si vous la choisissez, modèle Gemini pour l'assistant vocal.</li>
+    <li>Google AdMob, en version gratuite seulement, pour la publicité ; votre consentement est demandé dans l'application.</li>
+  </ul>
+
+  <h2>7. Pourquoi nous les traitons</h2>
+  <ul>
+    <li>Fournir le service que vous avez demandé, vérifier vos achats et vos droits : exécution du contrat.</li>
+    <li>Empêcher les abus (limites de demandes, vérification de l'intégrité de l'appareil, plafond de coût de l'assistant) : notre intérêt légitime.</li>
+    <li>Publicité personnalisée en version gratuite : votre consentement, retirable à tout moment dans les réglages.</li>
+  </ul>
+
+  <h2>8. Combien de temps</h2>
+  <ul>
+    <li>Installation, compte, achats, compteurs et partages : tant que vous utilisez l'application, jusqu'à la suppression de vos données.</li>
+    <li>Détail des demandes à l'assistant (date, coût) : {{ voice_retention_days }} jours ; totaux mensuels : 13 mois.</li>
+    <li>Compteurs de protection contre les abus : 2 jours.</li>
+    <li>Journaux techniques : 30 jours. Sauvegardes de la base : 35 jours.</li>
+  </ul>
+
+  <h2>9. Vos droits</h2>
+  <p>Dans l'application, rubrique « Confidentialité et données », vous pouvez <strong>télécharger</strong> toutes les données que notre serveur conserve sur vous et <strong>les supprimer</strong> : l'installation, le compte lié, les compteurs et les partages créés sont alors effacés (les sauvegardes disparaissent au plus tard 35 jours après). Vos achats restent enregistrés chez Google Play. Vous pouvez aussi nous écrire à {{ contact_email }} pour exercer vos droits d'accès, de rectification, d'effacement, de limitation, d'opposition et de portabilité, et introduire une réclamation auprès de l'Autorité de protection des données (Belgique) ou de l'autorité de votre pays.</p>
+
+  <h2>10. Sécurité</h2>
+  <p>Les échanges sont chiffrés (HTTPS). Les données sont chiffrées sur nos serveurs et leurs accès sont limités. L'application ne s'adresse pas aux enfants.</p>
+
+  <h2>11. Santé</h2>
+  <p>Les mesures du suivi du sommeil sont indicatives et restent sur votre téléphone. Eventide n'est pas un dispositif médical.</p>
+</article>
+{% endblock %}
