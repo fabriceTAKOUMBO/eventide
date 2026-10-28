@@ -7,7 +7,7 @@ Application Android pour se détendre et s'endormir avec des sons de nature, dev
 | [`app/`](app/) | Application **Flutter** (Android d'abord) : interface « Vitre », moteur audio, programmations, assistant vocal, achats, publicité |
 | [`backend/`](backend/) | API **Django 5.2 + DRF** : installations, droits et achats Google Play, assistant vocal (routeur, modèle Flash-Lite), partage, adresses de contenu signées |
 | [`infra/`](infra/) | **Terraform** : hébergement mutualisé dans le compte AWS principal (`us-east-1`), selon les mêmes règles que Candidature Express : uniquement des ajouts à côté de CINAF et JobMinutes |
-| [`docs/`](docs/) | Contrat d'API, architecture de l'app, hébergement, runbooks |
+| [`docs/`](docs/) | [Journal](docs/journal-de-developpement.md) (état, décisions, questions ouvertes), contrat d’API, architecture de l’app, hébergement, runbooks |
 | [`content/`](content/), [`tools/media/`](tools/media/) | Contenus de substitution (sons synthétiques) et scripts de génération |
 | [`shared/`](shared/) | Vecteurs de test communs à l'app et à l'API |
 
