@@ -11,6 +11,8 @@ Application Android pour se détendre et s'endormir avec des sons de nature, dev
 | [`content/`](content/), [`tools/media/`](tools/media/) | Contenus de substitution (sons synthétiques) et scripts de génération |
 | [`shared/`](shared/) | Vecteurs de test communs à l'app et à l'API |
 
+> **Règle absolue :** CINAF, JobMinutes et Candidature Express, qui partagent le compte AWS et certaines ressources, restent intouchées et ne doivent être influencées en aucun cas par Eventide. Détail et obligations des agents : [`AGENTS.md`](AGENTS.md).
+
 Le catalogue fermé (paysages, sons, musiques, décors et limites du gratuit) est **un seul fichier** : [`app/assets/catalog.json`](app/assets/catalog.json), lu par l'app et embarqué par l'API.
 
 ## Décisions
