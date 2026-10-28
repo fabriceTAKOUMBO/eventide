@@ -18,11 +18,17 @@ from apps.entitlements.services import current_plan, iso, owner_of
 from . import signing
 
 MAX_KEYS = 30
-KEY_RE = re.compile(r"^(audio/sons|audio/musiques|images/paysages)/([a-z0-9-]{1,64})\.(ogg|jpg)$")
+# Matched with ``fullmatch``: ``$`` alone would also accept a trailing newline.
+KEY_RE = re.compile(
+    r"(audio/sons|audio/musiques|images/paysages|videos/paysages)/([a-z0-9-]{1,64})\.(ogg|jpg|mp4)"
+)
+# (prefix, extension) -> catalog section; any other pair is refused. A landscape's still image
+# and its video are both gated by the landscape's own ``gratuit`` flag.
 LAYOUT = {
     ("audio/sons", "ogg"): "sons",
     ("audio/musiques", "ogg"): "musiques",
     ("images/paysages", "jpg"): "paysages",
+    ("videos/paysages", "mp4"): "paysages",
 }
 
 
@@ -47,7 +53,7 @@ def parse_keys(data: object) -> list[tuple[str, str, str]]:
     catalog = get_catalog()
     parsed = []
     for key in keys:
-        match = KEY_RE.match(key) if isinstance(key, str) else None
+        match = KEY_RE.fullmatch(key) if isinstance(key, str) else None
         section = LAYOUT.get((match.group(1), match.group(3))) if match else None
         if section is None or not catalog.has(section, match.group(2)):
             raise InvalidRequest()

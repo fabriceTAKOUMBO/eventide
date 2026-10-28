@@ -313,6 +313,7 @@ Le contenu est servi par **notre** distribution CloudFront, depuis le bucket pri
 | Son | `audio/sons/<id>.ogg` | `audio/ogg` |
 | Musique | `audio/musiques/<id>.ogg` | `audio/ogg` |
 | Paysage | `images/paysages/<id>.jpg` | `image/jpeg` |
+| Vidéo de paysage | `videos/paysages/<id>.mp4` | `video/mp4` |
 
 ```bash
 BUCKET=$(jq -r .content.bucket /tmp/ev-prod.json)
@@ -320,6 +321,8 @@ aws s3 sync ./contenu/audio "s3://$BUCKET/audio" --exclude '*' --include '*.ogg'
   --content-type audio/ogg --cache-control 'public, max-age=604800'
 aws s3 sync ./contenu/images "s3://$BUCKET/images" --exclude '*' --include '*.jpg' \
   --content-type image/jpeg --cache-control 'public, max-age=604800'
+aws s3 sync ./contenu/videos "s3://$BUCKET/videos" --exclude '*' --include '*.mp4' \
+  --content-type video/mp4 --cache-control 'public, max-age=604800'
 ```
 
 Un fichier remplacé garde le même nom : invalider le cache (`aws cloudfront create-invalidation --distribution-id "$(jq -r .content.distribution_id /tmp/ev-prod.json)" --paths '/audio/sons/<id>.ogg'`) ou, mieux, changer d'identifiant dans le catalogue. Vérification : une adresse non signée doit être refusée (`403`) ; une adresse signée par l'API répond `200` (phase 2, § 13).

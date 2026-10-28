@@ -50,6 +50,18 @@ def test_free_content_is_signed_for_everyone(api, cloudfront_key):
 
 
 @pytest.mark.django_db
+def test_free_landscape_video_is_signed_for_everyone(api, cloudfront_key):
+    keys = ["videos/paysages/cascade-foret.mp4", "videos/paysages/sous-bois.mp4"]
+    response = api.post("/v1/content/urls", {"keys": keys}, format="json")
+    assert response.status_code == 200
+    urls = response.json()["urls"]
+    assert set(urls) == set(keys)
+    for key, url in urls.items():
+        assert url.startswith(f"https://cdn.eventide.test/{key}?Expires=")
+        verify(cloudfront_key, url)
+
+
+@pytest.mark.django_db
 def test_tampered_url_does_not_verify(api, cloudfront_key):
     url = api.post("/v1/content/urls", {"keys": ["audio/sons/vent.ogg"]}, format="json").json()[
         "urls"
@@ -79,12 +91,57 @@ def test_premium_content_requires_premium(api, installation, cloudfront_key):
 @pytest.mark.parametrize(
     "keys",
     [
+        ["videos/paysages/pluie-ville.mp4"],
+        ["images/paysages/aurore-boreale.jpg"],
+        ["videos/paysages/cascade-foret.mp4", "videos/paysages/aurore-boreale.mp4"],
+    ],
+)
+def test_premium_landscape_media_requires_premium(api, installation, cloudfront_key, keys):
+    response = api.post("/v1/content/urls", {"keys": keys}, format="json")
+    assert response.status_code == 403
+    assert response.json()["error"] == "premium_required"
+    make_purchase(installation=installation[0])
+    response = api.post("/v1/content/urls", {"keys": keys}, format="json")
+    assert response.status_code == 200
+    urls = response.json()["urls"]
+    assert set(urls) == set(keys)
+    for url in urls.values():
+        verify(cloudfront_key, url)
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "keys",
+    [
         [],
         ["audio/sons/klaxon.ogg"],
         ["audio/sons/harpe.ogg"],
         ["audio/sons/eau-vive.mp3"],
         ["images/paysages/eau-vive.jpg"],
         ["../etc/passwd"],
+        ["audio/sons/vent.ogg\n"],
+        # Landscape videos: unknown or non-landscape id, wrong prefix or extension, traversal.
+        ["videos/paysages/klaxon.mp4"],
+        ["videos/paysages/eau-vive.mp4"],
+        ["videos/sons/vent.mp4"],
+        ["audio/sons/vent.mp4"],
+        ["images/paysages/cascade-foret.mp4"],
+        ["videos/paysages/cascade-foret.jpg"],
+        ["videos/paysages/cascade-foret.ogg"],
+        ["videos/paysages/cascade-foret.webm"],
+        ["videos/paysages/cascade-foret.MP4"],
+        ["videos/paysages/cascade-foret.mp4.mp4"],
+        ["videos/paysages/cascade-foret"],
+        ["Videos/paysages/cascade-foret.mp4"],
+        ["/videos/paysages/cascade-foret.mp4"],
+        ["videos//paysages/cascade-foret.mp4"],
+        ["videos/paysages/../paysages/cascade-foret.mp4"],
+        ["videos/paysages/../../audio/sons/vent.ogg"],
+        ["videos/paysages/%2e%2e/cascade-foret.mp4"],
+        ["videos/paysages/cascade-foret.mp4\n"],
+        ["videos/paysages/cascade-foret.mp4 "],
+        ["videos/paysages/cascade-foret.mp4?x=1"],
+        ["videos/paysages/cascade-foret.mp4", "videos/paysages/cascade-foret.mp4"],
         ["audio/sons/eau-vive.ogg", "audio/sons/eau-vive.ogg"],
         [3],
         ["audio/sons/vent.ogg"] * 31,
