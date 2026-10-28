@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:eventide/core/catalog.dart';
+import 'package:eventide/core/landscape_media.dart';
 import 'package:eventide/services/api_client.dart';
 import 'package:eventide/services/audio/audio_engine.dart';
 import 'package:eventide/services/connectivity.dart';
@@ -32,6 +33,7 @@ void main() {
     bool backend = false,
     bool offline = false,
     ConnectivityChecker? connectivity,
+    RemoteLandscapeMedia remote = RemoteLandscapeMedia.none,
   }) {
     final client = MockClient((request) async {
       fetched.add(request.url);
@@ -62,6 +64,7 @@ void main() {
       bundledAssets: () async => bundled,
       connectivity: connectivity ?? FakeConnectivity(),
       devBaseUrl: devBaseUrl,
+      remoteMedia: () async => remote,
     );
   }
 
@@ -126,5 +129,78 @@ void main() {
     expect(await repo.prefetchForOffline(catalog, wifiOnly: true), 0);
     await repo.clear();
     expect(await repo.isAvailableOffline(LayerKind.son, 'vagues'), isFalse);
+  });
+
+  group('landscape videos and posters', () {
+    const pluie = RemoteLandscapeMedia(videos: {'pluie-ville'}, images: {'pluie-ville'});
+
+    test('a bundled video wins, without any request (free landscapes, demo build)', () async {
+      final repo = build(backend: true, remote: pluie, bundled: {
+        'assets/landscapes/cascade-foret.mp4',
+        'assets/landscapes/cascade-foret.jpg',
+        'assets/landscapes/pluie-ville.mp4',
+      });
+      expect(
+        await repo.landscapeVideo('cascade-foret', allowDownload: true, wifiOnly: false),
+        const AssetLandscapeVideo('assets/landscapes/cascade-foret.mp4'),
+      );
+      expect(
+        await repo.landscapeVideo('pluie-ville', allowDownload: false, wifiOnly: true),
+        const AssetLandscapeVideo('assets/landscapes/pluie-ville.mp4'),
+      );
+      expect(await repo.landscapeImage('cascade-foret', allowDownload: true, wifiOnly: false), isNull,
+          reason: 'bundled posters are found by the UI');
+      expect(fetched, isEmpty);
+    });
+
+    test('Premium: poster and video by signed URL (videos/paysages/<id>.mp4), then the cache', () async {
+      final repo = build(backend: true, remote: pluie);
+      final poster = await repo.landscapeImage('pluie-ville', allowDownload: true, wifiOnly: false);
+      final video = await repo.landscapeVideo('pluie-ville', allowDownload: true, wifiOnly: false);
+      expect(fetched.map((u) => u.toString()), [
+        'https://api.test/v1/content/urls',
+        'https://cdn.test/images/paysages/pluie-ville.jpg?sig=1',
+        'https://api.test/v1/content/urls',
+        'https://cdn.test/videos/paysages/pluie-ville.mp4?sig=1',
+      ]);
+      expect(poster, endsWith('/images/paysages/pluie-ville.jpg'));
+      expect(video, FileLandscapeVideo(repo.cachedPath('videos/paysages/pluie-ville.mp4')));
+      expect(await repo.downloadedLandscapeImages(), {'pluie-ville'});
+      fetched.clear();
+      expect(await repo.landscapeVideo('pluie-ville', allowDownload: false, wifiOnly: true), video);
+      expect(fetched, isEmpty);
+    });
+
+    test('never asks for a key the server does not have, nor when downloads are not allowed', () async {
+      final repo = build(backend: true, remote: pluie);
+      expect(await repo.landscapeVideo('lune-lac', allowDownload: true, wifiOnly: false), isNull);
+      expect(await repo.landscapeVideo('pluie-ville', allowDownload: false, wifiOnly: false), isNull);
+      expect(await repo.landscapeImage('pluie-ville', allowDownload: false, wifiOnly: false), isNull);
+      expect(fetched, isEmpty);
+    });
+
+    test('« Wi-Fi seulement »: nothing on mobile data', () async {
+      final connectivity = FakeConnectivity(unmetered: false);
+      final repo = build(backend: true, remote: pluie, connectivity: connectivity);
+      expect(await repo.landscapeVideo('pluie-ville', allowDownload: true, wifiOnly: true), isNull);
+      expect(await repo.landscapeImage('pluie-ville', allowDownload: true, wifiOnly: true), isNull);
+      expect(fetched, isEmpty);
+      connectivity.unmetered = true;
+      expect(await repo.landscapeVideo('pluie-ville', allowDownload: true, wifiOnly: true), isA<FileLandscapeVideo>());
+    });
+
+    test('a failed download gives no video (still picture), never an exception', () async {
+      final repo = build(backend: true, remote: pluie, offline: true);
+      expect(await repo.landscapeVideo('pluie-ville', allowDownload: true, wifiOnly: false), isNull);
+    });
+
+    test('Premium offline prefetch also brings the posters, not the videos', () async {
+      final catalog = loadTestCatalog();
+      final repo = build(devBaseUrl: 'http://dev', remote: pluie);
+      final count = await repo.prefetchForOffline(catalog, wifiOnly: false);
+      expect(count, catalog.sounds.length + catalog.music.length + 1);
+      expect(fetched.map((u) => u.path), contains('/images/paysages/pluie-ville.jpg'));
+      expect(fetched.map((u) => u.path), isNot(contains('/videos/paysages/pluie-ville.mp4')));
+    });
   });
 }

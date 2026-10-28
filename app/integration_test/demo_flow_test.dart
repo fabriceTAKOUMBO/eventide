@@ -5,8 +5,7 @@
 // armed two to three minutes ahead: the workflow then sends the app to the background and checks
 // that the alarm fires and starts the media service (or posts the « Lancer » notification).
 //
-//   cp ../content/audio/sons/*.ogg assets/audio/sons/          # Premium audio, demo only
-//   cp ../content/audio/musiques/*.ogg assets/audio/musiques/
+//   bash tool/ci/bundle_demo_media.sh   # Premium audio and landscape videos, demo only
 //   flutter drive --driver=test_driver/integration_test.dart \
 //     --target=integration_test/demo_flow_test.dart \
 //     --dart-define=DEMO_MODE=true --android-project-arg=eventide.demo=true --keep-app-running
@@ -42,12 +41,18 @@ void main() {
       await tester.pumpWidget(EventideApp(model: started.model));
       await settle(tester);
 
-      // The Premium audio is bundled in the demo build only (copied from content/audio by CI).
+      // The Premium audio and landscape videos are bundled in the demo build only (copied from
+      // content/ by CI, tool/ci/bundle_demo_media.sh).
       final assets = (await AssetManifest.loadFromAssetBundle(rootBundle)).listAssets();
       expect(
         assets,
-        containsAll(<String>['assets/audio/sons/vagues.ogg', 'assets/audio/musiques/harpe.ogg']),
-        reason: 'the demo build bundles the Premium audio (cp ../content/audio/... first)',
+        containsAll(<String>[
+          'assets/audio/sons/vagues.ogg',
+          'assets/audio/musiques/harpe.ogg',
+          'assets/landscapes/pluie-ville.mp4',
+          'assets/landscapes/pluie-ville.jpg',
+        ]),
+        reason: 'the demo build bundles the Premium media (bash tool/ci/bundle_demo_media.sh first)',
       );
 
       await runDemoFlow(tester, started.model, stopPlayback: started.handler.stop, report: report);

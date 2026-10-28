@@ -6,6 +6,7 @@ import 'dart:io';
 
 import 'package:eventide/app/app_model.dart';
 import 'package:eventide/core/catalog.dart';
+import 'package:eventide/core/landscape_media.dart';
 import 'package:eventide/core/ops.dart' show ChangeLine;
 import 'package:eventide/core/plan.dart';
 import 'package:eventide/core/scene.dart';
@@ -575,6 +576,23 @@ class FakeAppModel extends AppModel {
     _schedules.clear();
     _nights.clear();
     notifyListeners();
+  }
+
+  // ---- Living landscapes
+
+  /// Videos the model can give, by landscape (none by default: still pictures only).
+  final Map<String, LandscapeVideoSource> videos = {};
+
+  /// Every landscape whose video the UI asked for.
+  final List<String> videoRequests = [];
+
+  @override
+  Future<LandscapeVideoSource?> landscapeVideo(String landscapeId) async {
+    videoRequests.add(landscapeId);
+    final l = catalog.landscape(landscapeId);
+    // Same rule as the real model: nothing for a locked landscape.
+    if (l == null || !rules.canUseLandscape(plan, l)) return null;
+    return videos[landscapeId];
   }
 
   @override

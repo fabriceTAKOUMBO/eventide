@@ -1,3 +1,10 @@
+# Médias d'Eventide : outils
+
+Deux familles d'outils :
+
+- `process_video.py` traite les **vidéos de paysages** reçues (générées par le product owner, ou matériel de test) en boucles sans raccord pour l'application (section « Vidéos de paysages » ci-dessous) ;
+- `generate_audio.py` et `generate_icons.js` génèrent les **médias provisoires** (sons, musiques, icônes) à partir de rien.
+
 # Médias provisoires (placeholders)
 
 Ce dossier génère **tous les médias provisoires** d'Eventide à partir de rien :
@@ -170,3 +177,60 @@ travers une lentille.
   utiliser plutôt `wordmark.png`, ou déclarer la famille Fraunces et dessiner le
   texte. Le point du i est un ı sans point surmonté d'une goutte, placée comme
   dans la maquette (0,54 em au-dessus de la ligne de base).
+
+# Vidéos de paysages (`process_video.py`)
+
+Transforme une vidéo brute (Veo dans Gemini, ou matériel de test) en ce que l'application affiche derrière ses panneaux de verre : un **paysage vivant**, jamais un lecteur vidéo. Prérequis : Python 3, numpy, Pillow, `ffmpeg`/`ffprobe` avec `libx264`. Les fichiers vidéo sont des données non fiables : ils ne sont lus que par ffmpeg et ffprobe.
+
+```sh
+python3 tools/media/process_video.py                    # tous les paysages (~6 min sur 4 cœurs)
+python3 tools/media/process_video.py --only pluie-ville
+python3 tools/media/process_video.py --check-only       # refait les mesures sur les fichiers produits
+python3 tools/media/process_video.py --sheets /tmp/planches --report mesures.json
+```
+
+`--sheets` écrit des planches de contrôle : `<id>-join.png` (les 3 images avant et les 3 après le raccord de la boucle) et `<id>-fade.png` (le fondu). La liste des paysages et leurs réglages sont dans `ITEMS`, en tête du script.
+
+## Chaîne de traitement
+
+1. **Décodage** du seul flux vidéo (son et image de couverture ignorés), en yuv420p, sans aucune conversion de couleur : tout le traitement se fait sur les plans Y, U, V (numpy), sans aller-retour RVB.
+2. Facultatif : **recadrage** au centre en 9:16 (jamais agrandi, jamais de bandes noires) et **étalonnage** (gain et gamma sur la luminance, saturation réduite, légère teinte).
+3. **Éclairs** (`pluie-ville`) : un éclair est un pic de la luminance moyenne d'une image au-dessus d'un plancher glissant (20e centile sur ± 2 s), de plus de 2 niveaux. La montée de lumière est comprimée en douceur (genou en tangente hyperbolique vers + 15 % du plancher, au plus + 6 % par image) ; le retrait se fait **pixel par pixel**, contre une image de référence (médiane des 8 images calmes les plus proches) : seul ce que l'éclair a éclairé est assombri, les lumières de la ville et les gouttes ne bougent pas. L'éclair reste visible, adouci.
+4. **Choix du segment** : `full` (toute la source, ou l'intervalle `span` donné quand la source a un défaut), `avoid-flashes` (la boucle la plus longue dont les deux fenêtres de fondu ne contiennent aucun éclair, avec 2 images de marge : un éclair n'est jamais coupé en deux par le fondu), `best-match` (durée de boucle dans un intervalle, fenêtres choisies là où les deux moments se ressemblent le plus sur une luminance floutée, pour éviter les images fantômes).
+5. **Boucle** : les F dernières images sont fondues sur les F premières (poids linéaires (j+1)/(F+1)) ; la sortie a N − F images et la dernière image s'enchaîne sur la première comme deux images voisines de la source.
+6. **Encodage** H.264 High, yuv420p, cadence de la source, image clé toutes les 2 s, **sans images B** (pas de liste d'édition, pas de réordonnancement : l'image 0 est la première décodée), `+faststart`, sans son ni métadonnées ; matrice de couleur de la source (BT.601 pour Veo, BT.709 pour les vidéos de test), primaires et transfert BT.709. Le CRF est le plus bas (18 au mieux) qui tient dans 2,5 Mo (4 Mo pour la pluie de test). `x264` en 4 fils fixes : même résultat à chaque exécution.
+7. **Image fixe** : l'image 0 de la vidéo **encodée**, redécodée (matrice de la source, plage limitée vers pleine), en JPEG qualité 85 : le passage image fixe → vidéo dans l'application est identique au pixel près (aux arrondis JPEG près).
+8. **Mesures** : la vidéo produite est redécodée ; le raccord (écart absolu moyen de luminance entre la dernière et la première image) est comparé aux écarts entre images voisines de toute la boucle, et aux sauts vers chaque image clé.
+
+## Destinations
+
+| Cas | Vidéo | Image fixe |
+|---|---|---|
+| Paysage gratuit (`catalog.json`) | `app/assets/landscapes/<id>.mp4` | `app/assets/landscapes/<id>.jpg` |
+| Paysage Premium | `content/videos/paysages/<id>.mp4` (S3) | `content/images/paysages/<id>.jpg` (S3) |
+| Matériel de test de tiers (non diffusable) | `medias-test/videos/paysages/<id>.mp4` | `medias-test/images/paysages/<id>.jpg` |
+
+Le script réécrit aussi `app/assets/landscapes/remote.json` (paysages Premium qui ont une vidéo ou une image sur S3) : l'application ne demande jamais une clé absente. Les originaux restent inchangés dans `medias-bruts/videos/<id>.mp4` (et `medias-test/originaux/` pour le matériel de test).
+
+## Mesures (28 octobre 2026)
+
+Écarts absolus moyens de luminance (0–255). « Raccord » : dernière → première image après encodage ; « avant encodage » : la même mesure sur la boucle avant compression.
+
+| Paysage | Boucle | Taille | CRF | Raccord | Voisines (médiane / 95e c.) | Sauts vers les images clés | Avant encodage : raccord / médiane | Raccord brut de la source |
+|---|---|---|---|---|---|---|---|---|
+| `cascade-foret` | 5,875 s, 141 images, 720 × 1280, 24 i/s | 2,33 Mo | 24 | 4,38 | 1,86 / 3,02 | 3,63 | 2,56 / 1,92 | 10,37 |
+| `pluie-ville` | 7,625 s, 183 images, 720 × 1280, 24 i/s | 2,28 Mo | 18 | 0,94 | 0,63 / 3,76 | 1,47 | 0,55 / 0,64 | 11,55 |
+| `toits-pluie` (test) | 13,0 s, 391 images, 480 × 854, 30 i/s | 3,98 Mo | 25 | 10,44 | 13,47 / 16,77 | 14,95 | 9,99 / 13,52 | 22,49 |
+| `ciel-etoile` (test) | 15,6 s, 468 images, 404 × 720, 30 i/s | 0,84 Mo | 18 | 0,53 | 0,18 / 0,33 | 0,48 | 0,15 / 0,17 | 2,85 |
+
+Lecture : **avant encodage, le raccord est au niveau du mouvement normal** entre deux images voisines. Après encodage, il vaut un saut vers une image clé (l'image 0 est une image clé, plus nette que les images prédites qui la précèdent) : le même petit « respir » de netteté se produit toutes les 2 s dans toute la boucle, le raccord ne s'en distingue pas. Images fixes : écart moyen avec l'image 0 décodée de 0,6 à 1,9 niveau (JPEG qualité 85), 13 à 208 ko.
+
+Particularités des sources :
+
+- `cascade-foret` : la source Veo a une **discontinuité de génération** entre ses images 62 et 63 (toute l'image saute : écart 10,4 contre 1,9 ailleurs, puis 4,0). Seules les images 63 à 239 sont utilisées (`span`), d'où une boucle de 5,9 s au lieu de 8,5 s.
+- `pluie-ville` : **six éclairs en 10 s** dans la source (luminance moyenne de 57 jusqu'à 116). Fenêtres de fondu choisies dans des passages calmes : images 26 à 227 de la source, fondu de 19 images (0,79 s, le plus long possible sans toucher un éclair). Les cinq éclairs de la boucle passent d'un pic de 92 à 116 à un pic d'environ 65,7 (+ 15 %), montée sur 3 images au moins.
+- `toits-pluie` (test) : pluie forte partout (écart de 13 entre images voisines) ; segment de 13 s choisi où les feuilles reviennent à la même position.
+- `ciel-etoile` (test) : nébuleuse jaune-orange très lumineuse (luminance moyenne 128) assombrie et désaturée vers un ciel de nuit bleu ardoise (moyenne 43, tiers inférieur 30), recadrée de 480 × 720 en 404 × 720 (9:16) ; segment de 15,6 s, fondu de 2 s.
+
+Si ExoPlayer marquait un accroc au moment où la boucle recommence, `copies=2` dans `ITEMS` enchaîne deux boucles dans le même fichier (deux fois moins de reprises, deux fois plus lourd).
+

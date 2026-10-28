@@ -240,7 +240,6 @@ class RealAppModel extends AppModel implements PlaybackHost {
     } catch (e) {
       debugPrint('RealAppModel: load failed ($e)');
     }
-    await _refreshPosters(notify: false);
     _handler.nightMaxHours = _catalog.limits.nightMaxHours;
     _handler.status.addListener(_onPlaybackStatus);
     _handler.attachHost(this);
@@ -250,6 +249,8 @@ class RealAppModel extends AppModel implements PlaybackHost {
       ..add(_native.launchScheduleRequests.listen((_) => unawaited(_checkPendingStart())));
     if (!_ready.isCompleted) _ready.complete();
     notifyListeners();
+    // Not awaited: file system only, the UI shows procedural pictures until it answers.
+    unawaited(_refreshPosters());
     unawaited(_afterInit());
   }
 
@@ -1255,13 +1256,14 @@ class RealAppModel extends AppModel implements PlaybackHost {
     await _refreshPosters();
   }
 
-  Future<void> _refreshPosters({bool notify = true}) async {
+  Future<void> _refreshPosters() async {
     final ids = await _content.downloadedLandscapeImages();
+    if (_events.isClosed) return; // disposed meanwhile
     if (ids.length == _posterIds.length && ids.containsAll(_posterIds)) return;
     _posterIds
       ..clear()
       ..addAll(ids);
-    if (notify) notifyListeners();
+    notifyListeners();
   }
 
   @override
@@ -1280,9 +1282,9 @@ class RealAppModel extends AppModel implements PlaybackHost {
       if (!_posterIds.contains(landscapeId)) {
         // The poster first (small): the real picture shows while the video downloads.
         final poster = await _content.landscapeImage(landscapeId, allowDownload: download, wifiOnly: wifiOnly);
-        if (poster != null && _posterIds.add(landscapeId)) notifyListeners();
+        if (poster != null && _posterIds.add(landscapeId) && !_events.isClosed) notifyListeners();
       }
-      if (!_rules.canUseLandscape(_plan, landscape)) return null;
+      if (_events.isClosed || !_rules.canUseLandscape(_plan, landscape)) return null;
       return await _content.landscapeVideo(landscapeId, allowDownload: download, wifiOnly: wifiOnly);
     } catch (e) {
       debugPrint('RealAppModel: landscape video $landscapeId unavailable ($e)');

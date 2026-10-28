@@ -36,3 +36,13 @@ Gabarit à ajouter à la fin de chaque prompt :
 ## Après génération
 
 Déposer les fichiers MP4 dans `medias-bruts/videos/` (GitHub, branche de travail) ou les joindre dans la conversation, nommés par identifiant (`toits-pluie.mp4`…). Le traitement (boucle, compression, image fixe) est fait par nous ; la vidéo ne joue que lorsque l'écran est allumé et l'app au premier plan, l'image fixe prend le relais en veille et si « réduire les animations » est activé.
+
+Le traitement est fait par `tools/media/process_video.py` (détails et mesures dans `tools/media/README.md`) : boucle sans raccord par fondu enchaîné, son retiré, éclairs adoucis, compression à 2,5 Mo au plus, image fixe = première image de la boucle.
+
+### Ce que nous ont appris les deux premières vidéos (28 octobre 2026)
+
+- **Résolution** : Gemini a rendu du 720 × 1280. Sur le Galaxy S24, l'image est agrandie 1,83 fois : correcte, un peu douce. Demander du 1080 × 1920 quand l'outil le permet.
+- **Durée utile** : la boucle perd la durée du fondu (≈ 1,5 s) et tout passage à défaut. Une source de 10 s donne 6 à 8,5 s de boucle ; viser 12 s ou plus.
+- **Défauts de génération** : `cascade-foret` a un saut brusque de toute l'image à 2,6 s (raccord entre deux morceaux générés) ; nous l'avons écarté, la boucle ne dure que 5,9 s. Vérifier la vidéo image par image avant de nous l'envoyer si possible, ou la régénérer.
+- **Éclairs** : `pluie-ville` en avait six en 10 s, très lumineux. Ils sont adoucis par le traitement, mais pour une application de sommeil, préciser « une seule lueur d'éclair lointaine et douce » (ou aucune) dans le prompt.
+

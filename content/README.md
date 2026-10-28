@@ -18,11 +18,16 @@ Le chemin d'un fichier sous `content/` est sa clé S3 :
 |---|---|
 | `audio/sons/<id>.ogg` | boucle de son de nature Premium |
 | `audio/musiques/<id>.ogg` | boucle musicale Premium |
-| `images/paysages/<id>.jpg` | image de paysage Premium (pas encore fournie) |
+| `images/paysages/<id>.jpg` | image fixe d'un paysage Premium : exactement la première image de sa vidéo (veille, vignettes, « réduire les animations », chargement) |
+| `videos/paysages/<id>.mp4` | vidéo d'un paysage Premium : boucle sans raccord, H.264, sans son, 2,5 Mo au plus |
 
 Les `<id>` sont ceux de `app/assets/catalog.json`. Seuls les éléments
 `"gratuit": false` vont sur S3 ; les éléments gratuits sont embarqués dans
-l'application (`app/assets/audio/...`).
+l'application (`app/assets/audio/...`, `app/assets/landscapes/<id>.mp4` et
+`<id>.jpg`). L'application ne demande une vidéo ou une image de paysage que si
+son identifiant figure dans `app/assets/landscapes/remote.json`, réécrit par
+`tools/media/process_video.py` d'après ce dossier : ajouter un fichier ici sans
+relancer le script ne le rend pas visible dans l'application.
 
 ## Fichiers présents
 
@@ -40,7 +45,14 @@ l'application (`app/assets/audio/...`).
 | `audio/musiques/boite-a-musique.ogg` | 26,4 s |
 | `audio/musiques/bols-tibetains.ogg` | 45,5 s |
 
-Aucune image `images/paysages/<id>.jpg` n'est encore fournie.
+| Clé | Contenu |
+|---|---|
+| `images/paysages/pluie-ville.jpg` | image fixe (720 × 1280, 69 ko) |
+| `videos/paysages/pluie-ville.mp4` | 7,6 s, 24 i/s, 720 × 1280, 2,28 Mo |
+
+Provenance et droits de chaque fichier : [`LICENCES.md`](LICENCES.md). Les
+vidéos de tiers de `medias-test/` (tests internes, non diffusables) ne vont
+**jamais** ici ni sur S3.
 
 ## Format audio
 
@@ -55,10 +67,17 @@ décrite dans `tools/media/README.md`.
 
 ```sh
 aws s3 cp content/audio s3://<bucket>/audio --recursive --content-type audio/ogg
+aws s3 cp content/images s3://<bucket>/images --recursive --content-type image/jpeg
+aws s3 cp content/videos s3://<bucket>/videos --recursive --content-type video/mp4
 ```
+
+(Exemple seulement : aucun agent ne fait d'appel AWS ; le téléversement est fait
+par le product owner. Les clés `videos/paysages/<id>.mp4` doivent aussi être
+acceptées par `POST /content/urls`, contrat § 8.)
 
 ## Régénération
 
 ```sh
-python3 tools/media/generate_audio.py
+python3 tools/media/generate_audio.py     # sons et musiques
+python3 tools/media/process_video.py      # vidéos et images de paysages (depuis medias-bruts/)
 ```

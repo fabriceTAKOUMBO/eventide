@@ -127,7 +127,7 @@ class _LandscapeBackgroundState extends State<LandscapeBackground>
     WidgetsBinding.instance.removeObserver(this);
     _hub.removeListener(_onHub);
     LandscapeImages.revision.removeListener(_onAssets);
-    _drop();
+    _drop(now: true);
     super.dispose();
   }
 
@@ -148,8 +148,14 @@ class _LandscapeBackgroundState extends State<LandscapeBackground>
     final lease = _lease;
     if (lease != null &&
         lease.player.status.value == LandscapeVideoStatus.failed) {
-      _failed = _source;
-      _drop();
+      // Not from inside the player's own notification: releasing may dispose it.
+      scheduleMicrotask(() {
+        if (!mounted || !identical(_lease, lease)) return;
+        _failed = _source;
+        _drop();
+        setState(() {});
+      });
+      return;
     }
     setState(() {});
   }
@@ -208,7 +214,7 @@ class _LandscapeBackgroundState extends State<LandscapeBackground>
         _lifecycle == AppLifecycleState.paused ||
         _lifecycle == AppLifecycleState.detached;
     if (source == null || source == _failed || !_wantVideo || gone) {
-      _drop();
+      _drop(now: gone);
       return;
     }
     if (!_visible || _lifecycle == AppLifecycleState.inactive) {
@@ -216,7 +222,7 @@ class _LandscapeBackgroundState extends State<LandscapeBackground>
       _lease?.playing = false;
       if (!_visible && _lease != null) {
         _coveredTimer ??= Timer(widget.releaseWhenCovered, () {
-          _drop();
+          _drop(now: true);
           if (mounted) setState(() {});
         });
       }
@@ -234,14 +240,23 @@ class _LandscapeBackgroundState extends State<LandscapeBackground>
     lease.playing = true;
   }
 
-  void _drop() {
+  /// Lets go of the player. On screen, only after the next frame, once its picture has left
+  /// the tree (never a frame drawn from a released texture); in background or covered, now
+  /// (no frame may come before the app is back).
+  void _drop({bool now = false}) {
     _coveredTimer?.cancel();
     _coveredTimer = null;
     final lease = _lease;
     if (lease == null) return;
     _lease = null;
     lease.player.status.removeListener(_onStatus);
-    lease.release();
+    if (now) {
+      lease.release();
+      return;
+    }
+    WidgetsBinding.instance
+      ..addPostFrameCallback((_) => lease.release())
+      ..ensureVisualUpdate();
   }
 
   @override

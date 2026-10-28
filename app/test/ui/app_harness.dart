@@ -31,6 +31,17 @@ Future<void> pumpApp(
     if (logo != null && context.mounted) {
       await precacheImage(AssetImage(logo), context);
     }
+    // Landscape posters (assets/landscapes/<id>.jpg), so that screenshots show them.
+    for (final l in model.catalog.landscapes) {
+      for (final poster in [
+        LandscapeImages.providerFor(l.id),
+        LandscapeImages.thumbnailFor(l.id),
+      ]) {
+        if (poster != null && context.mounted) {
+          await precacheImage(poster, context);
+        }
+      }
+    }
   });
   await settle(tester);
 }

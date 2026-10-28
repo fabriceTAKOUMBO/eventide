@@ -36,6 +36,19 @@ abstract final class LandscapeImages {
     return resolver?.call(landscapeId);
   }
 
+  /// The poster decoded at thumbnail size (menu tile, grid, schedules): one small copy
+  /// (480 px wide) per landscape instead of the full 720 × 1280 picture.
+  static ImageProvider? thumbnailFor(String landscapeId) {
+    final provider = providerFor(landscapeId);
+    return provider == null
+        ? null
+        : ResizeImage(
+            provider,
+            width: 480,
+            policy: ResizeImagePolicy.fit,
+          );
+  }
+
   /// A looping video exists for this landscape (bundled, or on the content server). Whether it
   /// can be played now is the model's answer (AppModel.landscapeVideo); this only decides that
   /// the still picture stays put (no Ken Burns), so that the video replaces it without a jump.
@@ -68,9 +81,14 @@ abstract final class LandscapeImages {
       }
       if (assets.contains(LandscapeMediaKeys.remoteManifest)) {
         try {
+          // Not cached by the bundle: read once here, and a cached future would outlive
+          // the zone that created it (widget tests).
           final remote = RemoteLandscapeMedia.fromJson(
             jsonDecode(
-              await assetBundle.loadString(LandscapeMediaKeys.remoteManifest),
+              await assetBundle.loadString(
+                LandscapeMediaKeys.remoteManifest,
+                cache: false,
+              ),
             ),
           );
           _remoteVideos.addAll(remote.videos);

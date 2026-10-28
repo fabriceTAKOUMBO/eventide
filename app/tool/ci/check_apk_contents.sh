@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # Checks what a release APK is, so that the demo build can never pass for production:
-#   production: package be.cinaf.eventide, label « Eventide », free audio only (no Premium audio);
+#   production: package be.cinaf.eventide, label « Eventide », free audio and free landscape
+#               videos only: no Premium audio, no Premium landscape video or poster
+#               (content/videos, content/images: served by the API), and none of the
+#               third-party test-only media (medias-test/, non-distributable);
 #   demo:       package be.cinaf.eventide.demo, label « Eventide Démo », every Premium sound and
-#               music of content/audio bundled.
+#               music of content/audio, every landscape video and poster of content/ and of
+#               medias-test/ bundled.
 #
 # Usage: check_apk_contents.sh production|demo <apk> [content-audio-dir]
 # Needs unzip and aapt2 (newest Android build-tools under ANDROID_HOME, or AAPT2=...).
@@ -10,7 +14,8 @@ set -euo pipefail
 
 kind="${1:?usage: $0 production|demo <apk> [content-audio-dir]}"
 apk="${2:?usage: $0 production|demo <apk> [content-audio-dir]}"
-content="${3:-$(cd "$(dirname "$0")/../../.." && pwd)/content/audio}"
+repo="$(cd "$(dirname "$0")/../../.." && pwd)"
+content="${3:-$repo/content/audio}"
 
 case "$kind" in
   production)
@@ -83,4 +88,30 @@ if [[ "$kind" == "production" ]]; then
 else
   [[ ${#missing[@]} -eq 0 ]] || fail "the demo APK lacks Premium audio: ${missing[*]}"
 fi
+
+# Living landscapes: assets/landscapes/<id>.mp4 (loop) and <id>.jpg (its frame 0).
+lprefix="assets/flutter_assets/assets/landscapes"
+for free in cascade-foret.mp4 cascade-foret.jpg remote.json; do
+  grep -qx "$lprefix/$free" <<<"$listing" || fail "free landscape media $free missing from the APK"
+done
+shopt -s nullglob
+check_media() {
+  local label="$1"
+  shift
+  local present=() absent=() file entry
+  for file in "$@"; do
+    entry="$lprefix/$(basename "$file")"
+    if grep -qx "$entry" <<<"$listing"; then present+=("$entry"); else absent+=("$entry"); fi
+  done
+  echo "  $label bundled: ${#present[@]} / $#"
+  if [[ "$kind" == "production" ]]; then
+    [[ ${#present[@]} -eq 0 ]] || fail "the production APK contains $label: ${present[*]}"
+  else
+    [[ ${#absent[@]} -eq 0 ]] || fail "the demo APK lacks $label: ${absent[*]}"
+  fi
+}
+check_media "Premium landscape videos/posters (content/)" \
+  "$repo"/content/videos/paysages/*.mp4 "$repo"/content/images/paysages/*.jpg
+check_media "test-only third-party videos/posters (medias-test/, non-distributable)" \
+  "$repo"/medias-test/videos/paysages/*.mp4 "$repo"/medias-test/images/paysages/*.jpg
 echo "  OK"

@@ -6,6 +6,7 @@ import 'package:eventide/app/app_controller.dart';
 import 'package:eventide/app/app_model.dart';
 import 'package:eventide/app/demo_mode.dart';
 import 'package:eventide/core/catalog.dart';
+import 'package:eventide/core/landscape_media.dart';
 import 'package:eventide/core/plan.dart';
 import 'package:eventide/core/scene.dart';
 import 'package:eventide/core/schedule.dart';
@@ -63,6 +64,9 @@ class Harness {
     String shareHost = 'eventide.app',
     bool demo = false,
     AudioEngine? engineOverride,
+    Set<String> bundledMedia = const {},
+    RemoteLandscapeMedia remoteMedia = RemoteLandscapeMedia.none,
+    Directory? contentDirectory,
   }) async {
     handler = PlaybackHandler(engine: engineOverride ?? engine, focus: focus, native: native, now: () => now);
     final client = MockClient(backend ?? (request) async => http.Response('', 500));
@@ -75,11 +79,12 @@ class Harness {
       deviceSalt: 'salt',
     );
     final content = ContentRepository(
-      directory: Directory('/nonexistent/eventide-content'),
+      directory: contentDirectory ?? Directory('/nonexistent/eventide-content'),
       client: client,
       api: api,
-      bundledAssets: () async => allBundledAudio(catalog),
+      bundledAssets: () async => {...allBundledAudio(catalog), ...bundledMedia},
       connectivity: connectivity,
+      remoteMedia: () async => remoteMedia,
     );
     model = RealAppModel(
       catalog: catalog,
@@ -1067,6 +1072,96 @@ void main() {
       expect(model.plan, Plan.free);
       await model.buy(PurchaseChoice.annual);
       expect(h.billing.calls, ['initialize', 'buy:annual']);
+    });
+  });
+
+  group('living landscapes (videos and posters)', () {
+    const pluie = RemoteLandscapeMedia(videos: {'pluie-ville'}, images: {'pluie-ville'});
+    const bundledFree = {'assets/landscapes/cascade-foret.mp4', 'assets/landscapes/cascade-foret.jpg'};
+
+    Future<http.Response> Function(http.Request) contentBackend(List<String> asked) => (request) async {
+          asked.add(request.url.toString());
+          if (request.url.path == '/v1/installations') {
+            return http.Response(jsonEncode({'installation_id': 'i', 'token': 't'}), 201);
+          }
+          if (request.url.path == '/v1/content/urls') {
+            final keys = (jsonDecode(request.body) as Map)['keys'] as List;
+            return http.Response(jsonEncode({
+              'urls': {for (final k in keys) k: 'https://cdn.test/$k?sig=1'},
+              'expires_at': '2026-10-28T22:00:00Z',
+            }), 200);
+          }
+          if (request.url.host == 'cdn.test') return http.Response('MEDIA', 200);
+          return http.Response(jsonEncode({'error': 'not_found'}), 404);
+        };
+
+    test('free plan: the bundled free video; nothing asked for a locked Premium landscape', () async {
+      final asked = <String>[];
+      final model = await h.start(backend: contentBackend(asked), bundledMedia: bundledFree, remoteMedia: pluie);
+      expect(await model.landscapeVideo('cascade-foret'),
+          const AssetLandscapeVideo('assets/landscapes/cascade-foret.mp4'));
+      expect(await model.landscapeVideo('pluie-ville'), isNull);
+      expect(model.landscapePosterFile('pluie-ville'), isNull);
+      expect(asked.where((u) => u.contains('content/urls') || u.contains('cdn.test')), isEmpty);
+    });
+
+    test('Premium: the poster first (the UI is told), then the video, kept for next time', () async {
+      final dir = await Directory.systemTemp.createTemp('eventide_media_');
+      addTearDown(() => dir.delete(recursive: true));
+      final asked = <String>[];
+      final model = await h.start(
+        plan: Plan.annual,
+        backend: contentBackend(asked),
+        bundledMedia: bundledFree,
+        remoteMedia: pluie,
+        contentDirectory: dir,
+      );
+      var notified = 0;
+      model.addListener(() => notified++);
+      final video = await model.landscapeVideo('pluie-ville');
+      expect(video, isA<FileLandscapeVideo>());
+      expect(File((video as FileLandscapeVideo).path).readAsStringSync(), 'MEDIA');
+      expect(model.landscapePosterFile('pluie-ville'), endsWith('/images/paysages/pluie-ville.jpg'));
+      expect(notified, greaterThan(0));
+      final cdn = asked.where((u) => u.startsWith('https://cdn.test/')).toList();
+      expect(cdn, [
+        'https://cdn.test/images/paysages/pluie-ville.jpg?sig=1',
+        'https://cdn.test/videos/paysages/pluie-ville.mp4?sig=1',
+      ]);
+      asked.clear();
+      expect(await model.landscapeVideo('pluie-ville'), video);
+      expect(asked, isEmpty);
+    });
+
+    test('« Wi-Fi seulement » on mobile data: no download, the still picture stays', () async {
+      final asked = <String>[];
+      final model = await h.start(plan: Plan.annual, backend: contentBackend(asked), remoteMedia: pluie);
+      await model.updateSettings(model.settings.copyWith(wifiOnly: true));
+      h.connectivity.unmetered = false;
+      asked.clear();
+      expect(await model.landscapeVideo('pluie-ville'), isNull);
+      expect(asked, isEmpty);
+    });
+
+    test('demo build: Premium videos are bundled and play without any server', () async {
+      final model = await h.start(
+        demo: true,
+        bundledMedia: {...bundledFree, 'assets/landscapes/pluie-ville.mp4', 'assets/landscapes/pluie-ville.jpg'},
+      );
+      expect(model.plan.isPremium, isTrue);
+      expect(await model.landscapeVideo('pluie-ville'),
+          const AssetLandscapeVideo('assets/landscapes/pluie-ville.mp4'));
+    });
+
+    test('the video never touches the sound', () async {
+      final model = await h.start(bundledMedia: bundledFree);
+      await model.play();
+      await settle();
+      expect(model.playing, isTrue);
+      final calls = List.of(h.engine.calls);
+      await model.landscapeVideo('cascade-foret');
+      expect(model.playing, isTrue);
+      expect(h.engine.calls, calls);
     });
   });
 }
