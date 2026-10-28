@@ -2,8 +2,12 @@
 # Runs inside reactivecircus/android-emulator-runner (.github/workflows/app.yml), from app/,
 # against one booted emulator. Three stages, all logs and screenshots in <out-dir>:
 #
-#   A. Release demo APK (R8, x86_64): install, launch with `am start -W`, the process stays
-#      alive, demo mode is on, no FATAL EXCEPTION / ANR / Dart error in logcat; screenshots.
+#   A. Release demo APK (R8, x86_64): install, launch with `am start -W`, then wait (up to
+#      A_READY_TIMEOUT s from the launch) until the first frame is drawn and demo mode is on,
+#      and watch the app for A_SETTLE more seconds: it stays alive, no FATAL EXCEPTION / ANR /
+#      Dart error in logcat; screenshots. `am start -W` gives up after about 10 s: « Status:
+#      timeout » is accepted only when ActivityTaskManager reports « Displayed <package>/… »
+#      (first frame drawn) later on, the process alive and no crash.
 #   B. Integration test (integration_test/demo_flow_test.dart, debug demo build) with
 #      `flutter drive --keep-app-running`; it leaves a schedule armed two to three minutes ahead.
 #   C. Scheduled start on a real Android system: the alarm is registered (dumpsys alarm), the
@@ -12,6 +16,13 @@
 #
 # A and B decide the exit code. C writes « pass » or « fail » to <out-dir>/scheduled-start.status
 # and its findings to <out-dir>/scheduled-start.txt (read by a non-blocking workflow step).
+#
+# The whole guest log is streamed to a host file during each stage, and the host is sampled
+# every few seconds (host-monitor.txt): when the emulator disappears, the job log shows the last
+# guest lines, the emulator's memory and CPU, the host kernel log and any emulator crash report.
+#
+# Optional environment: EMULATOR_WM_SIZE / EMULATOR_WM_DENSITY (display override applied before
+# stage A), A_READY_TIMEOUT (120), A_SETTLE (15), AM_START_TIMEOUT (60), ALLOWED_FLUTTER_ERRORS.
 #
 # Usage: emulator_checks.sh <release-demo-x86_64.apk> <out-dir>
 set -uo pipefail
@@ -23,6 +34,9 @@ mkdir -p "$out"
 out="$(cd "$out" && pwd)"
 export PATH="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}/platform-tools:$PATH"
 summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
+demo_marker='Eventide: demo mode on'
+# Reference time for the host files written during this step (emulator crash reports).
+: >"$out/.step-start"
 
 log() { echo "[emulator-checks $(date -u +%H:%M:%S)] $*"; }
 # Every adb call is bounded: an emulator that dies must fail the job, not leave
@@ -31,17 +45,88 @@ log() { echo "[emulator-checks $(date -u +%H:%M:%S)] $*"; }
 ADB_BIN="$(command -v adb || echo adb)"
 adb() { timeout "${ADB_TIMEOUT:-120}" "$ADB_BIN" "$@"; }
 device_alive() { [[ "$(timeout 20 "$ADB_BIN" get-state 2>/dev/null | tr -d '\r')" == "device" ]]; }
-# Host-side clues when the emulator disappears (memory pressure, emulator crash).
+
+# ---- Background helpers: guest log stream and host monitor (stopped on exit).
+stream_pid=""
+monitor_pid=""
+stop_logcat_stream() {
+  [[ -n $stream_pid ]] || return 0
+  kill "$stream_pid" 2>/dev/null || true
+  wait "$stream_pid" 2>/dev/null || true
+  stream_pid=""
+}
+# Streams the whole guest log (all buffers, with timestamps) to a host file while a stage runs:
+# when the emulator disappears, the lines written up to that moment are kept.
+start_logcat_stream() {
+  stop_logcat_stream
+  timeout "${STREAM_TIMEOUT:-2400}" "$ADB_BIN" logcat -v threadtime -b all >"$1" 2>&1 &
+  stream_pid=$!
+}
+# Emulator process (memory, CPU, uptime), host load and memory every MONITOR_INTERVAL seconds.
+start_host_monitor() {
+  (
+    while :; do
+      pids="$(pgrep -f 'qemu-system' 2>/dev/null | head -n 4 | paste -sd, -)"
+      if [[ -n $pids ]]; then
+        emu="$(ps -o pid=,rss=,pcpu=,etimes= -p "$pids" 2>/dev/null |
+          awk '{printf "emulator pid %s rss %d MB cpu %s%% up %s s; ", $1, $2 / 1024, $3, $4}')"
+      else
+        emu="no emulator process; "
+      fi
+      printf '%s %sload %s; %s\n' "$(date -u +%H:%M:%S)" "$emu" \
+        "$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null)" \
+        "$(free -m 2>/dev/null | awk 'NR == 2 {printf "host memory used %s free %s available %s MB", $3, $4, $7}')"
+      sleep "${MONITOR_INTERVAL:-5}"
+    done
+  ) >>"$out/host-monitor.txt" 2>&1 &
+  monitor_pid=$!
+}
+cleanup() {
+  stop_logcat_stream
+  [[ -n $monitor_pid ]] && kill "$monitor_pid" 2>/dev/null
+  return 0
+}
+trap cleanup EXIT
+
+# Host-side clues when the emulator disappears: is its process still there, its last memory and
+# CPU samples, the host kernel log (OOM killer, segfault), emulator crash reports, and the last
+# guest log lines before the loss ($2: stream file).
 host_diagnostics() {
   log "host diagnostics ($1)"
+  if pgrep -af 'qemu-system' 2>/dev/null | cut -c1-160; then
+    echo "the emulator process is still running (adb lost the device)"
+  else
+    echo "no emulator process on the host any more: the emulator exited"
+  fi
   free -m || true
-  ps -eo pid,rss,comm --sort=-rss | head -n 8 || true
-  (sudo -n dmesg -T 2>/dev/null || dmesg -T 2>/dev/null || true) | grep -iE 'out of memory|killed process|oom' | tail -n 10 || true
-  ls -la /tmp/android-runner 2>/dev/null | tail -n 5 || true
+  echo "load average: $(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null)"
+  ps -eo pid,rss,pcpu,comm --sort=-rss | head -n 8 || true
+  if [[ -s $out/host-monitor.txt ]]; then
+    echo "--- host monitor (every ${MONITOR_INTERVAL:-5} s), last samples"
+    tail -n 12 "$out/host-monitor.txt"
+  fi
+  echo "--- host kernel log, last lines"
+  (sudo -n dmesg -T 2>/dev/null || dmesg -T 2>/dev/null || true) | tail -n 25
+  echo "--- files written under /tmp/android-runner during this step (emulator crash reports, netsim)"
+  find /tmp/android-runner -newer "$out/.step-start" -type f -printf '%TT %9s %p\n' 2>/dev/null |
+    sort | tail -n 20 || true
+  find /tmp/android-runner/netsimd -maxdepth 2 -type f \( -name '*.log' -o -name '*std*' \) 2>/dev/null |
+    head -n 3 | while read -r file; do
+      echo "--- $file (last lines)"
+      tail -n 15 "$file"
+    done
+  if [[ -n ${PULSE_SERVER:-} ]] && command -v pactl >/dev/null; then
+    echo "--- PulseAudio clients ($PULSE_SERVER)"
+    timeout 10 pactl list short clients 2>&1 | tail -n 5
+  fi
+  if [[ -n ${2:-} && -s ${2:-} ]]; then
+    echo "--- guest log, last lines before the loss ($(basename "$2"))"
+    tail -n "${DIAG_LOG_LINES:-80}" "$2" | cut -c1-300
+  fi
 }
 annotate() { [[ -n "${GITHUB_ACTIONS:-}" ]] && echo "::$1 title=Emulator API ${api:-?}::$2"; return 0; }
-shot() { adb exec-out screencap -p >"$out/$1.png" 2>/dev/null || log "screenshot $1 failed"; }
-device_ms() { echo $(( $(adb shell date +%s | tr -d '\r') * 1000 )); }
+shot() { timeout 30 "$ADB_BIN" exec-out screencap -p >"$out/$1.png" 2>/dev/null || log "screenshot $1 failed"; }
+device_ms() { echo $(($(adb shell date +%s | tr -d '\r') * 1000)); }
 
 grant() {
   # Exact alarms (denied by default on Android 14+ for new installs) and notifications.
@@ -68,13 +153,27 @@ adb wait-for-device
 serial="$(adb devices | awk 'NR > 1 && $2 == "device" { print $1; exit }')"
 api="$(adb shell getprop ro.build.version.sdk | tr -d '\r')"
 release="$(adb shell getprop ro.build.version.release | tr -d '\r')"
+# Optional display override (same layout in dp, fewer pixels for the software renderer).
+if [[ -n ${EMULATOR_WM_SIZE:-} ]]; then
+  adb shell wm size "$EMULATOR_WM_SIZE" >/dev/null 2>&1 || log "wm size $EMULATOR_WM_SIZE failed"
+fi
+if [[ -n ${EMULATOR_WM_DENSITY:-} ]]; then
+  adb shell wm density "$EMULATOR_WM_DENSITY" >/dev/null 2>&1 || log "wm density $EMULATOR_WM_DENSITY failed"
+fi
 size="$(adb shell wm size | tr -d '\r' | sed 's/.*: //' | tail -n 1)"
 density="$(adb shell wm density | tr -d '\r' | sed 's/.*: //' | tail -n 1)"
 log "device $serial: Android $release (API $api), screen $size @ ${density} dpi"
+if [[ -n ${PULSE_SERVER:-} ]] && command -v pactl >/dev/null; then
+  log "host audio: PulseAudio at $PULSE_SERVER, clients:"
+  timeout 10 pactl list short clients 2>&1 | head -n 5
+else
+  log "host audio: no PulseAudio server (the emulator uses its fallback audio backend)"
+fi
 {
   echo "### Emulator: Android $release (API $api), $size, ${density} dpi"
   echo
 } >>"$summary"
+start_host_monitor
 
 status_a="fail"
 status_b="fail"
@@ -85,49 +184,110 @@ status_b="fail"
 stage_a() {
   log "A. release demo APK: $release_apk"
   adb uninstall "$pkg" >/dev/null 2>&1 || true
-  if ! timeout 300 adb install -r "$release_apk" >"$out/a-install.txt" 2>&1; then
+  if ! timeout 300 "$ADB_BIN" install -r "$release_apk" >"$out/a-install.txt" 2>&1; then
     cat "$out/a-install.txt"
+    device_alive || host_diagnostics "device lost while installing"
     annotate error "A: the release demo APK does not install"
+    echo "| A. Release demo APK (R8) | **FAIL** | does not install |" >>"$out/rows.md"
     return 1
   fi
   grant
   adb logcat -c
+  start_logcat_stream "$out/a-logcat-stream.txt"
   local component
   component="$(adb shell cmd package resolve-activity --brief -c android.intent.category.LAUNCHER "$pkg" | tr -d '\r' | tail -n 1)"
   [[ "$component" == */* ]] || component="$pkg/be.cinaf.eventide.MainActivity"
   log "A. launching $component"
-  timeout 180 adb shell am start -W -n "$component" | tr -d '\r' | tee "$out/a-am-start.txt"
-  sleep 4
-  shot a-1-launch
-  sleep 12
-  shot a-2-after-16s
-  local pid
-  pid="$(adb shell pidof "$pkg" | tr -d '\r')"
-  adb logcat -d -v brief >"$out/a-logcat.txt"
-  local crashes ok=0
-  crashes="$(find_crashes "$out/a-logcat.txt")"
-  if ! grep -q 'Status: ok' "$out/a-am-start.txt"; then
-    annotate error "A: am start did not report « Status: ok »"
+  local t0 status
+  t0="$(date +%s)"
+  timeout "${AM_START_TIMEOUT:-60}" "$ADB_BIN" shell am start -W -n "$component" 2>&1 | tr -d '\r' >"$out/a-am-start.txt"
+  cat "$out/a-am-start.txt"
+  status="$(sed -n 's/^Status: //p' "$out/a-am-start.txt" | head -n 1)"
+
+  # Wait for the first frame (« Status: ok », or ActivityTaskManager's « Displayed » line after
+  # an am start timeout) and the demo-mode line, or a crash, a dead process, a lost device.
+  local ready_timeout="${A_READY_TIMEOUT:-120}" displayed="" marker="" pid="" seen_pid=""
+  local crashes="" lost="" ready_after=""
+  while :; do
+    if ! device_alive; then
+      lost="yes"
+      break
+    fi
+    timeout 30 "$ADB_BIN" logcat -d -v brief >"$out/a-logcat.txt" 2>/dev/null || true
+    pid="$(timeout 20 "$ADB_BIN" shell pidof "$pkg" 2>/dev/null | tr -d '\r')"
+    [[ -n $pid ]] && seen_pid="$pid"
+    crashes="$(find_crashes "$out/a-logcat.txt")"
+    if [[ $status == "ok" ]] || grep -qF "Displayed $pkg/" "$out/a-logcat.txt"; then displayed="yes"; fi
+    grep -qF "$demo_marker" "$out/a-logcat.txt" && marker="yes"
+    [[ -n $crashes ]] && break
+    [[ -n $seen_pid && -z $pid ]] && break
+    if [[ -n $displayed && -n $marker && -n $pid ]]; then
+      ready_after="$(($(date +%s) - t0))"
+      break
+    fi
+    (($(date +%s) - t0 >= ready_timeout)) && break
+    sleep 3
+  done
+
+  if [[ -z $lost && -n $ready_after ]]; then
+    log "A. first frame drawn and demo mode on after ${ready_after} s; watching the app for ${A_SETTLE:-15} s"
+    shot a-1-ready
+    sleep "${A_SETTLE:-15}"
+    if device_alive; then
+      shot a-2-after-settle
+      timeout 30 "$ADB_BIN" logcat -d -v brief >"$out/a-logcat.txt" 2>/dev/null || true
+      pid="$(timeout 20 "$ADB_BIN" shell pidof "$pkg" 2>/dev/null | tr -d '\r')"
+      crashes="$(find_crashes "$out/a-logcat.txt")"
+    else
+      lost="yes"
+    fi
+  elif [[ -z $lost ]]; then
+    shot a-1-not-ready
+  fi
+  stop_logcat_stream
+
+  local ok=0 first_frame
+  first_frame="$(grep -F "Displayed $pkg/" "$out/a-logcat.txt" 2>/dev/null | head -n 1 | grep -oE '\+([0-9]+s)?[0-9]+ms' | head -n 1)"
+  if [[ -n $lost ]]; then
+    host_diagnostics "device lost during stage A" "$out/a-logcat-stream.txt"
+    annotate error "A: the emulator disconnected $(($(date +%s) - t0)) s after the launch (see host diagnostics in the job log)"
+    echo "| A. Release demo APK (R8) | **FAIL** | emulator lost $(($(date +%s) - t0)) s after the launch |" >>"$out/rows.md"
+    return 1
+  fi
+  if [[ $status != "ok" ]]; then
+    if [[ ($status == "timeout" || -z $status) && -n $displayed ]]; then
+      log "A. am start -W: « Status: ${status:-none} », but the first frame was drawn (${first_frame:-?}): accepted"
+    elif [[ -z $status ]]; then
+      annotate error "A: am start -W gave no status within ${AM_START_TIMEOUT:-60} s and no first frame was drawn within ${ready_timeout} s: $(grep -m 1 -E 'Error|Exception' "$out/a-am-start.txt")"
+      ok=1
+    elif [[ $status == "timeout" ]]; then
+      annotate error "A: am start -W timed out and the first frame was never drawn within ${ready_timeout} s (no « Displayed $pkg/ » in logcat)"
+      ok=1
+    else
+      annotate error "A: am start -W reported « Status: $status »"
+      ok=1
+    fi
+  fi
+  if [[ -z $pid ]]; then
+    annotate error "A: the release demo app is not running (crash?)"
     ok=1
   fi
-  if [[ -z "$pid" ]]; then
-    annotate error "A: the release demo app is not running 16 s after launch (crash?)"
-    ok=1
-  fi
-  if [[ -n "$crashes" ]]; then
+  if [[ -n $crashes ]]; then
     echo "$crashes" | head -n 60
     # Full first stack trace with its causes in the job log (artifacts may not be reachable).
     grep -m 1 -A 60 'FATAL EXCEPTION' "$out/a-logcat.txt" | grep -E 'FATAL|Process:|Exception|Error|Caused by|at ' | head -n 40 || true
     annotate error "A: crash, ANR or Dart error in logcat (see a-logcat.txt): $(echo "$crashes" | head -n 1)"
     ok=1
   fi
-  if ! grep -q 'Eventide: demo mode on' "$out/a-logcat.txt"; then
-    annotate error "A: « Eventide: demo mode on » missing from logcat: the release demo build did not enter demo mode"
+  if [[ -z $marker ]]; then
+    # Dart's print reaches logcat in release builds too (tag « flutter »): a missing line means
+    # that startEventide() did not reach createAppModel() in time, or demo mode is off.
+    echo "flutter log lines in logcat: $(grep -c '^[A-Z]/flutter' "$out/a-logcat.txt")"
+    grep -E '^[A-Z]/flutter' "$out/a-logcat.txt" | head -n 5
+    annotate error "A: « $demo_marker » missing from logcat ${ready_timeout} s after the launch: the release demo build did not enter demo mode (or its startup never got that far)"
     ok=1
   fi
-  local total
-  total="$(sed -n 's/^TotalTime: //p' "$out/a-am-start.txt")"
-  echo "| A. Release demo APK (R8) | $([[ $ok -eq 0 ]] && echo OK || echo '**FAIL**') | pid ${pid:-none}, cold start ${total:-?} ms |" >>"$out/rows.md"
+  echo "| A. Release demo APK (R8) | $([[ $ok -eq 0 ]] && echo OK || echo '**FAIL**') | pid ${pid:-none}, am start ${status:-no status}, first frame ${first_frame:-?}, ready after ${ready_after:-?} s |" >>"$out/rows.md"
   adb shell am force-stop "$pkg" || true
   # The debug build of stage B is signed with another key: start from a clean install.
   adb uninstall "$pkg" >/dev/null 2>&1 || true
@@ -138,6 +298,12 @@ stage_a() {
 # B. Integration test (flutter drive, debug demo build)
 # ---------------------------------------------------------------------------------------------
 stage_b() {
+  if ! device_alive; then
+    log "B. not run: no device"
+    annotate error "B: not run, the emulator was lost before the integration test"
+    echo "| B. Integration test (debug demo) | **FAIL** | not run: emulator lost before |" >>"$out/rows.md"
+    return 1
+  fi
   log "B. integration test with flutter drive"
   # Install the prebuilt debug APK first (same package and key as what flutter drive installs
   # with `adb install -r`), so that permissions are granted before the first launch.
@@ -153,6 +319,7 @@ stage_b() {
   done) &
   local granter=$!
   adb logcat -c
+  start_logcat_stream "$out/b-logcat-stream.txt"
   local code=0
   # Reuse the APK built before the emulator started: no Gradle build (and no 3 GB daemon)
   # competing with the emulator for memory while the test runs.
@@ -169,8 +336,9 @@ stage_b() {
   code=${PIPESTATUS[0]}
   kill "$granter" 2>/dev/null || true
   wait "$granter" 2>/dev/null || true
+  stop_logcat_stream
   if ! device_alive; then
-    host_diagnostics "device lost during stage B"
+    host_diagnostics "device lost during stage B" "$out/b-logcat-stream.txt"
     annotate error "B: the emulator disconnected during the integration test (see host diagnostics in the job log)"
     echo "| B. Integration test (debug demo) | **FAIL** | emulator lost |" >>"$out/rows.md"
     return 1
@@ -233,6 +401,7 @@ stage_c() {
   } >>"$result"
 
   adb logcat -c
+  start_logcat_stream "$out/c-logcat-stream.txt"
   adb shell input keyevent KEYCODE_HOME
   sleep 2
   shot c-1-home
@@ -241,7 +410,7 @@ stage_c() {
   deadline=$((at_ms + 100000))
   log "C. app in background; schedule at $at_ms, device now $now_ms (in $(((at_ms - now_ms) / 1000)) s)"
   local seen=""
-  while (($(device_ms) < deadline)); do
+  while device_alive && (($(device_ms) < deadline)); do
     adb logcat -d -v brief >"$out/c-logcat.txt"
     if grep -Eq 'EventideSchedule.*(playback started for schedule|nothing played for schedule|fallback|no-connection|skipped|nothing to start)' "$out/c-logcat.txt"; then
       seen="yes"
@@ -250,6 +419,14 @@ stage_c() {
     fi
     sleep 5
   done
+  stop_logcat_stream
+  if ! device_alive; then
+    host_diagnostics "device lost during stage C" "$out/c-logcat-stream.txt"
+    echo "the emulator was lost while waiting for the scheduled start" | tee -a "$result"
+    echo fail >"$out/scheduled-start.status"
+    echo "| C. Scheduled start (background) | **FAIL** | emulator lost |" >>"$out/rows.md"
+    return 0
+  fi
   shot c-2-after-fire
   adb logcat -d -v brief >"$out/c-logcat.txt"
   adb shell dumpsys activity services "$pkg" >"$out/c-dumpsys-services.txt" 2>&1

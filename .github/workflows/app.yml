@@ -201,8 +201,8 @@ jobs:
           printf '%s\n' "${apks[@]}"
           bash app/tool/ci/check_16kb_alignment.sh "${apks[@]}"
 
-  # Real Android systems (x86_64 emulators, KVM): Android 14 (API 34) and 16 (API 36), a
-  # 1080 x 2400 screen at 420 dpi close to the Galaxy S24 (1080 x 2340).
+  # Real Android systems (x86_64 emulators, KVM): Android 14 (API 34) and 16 (API 36), the
+  # layout of a 1080 x 2400 screen at 420 dpi (411 x 914 dp) close to the Galaxy S24 (1080 x 2340).
   emulator:
     name: Emulator API ${{ matrix.api-level }}
     needs: release-apks
@@ -216,6 +216,20 @@ jobs:
       AVD_TARGET: google_apis
       AVD_ARCH: x86_64
       AVD_PROFILE: pixel_7
+      # Same options for the snapshot and the checks (a snapshot only loads with the same GPU
+      # mode). swangle_indirect (ANGLE on SwiftShader) instead of swiftshader_indirect: with
+      # the latter the emulator froze, then exited silently 35 to 55 s into our Flutter app, on
+      # API 34 and 36, in the release start (no sound, no video: animations are off) as in the
+      # integration test (runs 40761869354 and 40770595168, 28 Oct 2026); another project
+      # measured the emulator lost with swiftshader_indirect and surviving with
+      # swangle_indirect. -feature -Vulkan: no guest Vulkan (Flutter uses OpenGL ES on
+      # emulators anyway). No -noaudio: the audio device goes to the host PulseAudio null sink
+      # started below.
+      EMULATOR_OPTIONS: -no-window -gpu swangle_indirect -feature -Vulkan -no-boot-anim -camera-back none
+      # Read by tool/ci/emulator_checks.sh: same layout in dp as 1080 x 2400 at 420 dpi, with
+      # 2.25 times fewer pixels for the software renderer to draw.
+      EMULATOR_WM_SIZE: 720x1600
+      EMULATOR_WM_DENSITY: "280"
     defaults:
       run:
         working-directory: app
@@ -274,7 +288,40 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-${{ matrix.api-level }}-${{ env.AVD_TARGET }}-${{ env.AVD_ARCH }}-${{ env.AVD_PROFILE }}-v2
+          # v3: snapshot made with swangle_indirect and without guest Vulkan.
+          key: avd-${{ matrix.api-level }}-${{ env.AVD_TARGET }}-${{ env.AVD_ARCH }}-${{ env.AVD_PROFILE }}-v3
+
+      # Without a host audio server the emulator logs « Could not init `pa' audio driver » and
+      # falls back to a backend that may never consume the frames Android plays: audio writes
+      # then block (seen by other projects; on 28 Oct 2026 the emulator died just after our app
+      # started its sound, with -noaudio). A PulseAudio null sink consumes them in real time,
+      # like a desktop's sound server. Local to the runner, nothing leaves it. Best effort: if it
+      # cannot start, the emulator keeps its fallback and the job log says so.
+      - name: Host audio server for the emulator (PulseAudio null sink, best effort)
+        run: |
+          install_pulse() { timeout 240 sudo apt-get install -y -qq --no-install-recommends pulseaudio pulseaudio-utils >/dev/null 2>&1; }
+          if ! command -v pulseaudio >/dev/null; then
+            install_pulse || { timeout 240 sudo apt-get update -qq >/dev/null 2>&1 && install_pulse; } || true
+          fi
+          dir="$RUNNER_TEMP/pulse"
+          mkdir -p "$dir"
+          if command -v pulseaudio >/dev/null; then
+            pulseaudio --daemonize=yes --exit-idle-time=-1 --disallow-exit --use-pid-file=no -n \
+              --log-target="file:$dir/pulse.log" \
+              --load="module-native-protocol-unix socket=$dir/native auth-anonymous=1" \
+              --load="module-null-sink sink_name=eventide_ci rate=48000 channels=2" || true
+            for _ in $(seq 20); do [ -S "$dir/native" ] && break; sleep 0.5; done
+          fi
+          if pactl -s "unix:$dir/native" info >/dev/null 2>&1; then
+            pactl -s "unix:$dir/native" set-default-sink eventide_ci || true
+            pactl -s "unix:$dir/native" list short sinks
+            # libpulse (PULSE_SERVER) and the emulator's PulseAudio driver (QEMU_PA_SERVER).
+            echo "PULSE_SERVER=unix:$dir/native" >> "$GITHUB_ENV"
+            echo "QEMU_PA_SERVER=unix:$dir/native" >> "$GITHUB_ENV"
+          else
+            tail -n 20 "$dir/pulse.log" 2>/dev/null || true
+            echo "::warning title=Host audio (API ${{ matrix.api-level }})::no PulseAudio server: the emulator keeps its fallback audio backend"
+          fi
 
       - name: Create the AVD and its snapshot (cache miss)
         if: steps.avd-cache.outputs.cache-hit != 'true'
@@ -286,12 +333,14 @@ jobs:
           profile: ${{ env.AVD_PROFILE }}
           ram-size: 3072M
           force-avd-creation: false
-          emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
+          emulator-options: ${{ env.EMULATOR_OPTIONS }}
           disable-animations: false
           script: echo "Generated AVD snapshot for caching."
 
       # A: release demo APK starts (R8), B: integration test, C: scheduled start in background.
       # The script exits non-zero when A or B fails; C is reported by the next step.
+      # disable-animations sets the animation scales to 0: Flutter then reports reduced motion,
+      # so the landscapes show their still picture (no video is played on the emulator).
       - name: Release start, integration test and scheduled start on the emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -301,9 +350,7 @@ jobs:
           profile: ${{ env.AVD_PROFILE }}
           ram-size: 3072M
           force-avd-creation: false
-          # No -noaudio: with it the emulator process died ~55 s after the app started playing
-          # sound, on API 34 and 36 (28 Oct 2026). The default (null) audio backend is used instead.
-          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none
+          emulator-options: -no-snapshot-save ${{ env.EMULATOR_OPTIONS }}
           disable-animations: true
           working-directory: app
           script: bash tool/ci/emulator_checks.sh ../dist/demo-emulator/eventide-demo-emulator-x86_64.apk ../emulator-results/api-${{ matrix.api-level }}

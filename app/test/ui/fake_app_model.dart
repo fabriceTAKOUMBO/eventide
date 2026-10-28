@@ -154,12 +154,15 @@ class FakeAppModel extends AppModel {
   String lastLandscapeOfTheme(String themeId) =>
       _lastOfTheme[themeId] ?? catalog.landscapesOfTheme(themeId).first.id;
 
+  // Wall clock, like the real controller: the Standby screen counts down against
+  // DateTime.now(). With the fixed `_now` the remaining time turned negative once the real
+  // clock passed 28 Oct 2026 21:30, and « Il reste … » became « Le son s’arrête ».
   @override
   DateTime? get timerEndsAt => switch (_scene.timer) {
-    TimerDuration(:final minutes) when _playing => _now.add(
+    TimerDuration(:final minutes) when _playing => DateTime.now().add(
       Duration(minutes: minutes),
     ),
-    TimerNight() when _playing => _now.add(
+    TimerNight() when _playing => DateTime.now().add(
       Duration(hours: catalog.limits.nightMaxHours),
     ),
     _ => null,
