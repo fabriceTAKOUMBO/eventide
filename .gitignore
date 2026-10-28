@@ -1,0 +1,52 @@
+# --- Secrets (jamais dans git) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.p8
+*.key
+*.keystore
+*.jks
+key.properties
+google-services.json
+*.tfvars
+!*.tfvars.example
+service-account*.json
+
+# --- OS / éditeurs ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.iml
+
+# --- Python / Django ---
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+backend/staticfiles/
+backend/media/
+
+# --- Terraform ---
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+
+# --- Flutter / Dart ---
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+build/
+**/android/.gradle/
+**/android/local.properties
+**/android/app/debug
+**/android/app/profile
+**/android/app/release
