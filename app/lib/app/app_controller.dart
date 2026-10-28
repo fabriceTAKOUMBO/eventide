@@ -589,11 +589,15 @@ class RealAppModel extends AppModel implements PlaybackHost {
     return st.playing || st.paused;
   }
 
+  /// Engine layers of [scene]. A muted category keeps its layers at volume 0 (parked by the
+  /// engine). [progressive]: the mix starts from silence or changes landscape, so the music
+  /// comes in over [MixRules.musicEntry].
   Future<_Prepared> _prepare(
     Scene scene, {
     String? subtitle,
     Duration rampUp = Duration.zero,
     String? scheduleId,
+    bool progressive = false,
   }) async {
     final layers = <EngineLayer>[];
     var failed = false;
@@ -605,7 +609,13 @@ class RealAppModel extends AppModel implements PlaybackHost {
         final key = MixRules.layerKey(kind, layer.id);
         try {
           final source = _sources[key] ??= await _content.resolve(kind, layer.id, allowNetwork: true);
-          layers.add(EngineLayer(key: key, source: source, volume: MixRules.layerVolume(kind, layer.level)));
+          layers.add(EngineLayer(
+            key: key,
+            source: source,
+            volume: MixRules.layerVolume(kind, scene.effectiveLevel(kind, layer.level)),
+            fadeIn: MixRules.entryFade(kind, progressive: progressive),
+            resumeFade: MixRules.resumeFadeOf(kind),
+          ));
         } on ContentUnavailableException catch (e) {
           failed = true;
           offline = offline || e.offline;
@@ -652,17 +662,19 @@ class RealAppModel extends AppModel implements PlaybackHost {
   }
 
   /// Brings the loaded audio in line with the scene (never cuts what plays on a failure).
-  Future<void> _syncAudio({bool crossFade = false}) async {
+  /// [crossFade]: the mix was replaced (landscape, favorite, shared mix), new music comes in
+  /// progressively. [fade]: fade of the kept layers otherwise (default 0.4 s).
+  Future<void> _syncAudio({bool crossFade = false, Duration? fade}) async {
     if (!_loaded) return;
     final generation = ++_audioGeneration;
-    final prepared = await _prepare(_scene);
+    final prepared = await _prepare(_scene, progressive: crossFade);
     if (generation != _audioGeneration || !_loaded) return;
     if (prepared.failed) _reportContentFailure(prepared);
     if (prepared.request.layers.isEmpty) {
       if (_scene.audioLayerCount == 0) await _handler.stop();
       return;
     }
-    await _handler.updateLayers(prepared.request, crossFade: crossFade);
+    await _handler.updateLayers(prepared.request, crossFade: crossFade, fade: fade);
   }
 
   // ---------------------------------------------------------------------------
@@ -697,7 +709,8 @@ class RealAppModel extends AppModel implements PlaybackHost {
         _emit(const OfflineEvent());
         return;
       }
-      final prepared = await _prepare(_scene);
+      _unmuteSilentStart();
+      final prepared = await _prepare(_scene, progressive: true);
       if (prepared.request.layers.isEmpty) {
         _reportContentFailure(prepared);
         return;
@@ -709,6 +722,15 @@ class RealAppModel extends AppModel implements PlaybackHost {
     } finally {
       _setPreparing(false);
     }
+  }
+
+  /// A start from silence where everything in the mix is muted would play nothing: both
+  /// categories are unmuted first (contract § 1). A resume after a pause keeps the mute.
+  void _unmuteSilentStart() {
+    if (!_scene.fullyMuted) return;
+    _scene = _scene.withoutMute();
+    _saveScene();
+    notifyListeners();
   }
 
   @override
@@ -752,7 +774,11 @@ class RealAppModel extends AppModel implements PlaybackHost {
         moment: _scene.moment,
         timer: _scene.timer,
         sleepTracking: _scene.sleepTracking,
+        mutedSounds: _scene.mutedSounds,
+        mutedMusic: _scene.mutedMusic,
       );
+      // A scheduled start is never silent.
+      if (scene.fullyMuted) scene = scene.withoutMute();
       subtitle = schedule.reminder.notificationText;
       rampUp = Duration(minutes: schedule.rampMinutes);
     } else {
@@ -769,11 +795,21 @@ class RealAppModel extends AppModel implements PlaybackHost {
         return null;
       }
     }
-    final prepared = await _prepare(scene, subtitle: subtitle, rampUp: rampUp, scheduleId: scheduleId);
+    final silentStart = schedule == null && scene.fullyMuted;
+    if (silentStart) scene = scene.withoutMute();
+    final prepared = await _prepare(
+      scene,
+      subtitle: subtitle,
+      rampUp: rampUp,
+      scheduleId: scheduleId,
+      progressive: true,
+    );
     if (prepared.request.layers.isEmpty) {
       if (_foreground) _reportContentFailure(prepared);
       return null;
     }
+    // Started from the notification with everything muted: unmuted (see _unmuteSilentStart).
+    if (silentStart) _unmuteSilentStart();
     if (schedule != null) {
       _scene = scene;
       _browsedId = scene.landscapeId;
@@ -891,12 +927,25 @@ class RealAppModel extends AppModel implements PlaybackHost {
       _emit(ToastEvent(AppMessages.tooManyLayers(max)));
       return;
     }
-    final next = _scene.withLevel(kind, id, target, maxAudioLayers: max);
+    var next = _scene.withLevel(kind, id, target, maxAudioLayers: max);
+    // Touching a level of a muted category makes it heard again.
+    final unmute = target > 0 && next.isMuted(kind);
+    if (unmute) next = next.withMuted(kind, false);
     if (identical(next, _scene)) return;
     _scene = next;
     _saveScene();
     notifyListeners();
-    if (kind.isAudio) unawaited(_syncAudio());
+    if (kind.isAudio) unawaited(_syncAudio(fade: unmute ? MixRules.muteFade : null));
+  }
+
+  @override
+  void setCategoryMuted(LayerKind kind, bool muted) {
+    final next = _scene.withMuted(kind, muted);
+    if (identical(next, _scene)) return;
+    _scene = next;
+    _saveScene();
+    notifyListeners();
+    unawaited(_syncAudio(fade: MixRules.muteFade));
   }
 
   // ---------------------------------------------------------------------------
@@ -942,7 +991,12 @@ class RealAppModel extends AppModel implements PlaybackHost {
     }
     _favorites = [
       ..._favorites,
-      Favorite(id: _newId(), scene: _scene.copyWith(timer: Scene.defaultTimer, sleepTracking: false), createdAt: _now()),
+      Favorite(
+        id: _newId(),
+        // The mix only: no timer, no sleep tracking, no mute (listening states).
+        scene: _scene.copyWith(timer: Scene.defaultTimer, sleepTracking: false).withoutMute(),
+        createdAt: _now(),
+      ),
     ];
     await _saveFavorites();
     _emit(const ToastEvent(AppMessages.addedToFavorites));
@@ -958,7 +1012,12 @@ class RealAppModel extends AppModel implements PlaybackHost {
       return;
     }
     _browseTimer?.cancel();
-    _scene = favorite.scene.copyWith(timer: _scene.timer, sleepTracking: _scene.sleepTracking);
+    _scene = favorite.scene.copyWith(
+      timer: _scene.timer,
+      sleepTracking: _scene.sleepTracking,
+      mutedSounds: _scene.mutedSounds,
+      mutedMusic: _scene.mutedMusic,
+    );
     _browsedId = _scene.landscapeId;
     _rememberTheme(_scene.landscapeId);
     _saveScene();
@@ -1242,7 +1301,8 @@ class RealAppModel extends AppModel implements PlaybackHost {
       shared = sceneFromShareUri(uri, _catalog);
     }
     if (shared == null) return;
-    // The recipient keeps their own timer and sleep tracking.
+    // The recipient keeps their own timer and sleep tracking, and hears the shared mix: a
+    // shared scene never carries a mute (contract § 8).
     final scene = shared.copyWith(timer: _scene.timer, sleepTracking: _scene.sleepTracking);
     final locked = _rules.lockedElements(_plan, scene);
     final landscape = _catalog.landscape(scene.landscapeId)!;
@@ -1463,6 +1523,8 @@ class RealAppModel extends AppModel implements PlaybackHost {
   /// Installs scene, schedules and settings (voice result or undo) and brings audio along.
   Future<void> _installSnapshot(AppSnapshot snapshot) async {
     final landscapeChanged = snapshot.scene.landscapeId != _scene.landscapeId;
+    final muteChanged =
+        snapshot.scene.mutedSounds != _scene.mutedSounds || snapshot.scene.mutedMusic != _scene.mutedMusic;
     final timerChanged = snapshot.scene.timer != _scene.timer;
     final schedulesChanged = !listEquals(snapshot.schedules, _schedules);
     final settingsChanged = snapshot.settings != _settings;
@@ -1486,7 +1548,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
     }
     notifyListeners();
     if (timerChanged) _handler.setTimer(_scene.timer);
-    await _syncAudio(crossFade: landscapeChanged);
+    await _syncAudio(crossFade: landscapeChanged, fade: muteChanged ? MixRules.muteFade : null);
   }
 
   @override

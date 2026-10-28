@@ -324,8 +324,11 @@ class PlaybackHandler extends BaseAudioHandler {
     return true;
   }
 
-  /// Applies a mix change while loaded (playing or paused).
-  Future<void> updateLayers(PlayRequest request, {bool crossFade = false}) async {
+  /// Applies a mix change while loaded (playing or paused): cross-fade of [MixRules.crossFade]
+  /// for a new landscape, else [fade] (default [MixRules.levelFade]; [MixRules.muteFade] for a
+  /// mute change). Layers at volume 0 (muted) stay loaded: the session, its timer and the media
+  /// notification go on even when nothing is audible.
+  Future<void> updateLayers(PlayRequest request, {bool crossFade = false, Duration? fade}) async {
     if (_current == null) return;
     _current = PlayRequest(
       landscapeId: request.landscapeId,
@@ -341,7 +344,7 @@ class PlaybackHandler extends BaseAudioHandler {
       await stop();
       return;
     }
-    await _engine.update(request.layers, fade: crossFade ? MixRules.crossFade : MixRules.levelFade);
+    await _engine.update(request.layers, fade: crossFade ? MixRules.crossFade : (fade ?? MixRules.levelFade));
     _publish(_copyStatus(timerEndsAt: _endsAt()));
   }
 

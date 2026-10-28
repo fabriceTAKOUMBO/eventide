@@ -216,8 +216,21 @@ abstract class AppModel extends ChangeNotifier {
   void setMoment(Moment moment);
 
   /// Adds, changes or removes (level 0) a layer. Locked item → OpenPremiumEvent;
-  /// too many audio layers → ToastEvent.
+  /// too many audio layers → ToastEvent. A level above 0 in a muted category unmutes it
+  /// (moving a slider of a muted category makes it heard again).
   void setLayerLevel(LayerKind kind, String id, int level);
+
+  // ---- Mute (`sourdine`): a whole category silenced, every layer and its level kept
+
+  /// Whether [kind] (sounds or music) is muted. The decor has no mute.
+  bool categoryMuted(LayerKind kind) => scene.isMuted(kind);
+  bool get soundsMuted => categoryMuted(LayerKind.son);
+  bool get musicMuted => categoryMuted(LayerKind.musique);
+
+  /// Mutes or unmutes sounds or music (fade of about 1 s), keeping every layer and its level,
+  /// so unmuting restores the exact mix. Saved with the scene. Ignored for the decor.
+  /// Concrete no-op default so that fakes and previews need not implement it.
+  void setCategoryMuted(LayerKind kind, bool muted) {}
 
   // ---- Favorites
   /// Adds or removes the current selection. At the free limit → OpenPremiumEvent.

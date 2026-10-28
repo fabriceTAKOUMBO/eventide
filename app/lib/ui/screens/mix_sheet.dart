@@ -1,5 +1,7 @@
 // Screen 4 · Mon mix: Sons / Musique / Décor, levels by 10 % steps or slider,
 // 0 % removes, « Moment de la journée » in Décor. No microphone here (intended).
+// Sons and Musique have a mute switch (`sourdine`): every element and its level is
+// kept, shown dimmed and still adjustable; touching a level makes the category heard.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -50,6 +52,7 @@ class _MixSheetState extends State<MixSheet> {
     final scene = model.scene;
     final texts = _texts[_kind]!;
     final active = scene.layers(_kind);
+    final muted = model.categoryMuted(_kind);
     final activeIds = {for (final l in active) l.id};
     final available = [
       for (final item in catalog.items(_kind))
@@ -93,6 +96,12 @@ class _MixSheetState extends State<MixSheet> {
                 40 + MediaQuery.paddingOf(context).bottom,
               ),
               children: [
+                if (_kind.isAudio && (active.isNotEmpty || muted))
+                  _MuteSwitch(
+                    kind: _kind,
+                    muted: muted,
+                    onChanged: (m) => model.setCategoryMuted(_kind, m),
+                  ),
                 if (_kind == LayerKind.decor) ...[
                   const SectionLabel(
                     'Moment de la journée',
@@ -138,6 +147,7 @@ class _MixSheetState extends State<MixSheet> {
                     key: ValueKey('${_kind.name}-${layer.id}'),
                     name: catalog.item(_kind, layer.id)?.name ?? layer.id,
                     level: layer.level,
+                    muted: muted,
                     onChanged: (v) => model.setLayerLevel(_kind, layer.id, v),
                   ),
                 if (active.isNotEmpty)
@@ -162,6 +172,91 @@ class _MixSheetState extends State<MixSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Mute switch of Sons / Musique: on = heard, off = « en sourdine » (levels kept). The whole
+/// row toggles (at least 64 px high); with large text the switch goes under the words.
+class _MuteSwitch extends StatelessWidget {
+  const _MuteSwitch({
+    required this.kind,
+    required this.muted,
+    required this.onChanged,
+  });
+
+  final LayerKind kind;
+  final bool muted;
+
+  /// Called with the new mute state.
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = Vitre.of(context);
+    final music = kind == LayerKind.musique;
+    final name = music ? 'Musique' : 'Sons de nature';
+    final object = music ? 'la musique' : 'les sons de nature';
+    final state = muted ? 'en sourdine' : (music ? 'activée' : 'activés');
+    final subtitle = muted
+        ? 'En sourdine, niveaux gardés'
+        : (music ? 'Activée' : 'Activés');
+    final radius = BorderRadius.circular(22);
+    void toggle() => onChanged(!muted);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Semantics(
+        container: true,
+        excludeSemantics: true,
+        toggled: !muted,
+        label: '$name $state',
+        onTap: toggle,
+        onTapHint: muted ? 'remettre $object' : 'couper $object',
+        child: Material(
+          color: p.fill(0.07),
+          borderRadius: radius,
+          child: InkWell(
+            borderRadius: radius,
+            onTap: toggle,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 64),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                child: Builder(
+                  builder: (context) {
+                    final texts = Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(name, style: manrope(18, weight: 700)),
+                        const SizedBox(height: 2),
+                        Text(subtitle, style: manrope(16, color: p.text(0.72))),
+                      ],
+                    );
+                    final control = VitreSwitchVisual(value: !muted);
+                    if (isLargeText(context)) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [texts, const SizedBox(height: 10), control],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: texts),
+                        const SizedBox(width: 12),
+                        control,
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -229,18 +324,21 @@ class _AddRow extends StatelessWidget {
   }
 }
 
-/// One active element: name, percentage, − / slider / +.
+/// One active element: name, percentage, − / slider / +. In a muted category the row is
+/// dimmed but keeps its level and stays adjustable (the model then unmutes the category).
 class _LevelRow extends StatefulWidget {
   const _LevelRow({
     super.key,
     required this.name,
     required this.level,
     required this.onChanged,
+    this.muted = false,
   });
 
   final String name;
   final int level;
   final ValueChanged<int> onChanged;
+  final bool muted;
 
   @override
   State<_LevelRow> createState() => _LevelRowState();
@@ -260,59 +358,66 @@ class _LevelRowState extends State<_LevelRow> {
   Widget build(BuildContext context) {
     final p = Vitre.of(context);
     final lower = widget.name.toLowerCase();
+    // Dimmed, not hidden: high contrast keeps the text clearly readable.
+    final opacity = widget.muted ? (p.highContrast ? 0.8 : 0.5) : 1.0;
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+      child: Opacity(
+        opacity: opacity,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 2),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: Text(widget.name, style: manrope(19, weight: 700)),
+                  ),
+                  Text('$_value %', style: manrope(17, color: p.text(0.78))),
+                ],
+              ),
+            ),
+            const SizedBox(height: 2),
+            Row(
               children: [
-                Expanded(
-                  child: Text(widget.name, style: manrope(19, weight: 700)),
+                RoundIconButton(
+                  icon: VIcons.minus,
+                  iconSize: 22,
+                  label: 'Baisser $lower',
+                  onPressed: () => _step(-10),
                 ),
-                Text('$_value %', style: manrope(17, color: p.text(0.78))),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: LevelSlider(
+                    value: _value,
+                    label: widget.muted
+                        ? '${widget.name}, en sourdine'
+                        : widget.name,
+                    onChanged: (v) {
+                      setState(() => _dragValue = v);
+                      // Live volume while dragging, without removing the element.
+                      widget.onChanged(v < 1 ? 1 : v);
+                    },
+                    onChangeEnd: (v) {
+                      setState(() => _dragValue = null);
+                      widget.onChanged(v);
+                    },
+                    onStep: _step,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                RoundIconButton(
+                  icon: VIcons.plus,
+                  iconSize: 22,
+                  label: 'Augmenter $lower',
+                  onPressed: () => _step(10),
+                ),
               ],
             ),
-          ),
-          const SizedBox(height: 2),
-          Row(
-            children: [
-              RoundIconButton(
-                icon: VIcons.minus,
-                iconSize: 22,
-                label: 'Baisser $lower',
-                onPressed: () => _step(-10),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: LevelSlider(
-                  value: _value,
-                  label: widget.name,
-                  onChanged: (v) {
-                    setState(() => _dragValue = v);
-                    // Live volume while dragging, without removing the element.
-                    widget.onChanged(v < 1 ? 1 : v);
-                  },
-                  onChangeEnd: (v) {
-                    setState(() => _dragValue = null);
-                    widget.onChanged(v);
-                  },
-                  onStep: _step,
-                ),
-              ),
-              const SizedBox(width: 8),
-              RoundIconButton(
-                icon: VIcons.plus,
-                iconSize: 22,
-                label: 'Augmenter $lower',
-                onPressed: () => _step(10),
-              ),
-            ],
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

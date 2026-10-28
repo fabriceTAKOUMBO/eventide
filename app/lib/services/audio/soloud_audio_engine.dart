@@ -4,6 +4,15 @@
 // carries the cap, the ramp-up of scheduled starts, ducking, pause fades and the end-of-timer
 // fade. Files are streamed from disk (LoadMode.disk): a 3-minute loop decoded in memory would
 // weigh ~60 MB per layer, far too much for an 8-hour night on an entry-level phone.
+//
+// Muted layers (volume 0, `sourdine`) are parked: faded out, then paused. A voice at volume 0
+// that keeps running is still decoded and mixed (SoLoud only skips voices beyond its active
+// voice limit, 16, far above our 6 layers): decoding one Opus 48 kHz stereo loop measured
+// ~0.45 % of a desktop core, several times that on an entry-level phone's little core, all
+// night long, for nothing. A parked voice costs nothing and comes back from where it stopped,
+// fading in from silence, so the re-entry stays seamless. When everything is muted, every voice
+// is parked: the engine is silent like a pause (the output stays open), while the session, its
+// timer and the landscape video go on.
 import 'dart:async';
 import 'dart:math';
 
@@ -18,7 +27,18 @@ class _Voice {
   EngineLayer layer;
   final AudioSource source;
   final SoundHandle handle;
+
+  /// Paused at volume 0 (muted): not decoded until its volume rises.
+  bool parked = false;
+
+  /// Parks the voice once its fade to silence is over.
+  Timer? parkTimer;
+
+  /// The voice is still fading in (entry, unmute, resume) until then: the drift leaves it alone.
+  DateTime steadyAt = DateTime.fromMillisecondsSinceEpoch(0);
 }
+
+bool _silent(double volume) => volume <= 0.0005;
 
 class SoLoudAudioEngine implements AudioEngine {
   SoLoudAudioEngine({SoLoud? soloud, Random? random})
@@ -169,16 +189,54 @@ class SoLoudAudioEngine implements AudioEngine {
         _safe(() => _soloud.seek(handle, offset));
       }
       _safe(() => _soloud.setProtectVoice(handle, true));
-      if (!_paused) _safe(() => _soloud.setPause(handle, false));
-      _safe(() => _soloud.fadeVolume(handle, layer.volume, fadeIn));
-      _voices[layer.key] = _Voice(layer, source, handle);
+      final voice = _Voice(layer, source, handle);
+      if (_silent(layer.volume)) {
+        // Muted from the start: loaded, but parked until it is heard.
+        voice.parked = true;
+      } else {
+        final entry = layer.fadeIn ?? fadeIn;
+        if (!_paused) _safe(() => _soloud.setPause(handle, false));
+        _safe(() => _soloud.fadeVolume(handle, layer.volume, entry));
+        voice.steadyAt = DateTime.now().add(entry);
+      }
+      _voices[layer.key] = voice;
     } catch (e) {
       // A missing or broken file never stops the other layers.
       debugPrint('SoLoudAudioEngine: cannot start ${layer.key} ($e)');
     }
   }
 
+  /// Brings a playing voice to [layer]'s volume over [fade]; to silence, it is then parked.
+  void _retarget(_Voice voice, EngineLayer layer, Duration fade) {
+    final changed = (voice.layer.volume - layer.volume).abs() > 0.001;
+    voice.layer = layer;
+    if (!changed) return;
+    if (_silent(layer.volume)) {
+      if (voice.parked) return;
+      _safe(() => _soloud.fadeVolume(voice.handle, 0, fade));
+      voice.parkTimer?.cancel();
+      voice.parkTimer = Timer(fade + const Duration(milliseconds: 50), () {
+        voice.parkTimer = null;
+        if (_voices[layer.key] != voice || !_silent(voice.layer.volume)) return;
+        voice.parked = true;
+        _safe(() => _soloud.setPause(voice.handle, true));
+      });
+      return;
+    }
+    voice.parkTimer?.cancel();
+    voice.parkTimer = null;
+    if (voice.parked) {
+      voice.parked = false;
+      _safe(() => _soloud.setVolume(voice.handle, 0));
+      if (!_paused) _safe(() => _soloud.setPause(voice.handle, false));
+    }
+    _safe(() => _soloud.fadeVolume(voice.handle, layer.volume, fade));
+    voice.steadyAt = DateTime.now().add(fade);
+  }
+
   void _fadeOutVoice(_Voice voice, Duration fade) {
+    voice.parkTimer?.cancel();
+    voice.parkTimer = null;
     _safe(() => _soloud.fadeVolume(voice.handle, 0, fade));
     // The voice is already out of _voices: a layer with the same key may start meanwhile with
     // its own handle; this one only finishes its fade, then stops and releases its source.
@@ -205,10 +263,9 @@ class SoLoudAudioEngine implements AudioEngine {
     for (final layer in layers) {
       final voice = _voices[layer.key];
       if (voice == null) {
-        await _startVoice(layer, fade < MixRules.crossFade ? const Duration(seconds: 1) : fade);
-      } else if ((voice.layer.volume - layer.volume).abs() > 0.001) {
-        voice.layer = layer;
-        _safe(() => _soloud.fadeVolume(voice.handle, layer.volume, fade));
+        await _startVoice(layer, fade < MixRules.crossFade ? MixRules.newLayerFade : fade);
+      } else {
+        _retarget(voice, layer, fade);
       }
     }
   }
@@ -218,7 +275,11 @@ class SoLoudAudioEngine implements AudioEngine {
     _drift?.cancel();
     _drift = Timer.periodic(const Duration(seconds: 25), (_) {
       if (_paused) return;
+      final now = DateTime.now();
       for (final voice in _voices.values) {
+        // Parked, fading out, or still coming in (a 20 s music entry): left alone.
+        if (voice.parked || voice.parkTimer != null || _silent(voice.layer.volume)) continue;
+        if (now.isBefore(voice.steadyAt)) continue;
         final factor = 0.93 + _random.nextDouble() * 0.07;
         _safe(() => _soloud.fadeVolume(voice.handle, voice.layer.volume * factor, const Duration(seconds: 20)));
       }
@@ -242,7 +303,7 @@ class SoLoudAudioEngine implements AudioEngine {
       if (_paused) {
         _paused = false;
         for (final v in _voices.values) {
-          _safe(() => _soloud.setPause(v.handle, false));
+          if (!v.parked) _safe(() => _soloud.setPause(v.handle, false));
         }
       }
       final now = DateTime.now();
@@ -289,7 +350,16 @@ class SoLoudAudioEngine implements AudioEngine {
     return _serial(() async {
       if (_voices.isEmpty || !_paused) return;
       _paused = false;
+      final now = DateTime.now();
       for (final v in _voices.values) {
+        if (v.parked) continue;
+        final back = v.layer.resumeFade;
+        if (back != null && !_silent(v.layer.volume)) {
+          // The music comes back gently (3 s), the sounds with the master fade.
+          _safe(() => _soloud.setVolume(v.handle, 0));
+          _safe(() => _soloud.fadeVolume(v.handle, v.layer.volume, back));
+          v.steadyAt = now.add(back);
+        }
         _safe(() => _soloud.setPause(v.handle, false));
       }
       _applyMaster(MixRules.pauseFade);
@@ -332,6 +402,10 @@ class SoLoudAudioEngine implements AudioEngine {
     final voices = _voices.values.toList();
     _voices.clear();
     _paused = false;
+    for (final v in voices) {
+      v.parkTimer?.cancel();
+      v.parkTimer = null;
+    }
     for (final v in voices) {
       try {
         await _soloud.stop(v.handle);

@@ -49,13 +49,32 @@ class FileAudioSource extends AudioSourceRef {
 }
 
 /// A layer ready to play: [volume] is the final per-layer gain in 0..1.
+///
+/// A layer at volume 0 (its category is muted, `sourdine`) stays loaded but is parked: once
+/// faded out it is paused, so it is no longer decoded; when its volume rises again it resumes
+/// from where it stopped and fades back in (contract § 1).
 class EngineLayer {
-  const EngineLayer({required this.key, required this.source, required this.volume});
+  const EngineLayer({
+    required this.key,
+    required this.source,
+    required this.volume,
+    this.fadeIn,
+    this.resumeFade,
+  });
 
   /// Stable identity of the layer in the mix, e.g. `son:eau-vive`.
   final String key;
   final AudioSourceRef source;
   final double volume;
+
+  /// How long the layer takes to come in when it is not playing yet (start from silence,
+  /// landscape change). Null: the engine's own fade (start fade, cross-fade, or
+  /// [MixRules.newLayerFade] for a level change). Ignored for a layer already playing.
+  final Duration? fadeIn;
+
+  /// After a pause, the layer comes back from silence over this duration instead of following
+  /// the short master fade ([MixRules.pauseFade]). Null: the master fade only.
+  final Duration? resumeFade;
 
   @override
   String toString() => 'EngineLayer($key, ${volume.toStringAsFixed(2)})';
@@ -87,6 +106,27 @@ abstract final class MixRules {
   /// Fade for a slider or button change in « Mon mix ».
   static const Duration levelFade = Duration(milliseconds: 400);
 
+  /// Fade-in of an element added to a playing mix (slider, « Ajouter », assistant).
+  static const Duration newLayerFade = Duration(seconds: 1);
+
+  /// Fade of a whole category muted or unmuted (`sourdine`).
+  static const Duration muteFade = Duration(seconds: 1);
+
+  /// Progressive entry of the melodies when playback starts from silence or the landscape
+  /// changes: the nature sounds come first, the music rises gently.
+  static const Duration musicEntry = Duration(seconds: 20);
+
+  /// The music comes back after a pause over this time (the sounds follow the master fade).
+  static const Duration musicResume = Duration(seconds: 3);
+
+  /// [EngineLayer.fadeIn] of a layer of [kind]: [musicEntry] for music when the mix starts
+  /// from silence or changes landscape ([progressive]); otherwise the engine's own fade.
+  static Duration? entryFade(LayerKind kind, {required bool progressive}) =>
+      progressive && kind == LayerKind.musique ? musicEntry : null;
+
+  /// [EngineLayer.resumeFade] of a layer of [kind].
+  static Duration? resumeFadeOf(LayerKind kind) => kind == LayerKind.musique ? musicResume : null;
+
   /// Fade at the end of the timer, then full stop (dossier, screen 2).
   static const Duration timerFadeOut = Duration(seconds: 30);
 
@@ -109,10 +149,14 @@ abstract class AudioEngine {
   Future<void> start(List<EngineLayer> layers, {Duration fadeIn, Duration rampUp});
 
   /// Brings the playing mix to [layers]: removed layers fade out, new ones fade in from a random
-  /// offset, kept ones fade to their new volume over [fade].
+  /// offset (over their [EngineLayer.fadeIn] when set), kept ones fade to their new volume over
+  /// [fade]. A layer going to volume 0 is parked after its fade (see [EngineLayer]).
   Future<void> update(List<EngineLayer> layers, {Duration fade});
 
   Future<void> pause();
+
+  /// Resumes after [pause]: master fade of [MixRules.pauseFade]; layers with a
+  /// [EngineLayer.resumeFade] (music) come back from silence over it. Parked layers stay parked.
   Future<void> resume();
 
   /// Fades the master volume to silence over [duration], then stops everything.
