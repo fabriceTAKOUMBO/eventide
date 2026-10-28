@@ -17,6 +17,7 @@ import 'package:eventide/ui/screens/standby_screen.dart';
 import 'package:eventide/ui/screens/voice_screen.dart';
 import 'package:eventide/ui/screens/landscapes_sheet.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart' show Opacity;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'app_harness.dart';
@@ -363,6 +364,65 @@ void main() {
       expect(label('Ajouter pluie douce'), findsOneWidget);
       await tearDownApp(tester);
     });
+
+    testWidgets(
+      'mute switches keep every level; muted rows dimmed, a level change unmutes',
+      (tester) async {
+        usePhoneView(tester);
+        final model = FakeAppModel();
+        await pumpApp(tester, model);
+        await openRoute(tester, Routes.mix, (_) => const MixSheet());
+        // Sons tab: the switch is on (heard).
+        expect(label('Sons de nature activés'), findsOneWidget);
+        expect(
+          tester.getSemantics(label('Sons de nature activés')),
+          isSemantics(
+            hasToggledState: true,
+            isToggled: true,
+            hasTapAction: true,
+          ),
+        );
+        expect(
+          tester.getSize(label('Sons de nature activés')).height,
+          greaterThanOrEqualTo(48),
+        );
+        await tapLabel(tester, 'Sons de nature activés');
+        expect(model.calls, contains('setCategoryMuted:son:true'));
+        expect(model.soundsMuted, isTrue);
+        expect(label('Sons de nature en sourdine'), findsOneWidget);
+        expect(find.text('En sourdine, niveaux gardés'), findsOneWidget);
+        // Rows stay, dimmed, with their level.
+        expect(model.scene.levelOf(LayerKind.son, 'eau-vive'), 60);
+        expect(find.text('60 %'), findsOneWidget);
+        expect(
+          find.byWidgetPredicate((w) => w is Opacity && w.opacity == 0.5),
+          findsNWidgets(3),
+        );
+        expect(label(RegExp('Eau vive, en sourdine')), findsOneWidget);
+        // Still adjustable: a step unmutes the category.
+        await tapLabel(tester, 'Augmenter eau vive');
+        expect(model.scene.levelOf(LayerKind.son, 'eau-vive'), 70);
+        expect(model.soundsMuted, isFalse);
+        // (The header may have scrolled off while reaching the row.)
+        expect(find.text('Activés', skipOffstage: false), findsOneWidget);
+
+        // Musique tab: « Musique activée » / « Musique en sourdine ».
+        await tapText(tester, 'Musique');
+        expect(find.text('Piano doux'), findsOneWidget);
+        await tapLabel(tester, 'Musique activée');
+        expect(model.musicMuted, isTrue);
+        expect(label('Musique en sourdine'), findsOneWidget);
+        expect(find.text('20 %'), findsOneWidget);
+        await tapLabel(tester, 'Musique en sourdine');
+        expect(model.musicMuted, isFalse);
+        expect(model.scene.levelOf(LayerKind.musique, 'piano-doux'), 20);
+
+        // The decor has no mute switch.
+        await tapText(tester, 'Décor');
+        expect(label(RegExp('sourdine|activée|activés')), findsNothing);
+        await tearDownApp(tester);
+      },
+    );
 
     testWidgets('slider drag changes the level', (tester) async {
       usePhoneView(tester);

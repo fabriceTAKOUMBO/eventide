@@ -1,7 +1,7 @@
 // Screen 1 · Bienvenue: one sentence, one button. No permission is asked here.
 import 'package:flutter/material.dart';
 
-import '../landscape/landscape_image.dart';
+import '../landscape/landscape_background.dart';
 import '../model_scope.dart';
 import '../theme/vitre.dart';
 import '../widgets/brand.dart';
@@ -40,7 +40,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: LandscapeImage(
+            child: LandscapeBackground(
               landscapeId: landscape.id,
               style: landscape.style,
               kenBurns: true,

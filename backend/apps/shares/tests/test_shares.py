@@ -42,6 +42,21 @@ def test_create_and_read_a_share(api):
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize(
+    "sourdine",
+    [{"sons": True, "musique": True}, {"musique": True}, "oui", None, [1]],
+)
+def test_the_mute_is_accepted_but_never_shared(api, sourdine):
+    """``sourdine`` (contract § 1) is accepted whatever its shape and dropped: the recipient
+    hears the mix."""
+    response = api.post("/v1/shares", {"scene": {**SCENE, "sourdine": sourdine}}, format="json")
+    assert response.status_code == 201
+    scene = api.get(f"/v1/shares/{response.json()['code']}").json()["scene"]
+    assert "sourdine" not in scene
+    assert scene["musique"] == [{"id": "harpe", "niveau": 25}]
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize("code", ["NOPE1234", "short", "bad-code", "x" * 9])
 def test_unknown_share_is_404(api, code):
     response = api.get(f"/v1/shares/{code}")

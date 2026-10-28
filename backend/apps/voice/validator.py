@@ -58,6 +58,8 @@ SETTING_BOOLEANS = ("contraste_renforce", "ecran_noir_minuteur", "wifi_seulement
 REPHRASE_REASONS = ("incompris", "ambigu")
 REFUSAL_REASONS = ("hors_catalogue", "interdit")
 MAX_SELECTOR_ID = 64
+# ``couper`` / ``remettre`` (mute, ``sourdine``): sounds and music only, the decor has no mute.
+MUTE_TARGETS = ("son", "musique")
 
 
 class _Invalid(Exception):
@@ -195,6 +197,11 @@ def _layer_op(op: str, raw: dict, catalog: Catalog, free: bool) -> dict:
     return out
 
 
+def _mute_op(op: str, raw: dict) -> dict:
+    """``couper`` / ``remettre`` a whole category; every other field is dropped."""
+    return {"op": op, "cible": _choice(raw.get("cible"), MUTE_TARGETS)}
+
+
 def _definir(raw: dict, catalog: Catalog, free: bool) -> dict:
     target = raw.get("cible")
     value = raw.get("valeur")
@@ -242,6 +249,8 @@ def _one(raw: Any, catalog: Catalog, free: bool) -> dict:
         raise _Invalid
     if op in ("ajouter", "retirer", "regler", "ajuster"):
         return _layer_op(op, raw, catalog, free)
+    if op in ("couper", "remettre"):
+        return _mute_op(op, raw)
     if op == "definir":
         return _definir(raw, catalog, free)
     if op == "changer":

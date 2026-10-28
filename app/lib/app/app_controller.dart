@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart' show AppLifecycleState;
 
 import '../core/catalog.dart';
+import '../core/landscape_media.dart';
 import '../core/ops.dart';
 import '../core/plan.dart';
 import '../core/scene.dart';
@@ -196,6 +197,9 @@ class RealAppModel extends AppModel implements PlaybackHost {
   final Map<AdPlacement, DateTime> _adLastShown = {};
   final AdPolicy _adPolicy = const AdPolicy();
 
+  /// Landscapes whose poster is downloaded (synchronous lookups by the UI).
+  final Set<String> _posterIds = {};
+
   bool _preparing = false;
   int _audioGeneration = 0;
   final Map<String, AudioSourceRef> _sources = {};
@@ -236,6 +240,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
     } catch (e) {
       debugPrint('RealAppModel: load failed ($e)');
     }
+    await _refreshPosters(notify: false);
     _handler.nightMaxHours = _catalog.limits.nightMaxHours;
     _handler.status.addListener(_onPlaybackStatus);
     _handler.attachHost(this);
@@ -359,7 +364,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
     _setOnline(online);
     if (online && _api.enabled) await _refreshEntitlements();
     if (entitlements.plan.isPremium) {
-      unawaited(_content.prefetchForOffline(_catalog, wifiOnly: _settings.wifiOnly));
+      unawaited(_prefetch(wifiOnly: _settings.wifiOnly));
     }
     if (online) await _maybeShowAd(AdPlacement.open);
   }
@@ -508,7 +513,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
     await _store.write(StoreKeys.voiceTrial, next.voice.toJson());
     await _syncSchedules();
     if (!wasPremium && entitlements.plan.isPremium) {
-      unawaited(_content.prefetchForOffline(_catalog, wifiOnly: _settings.wifiOnly));
+      unawaited(_prefetch(wifiOnly: _settings.wifiOnly));
     }
     notifyListeners();
   }
@@ -1235,6 +1240,56 @@ class RealAppModel extends AppModel implements PlaybackHost {
     await _writeState();
   }
 
+  // ---------------------------------------------------------------------------
+  // Living landscapes (videos and posters). Never tied to the sound: nothing here reads or
+  // changes the playback state, and nothing in the playback path touches the video.
+  // ---------------------------------------------------------------------------
+
+  /// Premium offline: sounds, music and landscape posters in the background.
+  Future<void> _prefetch({required bool wifiOnly}) async {
+    try {
+      await _content.prefetchForOffline(_catalog, wifiOnly: wifiOnly);
+    } catch (e) {
+      debugPrint('RealAppModel: prefetch failed ($e)');
+    }
+    await _refreshPosters();
+  }
+
+  Future<void> _refreshPosters({bool notify = true}) async {
+    final ids = await _content.downloadedLandscapeImages();
+    if (ids.length == _posterIds.length && ids.containsAll(_posterIds)) return;
+    _posterIds
+      ..clear()
+      ..addAll(ids);
+    if (notify) notifyListeners();
+  }
+
+  @override
+  String? landscapePosterFile(String landscapeId) =>
+      _posterIds.contains(landscapeId) ? _content.cachedPath(LandscapeMediaKeys.image(landscapeId)) : null;
+
+  @override
+  Future<LandscapeVideoSource?> landscapeVideo(String landscapeId) async {
+    final landscape = _catalog.landscape(landscapeId);
+    // A locked landscape shows its still picture only: nothing is downloaded for it.
+    if (landscape == null || !_rules.canUseLandscape(_plan, landscape)) return null;
+    // Only Premium content lives on the server; free landscapes are bundled.
+    final download = _plan.isPremium;
+    final wifiOnly = _settings.wifiOnly;
+    try {
+      if (!_posterIds.contains(landscapeId)) {
+        // The poster first (small): the real picture shows while the video downloads.
+        final poster = await _content.landscapeImage(landscapeId, allowDownload: download, wifiOnly: wifiOnly);
+        if (poster != null && _posterIds.add(landscapeId)) notifyListeners();
+      }
+      if (!_rules.canUseLandscape(_plan, landscape)) return null;
+      return await _content.landscapeVideo(landscapeId, allowDownload: download, wifiOnly: wifiOnly);
+    } catch (e) {
+      debugPrint('RealAppModel: landscape video $landscapeId unavailable ($e)');
+      return null;
+    }
+  }
+
   @override
   Future<void> updateSettings(AppSettings settings) async {
     final before = _settings;
@@ -1242,7 +1297,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
     await _saveSettings();
     notifyListeners();
     if (before.wifiOnly && !settings.wifiOnly && _plan.isPremium) {
-      unawaited(_content.prefetchForOffline(_catalog, wifiOnly: false));
+      unawaited(_prefetch(wifiOnly: false));
     }
   }
 
@@ -1775,6 +1830,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
     await _content.clear();
     await _api.forgetInstallation();
     _sources.clear();
+    _posterIds.clear();
     _scene = Scene.fromLandscape(_catalog.defaultLandscape);
     _browsedId = _scene.landscapeId;
     _lastByTheme.clear();

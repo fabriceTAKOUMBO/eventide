@@ -18,6 +18,7 @@ void main() {
   "sons":    [{"id": "eau-vive", "niveau": 60}, {"id": "oiseaux", "niveau": 40}],
   "musique": [{"id": "piano-doux", "niveau": 25}],
   "decor":   [{"id": "brume", "niveau": 30}],
+  "sourdine": {"sons": false, "musique": false},
   "minuteur": {"mode": "duree", "minutes": 60},
   "sommeil": {"suivi": true}
 }''';
@@ -36,8 +37,46 @@ void main() {
       expect(scene.decor, const [Layer(id: 'brume', level: 30)]);
       expect(scene.timer, const TimerDuration(60));
       expect(scene.sleepTracking, isTrue);
+      expect(scene.mutedSounds, isFalse);
+      expect(scene.mutedMusic, isFalse);
       expect(scene.toJson(), json);
       expect(Scene.fromJson(scene.toJson()), scene);
+    });
+
+    test('sourdine: optional when reading, always written, round-trips', () {
+      // A document written before `sourdine` existed stays valid (version 1).
+      final old = jsonDecode(contractJson) as Map<String, dynamic>
+        ..remove('sourdine');
+      final scene = Scene.fromJson(old);
+      expect(scene.mutedSounds, isFalse);
+      expect(scene.mutedMusic, isFalse);
+      expect(scene.version, 1);
+      expect(scene.toJson()['sourdine'], {'sons': false, 'musique': false});
+
+      final muted = Scene.fromJson({
+        ...old,
+        'sourdine': {'musique': true},
+      });
+      expect(muted.mutedMusic, isTrue);
+      expect(muted.mutedSounds, isFalse);
+      expect(muted.music, const [Layer(id: 'piano-doux', level: 25)]);
+      expect(Scene.fromJson(muted.toJson()), muted);
+      expect(muted, isNot(scene));
+
+      // Anything but a JSON boolean true is « not muted ».
+      for (final bad in [
+        'oui',
+        1,
+        [true],
+        {'sons': 'true', 'musique': 1},
+      ]) {
+        final parsed = Scene.fromJson({...old, 'sourdine': bad});
+        expect(
+          parsed.mutedSounds || parsed.mutedMusic,
+          isFalse,
+          reason: '$bad',
+        );
+      }
     });
 
     test('timer modes', () {
@@ -105,28 +144,32 @@ void main() {
       expect(scene.landscapeId, 'cascade-foret');
       expect(scene.moment, Moment.jour);
       expect(scene.sounds.map((l) => l.id), ['eau-vive', 'oiseaux', 'vent']);
+      expect(scene.music, const [Layer(id: 'piano-doux', level: 20)]);
       expect(scene.decor, const [Layer(id: 'brume', level: 30)]);
       expect(scene.timer, const TimerDuration(60));
       expect(scene.sleepTracking, isFalse);
-      expect(scene.audioLayerCount, 3);
+      expect(scene.audioLayerCount, 4);
+      expect(scene.mutedSounds || scene.mutedMusic, isFalse);
     });
 
-    test('options and withLandscape keep moment, timer and tracking', () {
+    test('options and withLandscape keep moment, timer, tracking and mute', () {
       final scene = Scene.fromLandscape(
         catalog.landscape('cafe-nuit')!,
         moment: Moment.nuit,
         timer: const TimerNight(),
       );
       expect(scene.moment, Moment.nuit);
-      expect(scene.music, const [Layer(id: 'piano-doux', level: 30)]);
+      expect(scene.music, const [Layer(id: 'piano-doux', level: 25)]);
       final moved = scene
-          .copyWith(sleepTracking: true)
+          .copyWith(sleepTracking: true, mutedMusic: true)
           .withLandscape(catalog.landscape('lune-lac')!);
       expect(moved.landscapeId, 'lune-lac');
       expect(moved.moment, Moment.nuit);
       expect(moved.timer, const TimerNight());
       expect(moved.sleepTracking, isTrue);
-      expect(moved.music, isEmpty);
+      expect(moved.music, const [Layer(id: 'harpe', level: 15)]);
+      expect(moved.mutedMusic, isTrue, reason: 'the mute is a listening state');
+      expect(moved.mutedSounds, isFalse);
       expect(moved.sounds.map((l) => l.id), ['ruisseau', 'chouette']);
     });
   });
@@ -143,7 +186,7 @@ void main() {
       expect(base.withLevel(LayerKind.son, 'vent', 30), same(base));
       // The original is untouched (undo keeps it).
       expect(base.levelOf(LayerKind.son, 'vent'), 30);
-      expect(base.music, isEmpty);
+      expect(base.music, const [Layer(id: 'piano-doux', level: 20)]);
     });
 
     test('0 or less removes', () {
@@ -191,9 +234,70 @@ void main() {
         'oiseaux',
       ]);
       expect(base.withoutLayer(LayerKind.son, '*').sounds, isEmpty);
-      expect(base.withoutLayer(LayerKind.musique, '*'), same(base));
+      final silent = base.withoutLayer(LayerKind.musique, '*');
+      expect(silent.music, isEmpty);
+      expect(silent.withoutLayer(LayerKind.musique, '*'), same(silent));
       expect(base.withoutLayer(LayerKind.son, 'tonnerre'), same(base));
     });
+  });
+
+  group('sourdine (mute)', () {
+    final base = Scene.fromLandscape(catalog.landscape('cascade-foret')!);
+
+    test(
+      'muting keeps every layer and its level; unmuting restores the mix',
+      () {
+        final muted = base.withMuted(LayerKind.musique, true);
+        expect(muted.mutedMusic, isTrue);
+        expect(muted.isMuted(LayerKind.musique), isTrue);
+        expect(muted.isMuted(LayerKind.son), isFalse);
+        expect(muted.music, base.music);
+        expect(muted.levelOf(LayerKind.musique, 'piano-doux'), 20);
+        expect(muted.effectiveLevelOf(LayerKind.musique, 'piano-doux'), 0);
+        expect(muted.effectiveLevelOf(LayerKind.son, 'eau-vive'), 60);
+        expect(muted.withMuted(LayerKind.musique, false), base);
+        expect(muted.withMuted(LayerKind.musique, true), same(muted));
+        expect(base.withMuted(LayerKind.musique, false), same(base));
+      },
+    );
+
+    test('the decor has no mute', () {
+      expect(base.withMuted(LayerKind.decor, true), same(base));
+      expect(base.isMuted(LayerKind.decor), isFalse);
+      expect(base.effectiveLevel(LayerKind.decor, 30), 30);
+    });
+
+    test('audible layers and a fully muted mix', () {
+      expect(base.audibleLayerCount, 4);
+      expect(base.fullyMuted, isFalse);
+      final noMusic = base.withMuted(LayerKind.musique, true);
+      expect(noMusic.audibleLayerCount, 3);
+      expect(noMusic.fullyMuted, isFalse);
+      final silent = noMusic.withMuted(LayerKind.son, true);
+      expect(silent.audibleLayerCount, 0);
+      expect(silent.fullyMuted, isTrue);
+      expect(silent.withoutMute(), base);
+      expect(base.withoutMute(), same(base));
+      // Sounds muted and no music at all: nothing to hear either.
+      final soundsOnly = base
+          .withoutLayer(LayerKind.musique, '*')
+          .withMuted(LayerKind.son, true);
+      expect(soundsOnly.fullyMuted, isTrue);
+      // An empty mix is not « muted »: there is nothing to play.
+      final empty = Scene(landscapeId: 'cascade-foret', mutedMusic: true);
+      expect(empty.fullyMuted, isFalse);
+    });
+
+    test(
+      'changing levels keeps the mute flags (the caller decides to unmute)',
+      () {
+        final muted = base.withMuted(LayerKind.son, true);
+        final louder = muted.withLevel(LayerKind.son, 'vent', 80);
+        expect(louder.mutedSounds, isTrue);
+        expect(louder.levelOf(LayerKind.son, 'vent'), 80);
+        expect(louder.effectiveLevelOf(LayerKind.son, 'vent'), 0);
+      },
+    );
   });
 
   test('immutable lists and value equality', () {

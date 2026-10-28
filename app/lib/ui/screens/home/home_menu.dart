@@ -529,11 +529,20 @@ class LandscapeThumbnail extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = LandscapeImages.providerFor(landscapeId);
     if (provider != null) {
-      return Image(
-        image: provider,
-        fit: BoxFit.cover,
-        alignment: Alignment(0, landscapeFocusY(style) * 2 - 1),
-        errorBuilder: (c, e, s) => ProceduralLandscape(style: style),
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          // Posters are 720 px wide: decode thumbnails at their displayed size only.
+          final dpr = MediaQuery.maybeDevicePixelRatioOf(context) ?? 2;
+          final width = constraints.hasBoundedWidth
+              ? (constraints.maxWidth * dpr).ceil().clamp(32, 720)
+              : null;
+          return Image(
+            image: ResizeImage.resizeIfNeeded(width, null, provider),
+            fit: BoxFit.cover,
+            alignment: Alignment(0, landscapeFocusY(style) * 2 - 1),
+            errorBuilder: (c, e, s) => ProceduralLandscape(style: style),
+          );
+        },
       );
     }
     return ProceduralLandscape(style: style);

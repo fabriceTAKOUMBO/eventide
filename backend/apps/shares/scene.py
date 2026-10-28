@@ -1,8 +1,9 @@
 """Validation of a scene document (contract § 1) for sharing.
 
 Only the mix is shared (dossier § 6 « Partage »): version, paysage, moment, sons, musique,
-decor. ``minuteur``, ``sommeil`` and any unknown field are dropped; a layer at ``niveau`` 0 is
-dropped (0 removes the element). Premium items are kept: a free recipient sees them locked.
+decor. ``minuteur``, ``sommeil``, ``sourdine`` (mute: never shared, the recipient hears the mix)
+and any unknown field are dropped whatever their shape; a layer at ``niveau`` 0 is dropped (0
+removes the element). Premium items are kept: a free recipient sees them locked.
 """
 
 from __future__ import annotations

@@ -1,5 +1,6 @@
-// Resolves where the audio of a layer comes from: bundled asset, cached file, or download
-// (signed CloudFront URL from POST /content/urls, or the local dev server in debug).
+// Resolves where the audio of a layer, and the video and poster of a landscape, come from:
+// bundled asset, cached file, or download (signed CloudFront URL from POST /content/urls, or the
+// local dev server in debug).
 import 'dart:async';
 import 'dart:io';
 
@@ -7,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../core/catalog.dart';
+import '../core/landscape_media.dart';
 import 'api_client.dart';
 import 'audio/audio_engine.dart';
 import 'connectivity.dart';
@@ -32,6 +34,7 @@ class ContentRepository {
     required this._bundledAssets,
     required this._connectivity,
     String devBaseUrl = '',
+    this._remoteMedia,
   }) : _devBaseUrl = devBaseUrl.endsWith('/') ? devBaseUrl.substring(0, devBaseUrl.length - 1) : devBaseUrl;
 
   final Directory _directory;
@@ -40,8 +43,10 @@ class ContentRepository {
   final Future<Set<String>> Function() _bundledAssets;
   final ConnectivityChecker _connectivity;
   final String _devBaseUrl;
+  final Future<RemoteLandscapeMedia> Function()? _remoteMedia;
 
   Set<String>? _assets;
+  RemoteLandscapeMedia? _remote;
   final Map<String, Future<File>> _downloads = {};
   bool _prefetching = false;
 
@@ -56,6 +61,18 @@ class ContentRepository {
   File _cachedFile(String key) => File('${_directory.path}/$key');
 
   Future<Set<String>> _assetSet() async => _assets ??= await _bundledAssets();
+
+  Future<RemoteLandscapeMedia> _remoteSet() async {
+    final cached = _remote;
+    if (cached != null) return cached;
+    var remote = RemoteLandscapeMedia.none;
+    try {
+      remote = await _remoteMedia?.call() ?? RemoteLandscapeMedia.none;
+    } catch (_) {
+      // No manifest: nothing is asked from the server.
+    }
+    return _remote = remote;
+  }
 
   /// Playable without network (bundled or already downloaded).
   Future<bool> isAvailableOffline(LayerKind kind, String id) async {
@@ -125,7 +142,82 @@ class ContentRepository {
     }
   }
 
-  /// Premium offline: downloads every audio item in the background, one at a time.
+  // ---- Landscape media (looping videos and posters)
+
+  /// Local path of a downloaded file for [key], or null.
+  String cachedPath(String key) => _cachedFile(key).path;
+
+  /// Video of a landscape: bundled (`assets/landscapes/<id>.mp4`), already downloaded, or
+  /// downloaded now when [allowDownload] and the network policy allow it. Null when none can
+  /// be had now; never throws (the still picture is shown instead).
+  Future<LandscapeVideoSource?> landscapeVideo(
+    String id, {
+    required bool allowDownload,
+    required bool wifiOnly,
+  }) async {
+    final asset = LandscapeMediaKeys.bundledVideo(id);
+    if ((await _assetSet()).contains(asset)) return AssetLandscapeVideo(asset);
+    final path = await _landscapeFile(
+      LandscapeMediaKeys.video(id),
+      listed: (await _remoteSet()).videos.contains(id),
+      allowDownload: allowDownload,
+      wifiOnly: wifiOnly,
+    );
+    return path == null ? null : FileLandscapeVideo(path);
+  }
+
+  /// Downloaded poster of a landscape (local path), same rules as [landscapeVideo]. Null for a
+  /// bundled poster (`assets/landscapes/<id>.jpg`, found by the UI itself) or when unavailable.
+  Future<String?> landscapeImage(
+    String id, {
+    required bool allowDownload,
+    required bool wifiOnly,
+  }) async {
+    if ((await _assetSet()).contains(LandscapeMediaKeys.bundledImage(id))) return null;
+    return _landscapeFile(
+      LandscapeMediaKeys.image(id),
+      listed: (await _remoteSet()).images.contains(id),
+      allowDownload: allowDownload,
+      wifiOnly: wifiOnly,
+    );
+  }
+
+  /// Ids of the landscapes whose poster is already downloaded.
+  Future<Set<String>> downloadedLandscapeImages() async {
+    final folder = Directory('${_directory.path}/images/paysages');
+    try {
+      if (!await folder.exists()) return {};
+      return {
+        await for (final entity in folder.list())
+          if (entity is File && entity.path.endsWith('.jpg'))
+            entity.uri.pathSegments.last.replaceFirst(RegExp(r'\.jpg$'), ''),
+      };
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<String?> _landscapeFile(
+    String key, {
+    required bool listed,
+    required bool allowDownload,
+    required bool wifiOnly,
+  }) async {
+    final cached = _cachedFile(key);
+    if (await cached.exists()) return cached.path;
+    // Only keys the server has (remote.json): never a request for a missing video.
+    if (!listed || !allowDownload) return null;
+    // Pictures are decoration: with « Wi-Fi seulement », never on mobile data.
+    if (wifiOnly && !await _connectivity.isUnmetered()) return null;
+    try {
+      return (await _download(key)).path;
+    } on ContentUnavailableException {
+      return null;
+    }
+  }
+
+  /// Premium offline: downloads every audio item in the background, one at a time, then the
+  /// landscape posters (small; videos are fetched when their landscape is shown).
   /// With « Téléchargements en Wi-Fi seulement », runs only on Wi-Fi/Ethernet.
   Future<int> prefetchForOffline(Catalog catalog, {required bool wifiOnly}) async {
     if (_prefetching) return 0;
@@ -143,6 +235,19 @@ class ContentRepository {
           } on ContentUnavailableException catch (e) {
             if (e.offline) return downloaded;
           }
+        }
+      }
+      final assets = await _assetSet();
+      for (final id in (await _remoteSet()).images) {
+        if (assets.contains(LandscapeMediaKeys.bundledImage(id))) continue;
+        final key = LandscapeMediaKeys.image(id);
+        if (await _cachedFile(key).exists()) continue;
+        if (wifiOnly && !await _connectivity.isUnmetered()) return downloaded;
+        try {
+          await _download(key);
+          downloaded++;
+        } on ContentUnavailableException catch (e) {
+          if (e.offline) return downloaded;
         }
       }
     } finally {

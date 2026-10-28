@@ -12,6 +12,7 @@ import '../../../core/catalog.dart';
 import '../../../core/format.dart';
 import '../../../core/scene.dart';
 import '../../landscape/decor_layer.dart';
+import '../../landscape/landscape_background.dart';
 import '../../landscape/landscape_image.dart';
 import '../../model_scope.dart';
 import '../../navigation.dart';
@@ -328,11 +329,13 @@ class _HomeScreenState extends State<HomeScreen>
     required bool current,
   }) {
     final l = _landscape(model, id);
+    // Keyed by landscape: the incoming picture of a swipe keeps its state (and its video
+    // player) when it becomes the current one.
     return Positioned.fill(
       key: ValueKey('picture-$id'),
       child: Transform.translate(
         offset: offset,
-        child: LandscapeImage(
+        child: LandscapeBackground(
           landscapeId: l.id,
           style: l.style,
           moment: model.scene.moment,
@@ -626,8 +629,8 @@ class _HomeScreenState extends State<HomeScreen>
 
   String? _prewarmedFor;
 
-  /// Rasterises the neighbouring landscapes after the frame, so that a swipe never
-  /// waits for the first paint of the incoming picture.
+  /// Rasterises the neighbouring landscapes (or decodes their posters) after the frame, so
+  /// that a swipe never waits for the first paint of the incoming picture.
   void _prewarmNeighbors(AppModel model, String id, double dpr) {
     if (_prewarmedFor == id || _size.isEmpty) return;
     _prewarmedFor = id;
@@ -639,7 +642,12 @@ class _HomeScreenState extends State<HomeScreen>
       if (!mounted) return;
       for (final other in ids) {
         final l = model.catalog.landscape(other);
-        if (l == null || LandscapeImages.providerFor(other) != null) continue;
+        if (l == null) continue;
+        final poster = LandscapeImages.providerFor(other);
+        if (poster != null) {
+          unawaited(precacheImage(poster, context, onError: (_, _) {}));
+          continue;
+        }
         LandscapeRasterCache.obtain(l.style, size, dpr.clamp(1.0, 1.75));
       }
     });

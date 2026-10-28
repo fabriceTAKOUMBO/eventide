@@ -168,6 +168,7 @@ void main() {
       expect(locked, [
         (kind: null, id: 'toits-pluie'),
         (kind: LayerKind.son, id: 'tonnerre'),
+        (kind: LayerKind.musique, id: 'cordes-lentes'),
         (kind: LayerKind.decor, id: 'eclairs'),
       ]);
     });

@@ -69,6 +69,31 @@ void main() {
     },
   );
 
+  test('the mute (sourdine) is never shared: the recipient hears the mix', () {
+    final muted = scene
+        .withMuted(LayerKind.musique, true)
+        .withMuted(LayerKind.son, true);
+    expect(shareableSceneJson(muted).containsKey('sourdine'), isFalse);
+    expect(shareableSceneJson(muted), shareableSceneJson(scene));
+    final decoded = decodeSceneFromLink(encodeSceneForLink(muted), catalog)!;
+    expect(decoded.mutedSounds, isFalse);
+    expect(decoded.mutedMusic, isFalse);
+    expect(decoded.music, scene.music, reason: 'levels kept, all audible');
+    // A payload that carries one anyway (another client) is ignored.
+    final forged = encodeJson({
+      ...shareableSceneJson(scene),
+      'sourdine': {'sons': true, 'musique': true},
+    });
+    expect(decodeSceneFromLink(forged, catalog)!.fullyMuted, isFalse);
+    expect(
+      sceneFromSharedJson({
+        ...shareableSceneJson(scene),
+        'sourdine': {'musique': true},
+      }, catalog)!.mutedMusic,
+      isFalse,
+    );
+  });
+
   test('every landscape default mix round-trips', () {
     for (final l in catalog.landscapes) {
       final s = Scene.fromLandscape(l);

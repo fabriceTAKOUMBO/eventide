@@ -320,7 +320,15 @@ class FakeAppModel extends AppModel {
       );
       return;
     }
-    _scene = next;
+    // Like the real model: a level above 0 in a muted category unmutes it.
+    _scene = level > 0 ? next.withMuted(kind, false) : next;
+    notifyListeners();
+  }
+
+  @override
+  void setCategoryMuted(LayerKind kind, bool muted) {
+    _log('setCategoryMuted:${kind.name}:$muted');
+    _scene = _scene.withMuted(kind, muted);
     notifyListeners();
   }
 
@@ -524,8 +532,7 @@ class FakeAppModel extends AppModel {
   Future<void> restorePurchases() async => _log('restorePurchases');
 
   @override
-  Future<void> openManageSubscription() async =>
-      _log('openManageSubscription');
+  Future<void> openManageSubscription() async => _log('openManageSubscription');
 
   // ---- Platform hooks
 

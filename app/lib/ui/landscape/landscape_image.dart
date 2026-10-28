@@ -1,11 +1,14 @@
 // Landscape picture used everywhere (home, sheets backgrounds, thumbnails).
-// Prefers a real photo when one is available, otherwise the procedural painter.
+// Prefers a real photo when one is available, otherwise the procedural painter. The full-screen
+// landscape (home, welcome, offline) is LandscapeBackground, which adds the looping video.
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/landscape_media.dart';
 import '../../core/scene.dart' show Moment;
 import '../theme/vitre.dart';
 import 'landscape_painter.dart';
@@ -13,34 +16,65 @@ import 'landscape_painter.dart';
 /// Returns a real photo for a landscape id, or null to use the procedural painter.
 typedef LandscapeImageResolver = ImageProvider? Function(String landscapeId);
 
-/// Where real photos come from. The content pipeline can set [resolver] (for example
-/// to a downloaded file); bundled `assets/landscapes/<id>.jpg` files are found by
-/// [discoverAssets].
+/// Where real photos come from: bundled `assets/landscapes/<id>.jpg` files (posters of the
+/// looping videos, found by [discoverAssets]), then [resolver] (set by the app to the posters
+/// downloaded for Premium).
 abstract final class LandscapeImages {
   static LandscapeImageResolver? resolver;
   static final Set<String> _bundled = {};
+  static final Set<String> _bundledVideos = {};
+  static final Set<String> _remoteVideos = {};
   static final ValueNotifier<String?> brandLogo = ValueNotifier<String?>(null);
 
+  /// Bumped when [discoverAssets] has found the bundled media (pictures may change).
+  static final ValueNotifier<int> revision = ValueNotifier<int>(0);
+
   static ImageProvider? providerFor(String landscapeId) {
-    final custom = resolver?.call(landscapeId);
-    if (custom != null) return custom;
     if (_bundled.contains(landscapeId)) {
-      return AssetImage('assets/landscapes/$landscapeId.jpg');
+      return AssetImage(LandscapeMediaKeys.bundledImage(landscapeId));
     }
-    return null;
+    return resolver?.call(landscapeId);
   }
 
-  /// Reads the asset manifest once to find bundled photos and the brand logo.
+  /// A looping video exists for this landscape (bundled, or on the content server). Whether it
+  /// can be played now is the model's answer (AppModel.landscapeVideo); this only decides that
+  /// the still picture stays put (no Ken Burns), so that the video replaces it without a jump.
+  static bool hasVideo(String landscapeId) =>
+      _bundledVideos.contains(landscapeId) ||
+      _remoteVideos.contains(landscapeId);
+
+  @visibleForTesting
+  static void debugSetVideos({Set<String> bundled = const {}, Set<String> remote = const {}}) {
+    _bundledVideos
+      ..clear()
+      ..addAll(bundled);
+    _remoteVideos
+      ..clear()
+      ..addAll(remote);
+    revision.value++;
+  }
+
+  /// Reads the asset manifest once to find bundled photos, videos and the brand logo.
   static Future<void> discoverAssets([AssetBundle? bundle]) async {
     try {
-      final manifest = await AssetManifest.loadFromAssetBundle(
-        bundle ?? rootBundle,
-      );
+      final assetBundle = bundle ?? rootBundle;
+      final manifest = await AssetManifest.loadFromAssetBundle(assetBundle);
       final assets = manifest.listAssets();
       for (final a in assets) {
-        final m = RegExp(r'^assets/landscapes/([a-z0-9-]+)\.jpg$')
+        final m = RegExp(r'^assets/landscapes/([a-z0-9-]+)\.(jpg|mp4)$')
             .firstMatch(a);
-        if (m != null) _bundled.add(m.group(1)!);
+        if (m == null) continue;
+        (m.group(2) == 'jpg' ? _bundled : _bundledVideos).add(m.group(1)!);
+      }
+      if (assets.contains(LandscapeMediaKeys.remoteManifest)) {
+        try {
+          final remote = RemoteLandscapeMedia.fromJson(
+            jsonDecode(
+              await assetBundle.loadString(LandscapeMediaKeys.remoteManifest),
+            ),
+          );
+          _remoteVideos.addAll(remote.videos);
+        } catch (_) {}
       }
       for (final candidate in const [
         'assets/brand/logo.png',
@@ -54,6 +88,7 @@ abstract final class LandscapeImages {
     } catch (_) {
       // No manifest (tests, previews): procedural pictures only.
     }
+    revision.value++;
   }
 }
 

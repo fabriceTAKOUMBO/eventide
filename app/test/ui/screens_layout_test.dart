@@ -1,6 +1,7 @@
 // Every screen lays out at 390 × 844 without overflow or exception, at text scale
 // 1.0 and 2.0 (and with the in-app « Très grande » size and high contrast).
 import 'package:eventide/app/app_model.dart';
+import 'package:eventide/core/catalog.dart';
 import 'package:eventide/core/ops.dart' show ChangeLine;
 import 'package:eventide/core/plan.dart';
 import 'package:eventide/core/settings.dart';
@@ -201,6 +202,38 @@ void main() {
         await tearDownApp(tester);
       });
     });
+  }
+
+  for (final scale in const [1.0, 2.0]) {
+    for (final contrast in const [false, true]) {
+      testWidgets('Mon mix with everything muted, text scale $scale, '
+          'high contrast $contrast', (tester) async {
+        usePhoneView(tester, textScale: scale);
+        final model = FakeAppModel();
+        await model.updateSettings(
+          AppSettings(onboarded: true, highContrast: contrast),
+        );
+        model.setCategoryMuted(LayerKind.son, true);
+        model.setCategoryMuted(LayerKind.musique, true);
+        await pumpApp(tester, model);
+        await openRoute(tester, Routes.mix, (_) => const MixSheet());
+        expect(tester.takeException(), isNull);
+        expect(
+          find.bySemanticsLabel('Sons de nature en sourdine'),
+          findsOneWidget,
+        );
+        final opacity = contrast ? 0.8 : 0.5;
+        expect(
+          find.byWidgetPredicate((w) => w is Opacity && w.opacity == opacity),
+          findsWidgets,
+        );
+        await tester.tap(find.text('Musique'));
+        await settle(tester);
+        expect(tester.takeException(), isNull);
+        expect(find.bySemanticsLabel('Musique en sourdine'), findsOneWidget);
+        await tearDownApp(tester);
+      });
+    }
   }
 
   testWidgets('largest in-app text size and high contrast at text scale 1.3', (

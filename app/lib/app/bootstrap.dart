@@ -13,6 +13,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../core/catalog.dart';
+import '../core/landscape_media.dart';
 import '../services/account_service.dart';
 import '../services/ads_service.dart';
 import '../services/api_client.dart';
@@ -64,9 +65,21 @@ Future<Catalog> loadCatalog() async =>
 Future<Set<String>> _bundledAssets() async {
   try {
     final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
-    return manifest.listAssets().where((k) => k.startsWith('assets/audio/')).toSet();
+    return manifest
+        .listAssets()
+        .where((k) => k.startsWith('assets/audio/') || k.startsWith('assets/landscapes/'))
+        .toSet();
   } catch (_) {
     return const {};
+  }
+}
+
+/// Which Premium landscapes have a video or a poster on the content server (generated file).
+Future<RemoteLandscapeMedia> _remoteLandscapeMedia() async {
+  try {
+    return RemoteLandscapeMedia.fromJson(jsonDecode(await rootBundle.loadString(LandscapeMediaKeys.remoteManifest)));
+  } catch (_) {
+    return RemoteLandscapeMedia.none;
   }
 }
 
@@ -113,6 +126,7 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
     bundledAssets: _bundledAssets,
     connectivity: connectivity,
     devBaseUrl: Env.devContentBaseUrl,
+    remoteMedia: _remoteLandscapeMedia,
   );
   late final RealAppModel model;
   final Billing billing = demo

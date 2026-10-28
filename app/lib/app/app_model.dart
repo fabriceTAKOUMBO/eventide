@@ -4,6 +4,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../core/catalog.dart';
+import '../core/landscape_media.dart';
 import '../core/plan.dart';
 import '../core/scene.dart';
 import '../core/schedule.dart';
@@ -331,4 +332,17 @@ abstract class AppModel extends ChangeNotifier {
 
   /// Demo build (« Eventide Démo »): Premium is forced on the phone, nothing can be bought.
   bool get demoMode => false;
+
+  // ---- Living landscapes (looping videos and their posters, docs/app/architecture.md § 14)
+
+  /// Looping video of a landscape when one can be shown now: bundled (free landscapes, and
+  /// every landscape of the demo build) or downloaded once and kept (Premium,
+  /// `videos/paysages/<id>.mp4`, « Wi-Fi seulement » respected). Null: the still picture stays.
+  /// Never downloads anything for a landscape the plan cannot use. Independent of the sound:
+  /// playing or pausing the sound never changes the video.
+  Future<LandscapeVideoSource?> landscapeVideo(String landscapeId) async => null;
+
+  /// Downloaded poster of a Premium landscape (local file path), or null. Bundled posters
+  /// (`assets/landscapes/<id>.jpg`) are found by the UI from the asset manifest.
+  String? landscapePosterFile(String landscapeId) => null;
 }

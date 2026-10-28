@@ -13,7 +13,7 @@ from typing import Any
 
 from apps.core.catalog import get_catalog
 
-PROMPT_VERSION = "v1"
+PROMPT_VERSION = "v2"
 
 MODEL_OPS = [
     "definir",
@@ -22,6 +22,8 @@ MODEL_OPS = [
     "retirer",
     "regler",
     "ajuster",
+    "couper",
+    "remettre",
     "lecture",
     "creer",
     "modifier",
@@ -124,6 +126,11 @@ changer paysage (valeur_texte = suivant | precedent)
 - definir moment (valeur_texte = aube | jour | soir | nuit)
 - ajouter son|musique|decor (id, niveau 0-100 facultatif) ; retirer (id, ou "*" pour tous)
 - regler (id, niveau 0-100) ; ajuster (id, delta de -100 à 100 : « baisse » = -20, « monte » = +20)
+- couper son|musique : met toute la catégorie en sourdine en GARDANT ses éléments et leurs \
+niveaux (« coupe la musique », « arrête la musique », « mets la musique en sourdine », « coupe \
+les sons de la nature ») ; remettre son|musique : enlève la sourdine (« remets la musique ») ; \
+retirer musique "*" seulement pour « enlève / retire / supprime (toute) la musique » ; \
+« coupe le son », « coupe tout » = lecture pause ; le décor n'a pas de sourdine
 - definir minuteur (minuteur = {mode: duree, minutes 1-600} | {mode: nuit} | {mode: aucun})
 - lecture (valeur_texte = pause | reprise)
 - creer programmation (programmation = heure "HH:MM", jours 1=lundi..7=dimanche, \
@@ -173,6 +180,12 @@ def _layer_summary(items: Any) -> list[dict]:
     return out[:12]
 
 
+def _mute_summary(value: Any) -> dict:
+    """``sourdine`` of the scene (contract § 1): two booleans, false when absent or invalid."""
+    value = value if isinstance(value, dict) else {}
+    return {key: value.get(key) is True for key in ("sons", "musique")}
+
+
 def state_summary(state: dict) -> dict:
     """The part of the app state the model needs (ids and levels only)."""
     scene = state.get("scene") if isinstance(state.get("scene"), dict) else {}
@@ -188,6 +201,7 @@ def state_summary(state: dict) -> dict:
         "sons": _layer_summary(scene.get("sons")),
         "musique": _layer_summary(scene.get("musique")),
         "decor": _layer_summary(scene.get("decor")),
+        "sourdine": _mute_summary(scene.get("sourdine")),
         "minuteur": scene.get("minuteur"),
         "lecture": state.get("lecture"),
         "programmations": schedules[:20],

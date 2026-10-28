@@ -1,5 +1,6 @@
 // Entry widget of the UI. `main.dart` calls `runApp(EventideApp(model: controller))`.
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -41,6 +42,7 @@ class _EventideAppState extends State<EventideApp> {
     _settings = widget.model.settings;
     widget.model.addListener(_onModelChanged);
     _listen();
+    _usePosters();
     LandscapeImages.discoverAssets();
     SystemChrome.setSystemUIOverlayStyle(
       const SystemUiOverlayStyle(
@@ -61,7 +63,17 @@ class _EventideAppState extends State<EventideApp> {
       _settings = widget.model.settings;
       _events?.cancel();
       _listen();
+      _usePosters();
     }
+  }
+
+  /// Posters downloaded for Premium (bundled ones are found from the asset manifest).
+  void _usePosters() {
+    final model = widget.model;
+    LandscapeImages.resolver = (id) {
+      final path = model.landscapePosterFile(id);
+      return path == null ? null : FileImage(File(path));
+    };
   }
 
   /// Only the settings (text size, contrast) change the app shell.

@@ -80,6 +80,10 @@ flutter:
     - assets/catalog.json
     - assets/audio/sons/
     - assets/audio/musiques/
+    # Living landscapes: <id>.mp4 (seamless loop) and <id>.jpg (its frame 0) for the free
+    # landscapes, remote.json (what the content server has). The demo build copies the Premium
+    # and test videos here before building (CI), never the production build.
+    - assets/landscapes/
     # Only what the UI loads (LandscapeImages.discoverAssets): the store icons
     # (logo_1024.png, SVG sources, wordmark) stay out of the APK.
     - assets/brand/logo_512.png

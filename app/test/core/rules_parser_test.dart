@@ -73,7 +73,11 @@ void main() {
         'Ajoute du piano doux': [
           layer('ajouter', 'musique', 'piano-doux', 'niveau', 50),
         ],
-        'Coupe la musique': [layer('retirer', 'musique', '*')],
+        // Owner decision (28 Oct. 2026): « coupe » mutes, the settings are kept.
+        'Coupe la musique': [
+          {'op': 'couper', 'cible': 'musique'},
+        ],
+        'Enlève la musique': [layer('retirer', 'musique', '*')],
         'Ajoute de la brume': [
           layer('ajouter', 'decor', 'brume', 'niveau', 50),
         ],
@@ -243,11 +247,83 @@ void main() {
         ],
         'enlève le bruit de la pluie': [layer('retirer', 'son', 'pluie-douce')],
         'retire les étoiles': [layer('retirer', 'decor', 'etoiles')],
-        'coupe tous les sons': [layer('retirer', 'son', '*')],
+        'coupe tous les sons': [
+          {'op': 'couper', 'cible': 'son'},
+        ],
+        'enlève tous les sons': [layer('retirer', 'son', '*')],
+        'retire toute la musique': [layer('retirer', 'musique', '*')],
         'enlève le décor': [layer('retirer', 'decor', '*')],
         'arrête le tonnerre': [layer('retirer', 'son', 'tonnerre')],
       });
     });
+
+    test('mute and unmute a whole category (sourdine)', () {
+      Map<String, dynamic> mute(String op, String cible) => {
+        'op': op,
+        'cible': cible,
+      };
+      expectParsed({
+        'coupe la musique': [mute('couper', 'musique')],
+        'arrête la musique': [mute('couper', 'musique')],
+        'éteins les mélodies': [mute('couper', 'musique')],
+        'mets la musique en sourdine': [mute('couper', 'musique')],
+        'mets en sourdine la musique': [mute('couper', 'musique')],
+        'la musique en sourdine s’il te plaît': [mute('couper', 'musique')],
+        'coupe les sons de la nature': [mute('couper', 'son')],
+        'coupe les bruits de la nature': [mute('couper', 'son')],
+        'mets les sons en sourdine': [mute('couper', 'son')],
+        'remets la musique': [mute('remettre', 'musique')],
+        'rallume la musique': [mute('remettre', 'musique')],
+        'remets les bruits de la nature': [mute('remettre', 'son')],
+        'remets les sons de la nature': [mute('remettre', 'son')],
+        'enlève la sourdine de la musique': [mute('remettre', 'musique')],
+        'coupe la sourdine des sons': [mute('remettre', 'son')],
+        // Unchanged: one element is removed, the decor has no mute, « le son »
+        // is the playback.
+        'coupe la pluie': [layer('retirer', 'son', 'pluie-douce')],
+        'coupe le décor': [layer('retirer', 'decor', '*')],
+        'coupe le son': [
+          {'op': 'lecture', 'valeur': 'pause'},
+        ],
+        'remets le son': [
+          {'op': 'lecture', 'valeur': 'reprise'},
+        ],
+        'coupe la musique et les sons': [
+          mute('couper', 'musique'),
+          mute('couper', 'son'),
+        ],
+      });
+    });
+
+    test(
+      '« enlève la sourdine » unmutes what is muted; nothing to unmute → model',
+      () {
+        final musicMuted = AppSnapshot(
+          scene: snapshot.scene.withMuted(LayerKind.musique, true),
+        );
+        final bothMuted = AppSnapshot(
+          scene: snapshot.scene
+              .withMuted(LayerKind.musique, true)
+              .withMuted(LayerKind.son, true),
+        );
+        expect(parse('enlève la sourdine', musicMuted), [
+          {'op': 'remettre', 'cible': 'musique'},
+        ]);
+        expect(parse('retire la sourdine', bothMuted), [
+          {'op': 'remettre', 'cible': 'son'},
+          {'op': 'remettre', 'cible': 'musique'},
+        ]);
+        expect(parse('enlève la sourdine'), isNull);
+        // « Remets la musique » with no music in the mix: the model decides.
+        final noMusic = AppSnapshot(
+          scene: snapshot.scene.withoutLayer(LayerKind.musique, '*'),
+        );
+        expect(parse('remets la musique', noMusic), isNull);
+        // A muted category with a single element named: still that element.
+        expect(parse('mets la pluie en sourdine'), isNull);
+        expect(parse('mets le décor en sourdine'), isNull);
+      },
+    );
 
     test('several commands', () {
       expectParsed({

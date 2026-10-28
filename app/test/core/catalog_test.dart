@@ -41,7 +41,10 @@ void main() {
       Layer(id: 'oiseaux', level: 40),
       Layer(id: 'vent', level: 30),
     ]);
-    expect(cascade.defaultMix[LayerKind.musique], isEmpty);
+    // Every landscape starts with a soft melody (owner decision, 28 Oct. 2026).
+    expect(cascade.defaultMix[LayerKind.musique], const [
+      Layer(id: 'piano-doux', level: 20),
+    ]);
     expect(cascade.defaultMix[LayerKind.decor], const [
       Layer(id: 'brume', level: 30),
     ]);
@@ -106,6 +109,26 @@ void main() {
       }
     }
   });
+
+  test(
+    'every landscape starts with one soft melody; free ones use free music',
+    () {
+      for (final l in catalog.landscapes) {
+        final music = l.defaultMix[LayerKind.musique]!;
+        expect(music, hasLength(1), reason: l.id);
+        final melody = music.single;
+        expect(melody.level, inInclusiveRange(10, 30), reason: l.id);
+        final item = catalog.item(LayerKind.musique, melody.id)!;
+        if (l.free) expect(item.free, isTrue, reason: '${l.id}/${melody.id}');
+        final audio = l.defaultMix[LayerKind.son]!.length + music.length;
+        expect(
+          audio,
+          lessThanOrEqualTo(catalog.limits.layersMax),
+          reason: l.id,
+        );
+      }
+    },
+  );
 
   test('LayerKind mapping', () {
     expect(LayerKind.son.cible, 'son');

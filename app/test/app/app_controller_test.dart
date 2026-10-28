@@ -139,8 +139,10 @@ void main() {
       expect(model.browsedLandscapeLocked, isFalse);
       await model.play();
       expect(model.playing, isTrue);
-      expect(h.engine.activeKeys, {'son:eau-vive', 'son:oiseaux', 'son:vent'});
+      expect(h.engine.activeKeys, {'son:eau-vive', 'son:oiseaux', 'son:vent', 'musique:piano-doux'});
       expect(h.engine.volumeOf('son:eau-vive'), closeTo(0.6, 1e-9));
+      // The default melody (20 %) sits under the sounds (music gain 0.8).
+      expect(h.engine.volumeOf('musique:piano-doux'), closeTo(0.16, 1e-9));
       expect(model.timerEndsAt, h.now.add(const Duration(hours: 1)));
       await model.togglePlay();
       expect(model.playing, isFalse);
@@ -197,7 +199,7 @@ void main() {
       expect(model.scene.landscapeId, 'cascade-foret');
       await settle(150);
       expect(model.scene.landscapeId, 'sous-bois');
-      expect(h.engine.activeKeys, {'son:vent', 'son:oiseaux'});
+      expect(h.engine.activeKeys, {'son:vent', 'son:oiseaux', 'musique:nappes-apaisantes'});
       expect(h.engine.lastFade, MixRules.crossFade);
       expect(model.lastLandscapeOfTheme('nature'), 'sous-bois');
 
@@ -250,6 +252,210 @@ void main() {
       model.setLayerLevel(LayerKind.decor, 'lucioles', 50);
       await settle();
       expect(h.engine.activeKeys.any((k) => k.startsWith('decor:')), isFalse);
+    });
+  });
+
+  group('sourdine (mute) and the progressive melody', () {
+    test('muting music fades it to 0 over 1 s, keeps its level, unmuting restores it', () async {
+      final model = await h.start();
+      await model.play();
+      expect(h.engine.volumeOf('musique:piano-doux'), closeTo(0.16, 1e-9));
+      model.setCategoryMuted(LayerKind.musique, true);
+      expect(model.musicMuted, isTrue);
+      expect(model.categoryMuted(LayerKind.musique), isTrue);
+      expect(model.soundsMuted, isFalse);
+      await settle();
+      // Still loaded (parked by the engine), silent; the sounds go on.
+      expect(h.engine.activeKeys, contains('musique:piano-doux'));
+      expect(h.engine.parkedKeys, {'musique:piano-doux'});
+      expect(h.engine.lastFade, MixRules.muteFade);
+      expect(h.engine.volumeOf('son:eau-vive'), closeTo(0.6, 1e-9));
+      expect(model.scene.levelOf(LayerKind.musique, 'piano-doux'), 20);
+      expect(model.playing, isTrue);
+
+      model.setCategoryMuted(LayerKind.musique, false);
+      await settle();
+      expect(h.engine.volumeOf('musique:piano-doux'), closeTo(0.16, 1e-9));
+      expect(h.engine.parkedKeys, isEmpty);
+      expect(h.engine.lastFade, MixRules.muteFade);
+      // Unmuting is not a new entry: no 20 s fade.
+      expect(h.engine.calls.where((c) => c == 'start'), hasLength(1));
+    });
+
+    test('everything muted: silent but still playing (timer, video); a fresh start unmutes', () async {
+      final model = await h.start();
+      await model.play();
+      final endsAt = model.timerEndsAt;
+      model.setCategoryMuted(LayerKind.son, true);
+      model.setCategoryMuted(LayerKind.musique, true);
+      await settle();
+      expect(model.scene.fullyMuted, isTrue);
+      expect(h.engine.parkedKeys, h.engine.activeKeys);
+      expect(model.playing, isTrue, reason: 'muting is not pausing');
+      expect(model.timerEndsAt, endsAt, reason: 'the timer keeps running');
+      // A pause and a resume keep the mute.
+      await model.pause();
+      await model.play();
+      expect(model.playing, isTrue);
+      expect(model.scene.fullyMuted, isTrue);
+      // Stop, then Play from silence: a start is never silent.
+      await h.handler.stop();
+      await model.play();
+      expect(model.playing, isTrue);
+      expect(model.soundsMuted || model.musicMuted, isFalse);
+      expect(h.engine.parkedKeys, isEmpty);
+      expect(h.engine.volumeOf('son:eau-vive'), closeTo(0.6, 1e-9));
+    });
+
+    test('a muted category with the other one audible still starts muted', () async {
+      final model = await h.start();
+      model.setCategoryMuted(LayerKind.musique, true);
+      await model.play();
+      expect(model.musicMuted, isTrue);
+      expect(h.engine.activeKeys, contains('musique:piano-doux'));
+      expect(h.engine.parkedKeys, {'musique:piano-doux'});
+    });
+
+    test('moving a level of a muted category unmutes it (1 s fade); removing does not', () async {
+      final model = await h.start();
+      await model.play();
+      model.setCategoryMuted(LayerKind.musique, true);
+      await settle();
+      model.setLayerLevel(LayerKind.musique, 'piano-doux', 0);
+      expect(model.musicMuted, isTrue);
+      model.setLayerLevel(LayerKind.musique, 'piano-doux', 30);
+      expect(model.musicMuted, isFalse);
+      await settle();
+      expect(h.engine.lastFade, MixRules.muteFade);
+      expect(h.engine.volumeOf('musique:piano-doux'), closeTo(0.24, 1e-9));
+      // Same level as stored, but muted: touching it still unmutes.
+      model.setCategoryMuted(LayerKind.son, true);
+      model.setLayerLevel(LayerKind.son, 'vent', 30);
+      expect(model.soundsMuted, isFalse);
+      // The decor has no mute.
+      model.setCategoryMuted(LayerKind.decor, true);
+      expect(model.categoryMuted(LayerKind.decor), isFalse);
+    });
+
+    test('the mute is saved with the scene and survives a restart', () async {
+      final model = await h.start();
+      model.setCategoryMuted(LayerKind.musique, true);
+      await settle(500);
+      final saved = jsonDecode(h.store.files[StoreKeys.scene]!) as Map<String, dynamic>;
+      expect((saved['data'] as Map)['sourdine'], {'sons': false, 'musique': true});
+      model.dispose();
+      final store = h.store;
+      h = Harness()..store = store;
+      final again = await h.start();
+      expect(again.musicMuted, isTrue);
+      expect(again.scene.levelOf(LayerKind.musique, 'piano-doux'), 20);
+    });
+
+    test('the mute stays across a landscape change; favorites and shares never carry it', () async {
+      final model = await h.start();
+      model.setCategoryMuted(LayerKind.musique, true);
+      model.selectLandscape('sous-bois');
+      expect(model.scene.music, const [Layer(id: 'nappes-apaisantes', level: 20)]);
+      expect(model.musicMuted, isTrue);
+      await model.toggleFavorite();
+      expect(model.favorites.single.scene.mutedMusic, isFalse);
+      // Applying a favorite keeps the current listening state.
+      model.setCategoryMuted(LayerKind.musique, false);
+      model.setCategoryMuted(LayerKind.son, true);
+      model.applyFavorite(model.favorites.single);
+      expect(model.soundsMuted, isTrue);
+      expect(model.musicMuted, isFalse);
+      // A share link carries no mute, and opening one gives the audible mix.
+      final link = await model.createShareLink();
+      expect(utf8.decode(base64Url.decode(base64Url.normalize(link.fragment))), isNot(contains('sourdine')));
+      h.links.open(link);
+      await settle();
+      expect(model.soundsMuted || model.musicMuted, isFalse);
+    });
+
+    test('voice: « coupe la musique » mutes, « Annuler » restores; « remets la musique » unmutes', () async {
+      final model = await h.start();
+      await model.play();
+      await model.startVoice();
+      h.speech.finalResult('coupe la musique');
+      await settle();
+      final result = model.voiceState as VoiceResult;
+      expect(result.changes.single.label, 'Musique');
+      expect(result.changes.single.value, 'En sourdine');
+      expect(model.musicMuted, isTrue);
+      expect(model.scene.levelOf(LayerKind.musique, 'piano-doux'), 20);
+      expect(h.engine.parkedKeys, {'musique:piano-doux'});
+      expect(h.engine.lastFade, MixRules.muteFade);
+      await model.undoVoice();
+      expect(model.musicMuted, isFalse);
+      await settle();
+      expect(h.engine.parkedKeys, isEmpty);
+
+      model.setCategoryMuted(LayerKind.musique, true);
+      await model.startVoice();
+      h.speech.finalResult('remets la musique');
+      await settle();
+      expect(model.musicMuted, isFalse);
+      expect((model.voiceState as VoiceResult).changes.single.value, 'Rétablie');
+      model.keepVoice();
+      // « Enlève la musique » still removes.
+      await model.startVoice();
+      h.speech.finalResult('enlève la musique');
+      await settle();
+      expect(model.scene.music, isEmpty);
+    });
+
+    test('the melody comes in over 20 s at a start and a landscape change, the sounds faster', () async {
+      final model = await h.start();
+      await model.play();
+      expect(h.engine.entryFades['musique:piano-doux'], MixRules.musicEntry);
+      expect(h.engine.entryFades['son:eau-vive'], const Duration(seconds: 2));
+      // Every music layer comes back over 3 s after a pause; the sounds follow the master.
+      final music = h.engine.layers.firstWhere((l) => l.key == 'musique:piano-doux');
+      final sound = h.engine.layers.firstWhere((l) => l.key == 'son:eau-vive');
+      expect(music.resumeFade, MixRules.musicResume);
+      expect(sound.resumeFade, isNull);
+
+      model.selectLandscape('sous-bois');
+      await settle();
+      expect(h.engine.entryFades['musique:nappes-apaisantes'], MixRules.musicEntry);
+      expect(h.engine.lastFade, MixRules.crossFade);
+      // « vent » and « oiseaux » were already playing: they only glide.
+      expect(h.engine.entryFades['son:vent'], const Duration(seconds: 2));
+
+      // A melody added by hand comes in at once (1 s), not over 20 s.
+      model.setLayerLevel(LayerKind.musique, 'piano-doux', 30);
+      await settle();
+      expect(h.engine.entryFades['musique:piano-doux'], MixRules.newLayerFade);
+    });
+
+    test('a scheduled start ramps up the master and brings the melody in over 20 s, never silent', () async {
+      final model = await h.start();
+      model.setCategoryMuted(LayerKind.son, true);
+      model.setCategoryMuted(LayerKind.musique, true);
+      final schedule = model.newScheduleDraft().copyWith(landscapeId: 'sous-bois', rampMinutes: 15);
+      await model.saveSchedule(schedule);
+      h.native.pendingStart = schedule.id;
+      await h.handler.click();
+      await settle();
+      expect(model.playing, isTrue);
+      expect(h.engine.lastRampUp, const Duration(minutes: 15));
+      expect(h.engine.entryFades['musique:nappes-apaisantes'], MixRules.musicEntry);
+      expect(model.soundsMuted || model.musicMuted, isFalse);
+      expect(h.engine.parkedKeys, isEmpty);
+    });
+
+    test('a scheduled start keeps a partial mute (music off at night stays off)', () async {
+      final model = await h.start();
+      model.setCategoryMuted(LayerKind.musique, true);
+      final schedule = model.newScheduleDraft().copyWith(landscapeId: 'sous-bois');
+      await model.saveSchedule(schedule);
+      h.native.pendingStart = schedule.id;
+      await h.handler.click();
+      await settle();
+      expect(model.playing, isTrue);
+      expect(model.musicMuted, isTrue);
+      expect(h.engine.parkedKeys, {'musique:nappes-apaisantes'});
     });
   });
 

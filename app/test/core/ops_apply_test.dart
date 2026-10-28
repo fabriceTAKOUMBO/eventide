@@ -156,6 +156,146 @@ void main() {
     });
   });
 
+  group('sourdine (mute)', () {
+    test('couper keeps every layer and its level; remettre brings it back', () {
+      final before = snapshot();
+      final muted = apply(before, [
+        {'op': 'couper', 'cible': 'musique'},
+      ]);
+      final scene = muted.snapshot.scene;
+      expect(scene.mutedMusic, isTrue);
+      expect(scene.music, before.scene.music);
+      expect(scene.levelOf(LayerKind.musique, 'piano-doux'), 20);
+      expect(muted.changes, const [ChangeLine('Musique', 'En sourdine')]);
+      expect(muted.effects, isEmpty);
+      // The before snapshot is untouched (undo).
+      expect(before.scene.mutedMusic, isFalse);
+
+      final back = apply(muted.snapshot, [
+        {'op': 'remettre', 'cible': 'musique'},
+      ]);
+      expect(back.snapshot.scene, before.scene);
+      expect(back.changes, const [ChangeLine('Musique', 'Rétablie')]);
+    });
+
+    test('sounds: « Sons » — « En sourdine » / « Rétablis »', () {
+      final r = apply(snapshot(), [
+        {'op': 'couper', 'cible': 'son'},
+      ]);
+      expect(r.snapshot.scene.mutedSounds, isTrue);
+      expect(r.snapshot.scene.mutedMusic, isFalse);
+      expect(r.changes, const [ChangeLine('Sons', 'En sourdine')]);
+      final back = apply(r.snapshot, [
+        {'op': 'remettre', 'cible': 'son'},
+      ]);
+      expect(back.snapshot.scene.mutedSounds, isFalse);
+      expect(back.changes, const [ChangeLine('Sons', 'Rétablis')]);
+    });
+
+    test('adding or setting a level in a muted category unmutes it', () {
+      final muted = snapshot().copyWith(
+        scene: snapshot().scene.withMuted(LayerKind.musique, true),
+      );
+      for (final op in <Map<String, dynamic>>[
+        {'op': 'ajouter', 'cible': 'musique', 'id': 'nappes-apaisantes'},
+        {'op': 'ajouter', 'cible': 'musique', 'id': 'piano-doux', 'niveau': 10},
+        {'op': 'regler', 'cible': 'musique', 'id': 'piano-doux', 'niveau': 40},
+        {'op': 'ajuster', 'cible': 'musique', 'id': 'piano-doux', 'delta': 20},
+        {'op': 'ajuster', 'cible': 'musique', 'id': 'piano-doux', 'delta': -10},
+      ]) {
+        final r = apply(muted, [op]);
+        expect(r.snapshot.scene.mutedMusic, isFalse, reason: '$op');
+        expect(
+          r.changes.last,
+          const ChangeLine('Musique', 'Rétablie'),
+          reason: '$op',
+        );
+      }
+    });
+
+    test('removing, or touching another category, keeps the mute', () {
+      final muted = snapshot().copyWith(
+        scene: snapshot().scene.withMuted(LayerKind.musique, true),
+      );
+      for (final op in <Map<String, dynamic>>[
+        {'op': 'retirer', 'cible': 'musique', 'id': 'piano-doux'},
+        {'op': 'retirer', 'cible': 'musique', 'id': '*'},
+        {'op': 'regler', 'cible': 'musique', 'id': 'piano-doux', 'niveau': 0},
+        {'op': 'ajuster', 'cible': 'musique', 'id': 'piano-doux', 'delta': -50},
+        {'op': 'ajuster', 'cible': 'musique', 'id': 'harpe', 'delta': -20},
+        {'op': 'ajouter', 'cible': 'son', 'id': 'pluie-douce'},
+        {'op': 'definir', 'cible': 'paysage', 'valeur': 'sous-bois'},
+        {'op': 'changer', 'cible': 'paysage', 'valeur': 'suivant'},
+      ]) {
+        final r = apply(muted, [op]);
+        expect(r.snapshot.scene.mutedMusic, isTrue, reason: '$op');
+      }
+    });
+
+    test('a refused addition (couches_max) does not unmute', () {
+      var before = snapshot();
+      before = before.copyWith(
+        scene: before.scene
+            .withLevel(LayerKind.son, 'pluie-douce', 40)
+            .withLevel(LayerKind.son, 'ruisseau', 40)
+            .withMuted(LayerKind.musique, true)
+            .withLevel(LayerKind.musique, 'harpe', 30),
+      );
+      expect(before.scene.audioLayerCount, 6);
+      final r = apply(before, [
+        {'op': 'ajouter', 'cible': 'musique', 'id': 'flute'},
+      ]);
+      expect(r.snapshot.scene.mutedMusic, isTrue);
+      expect(r.effects, const [RefuseEffect('couches_max')]);
+    });
+
+    test(
+      'a muted empty category is still muted (adding music later unmutes)',
+      () {
+        final before = snapshot().copyWith(
+          scene: snapshot().scene.withoutLayer(LayerKind.musique, '*'),
+        );
+        final r = apply(before, [
+          {'op': 'couper', 'cible': 'musique'},
+          {
+            'op': 'ajouter',
+            'cible': 'musique',
+            'id': 'piano-doux',
+            'niveau': 30,
+          },
+        ]);
+        expect(r.snapshot.scene.mutedMusic, isFalse);
+        expect(r.snapshot.scene.levelOf(LayerKind.musique, 'piano-doux'), 30);
+        expect(r.changes, const [
+          ChangeLine('Musique', 'Rétablie'),
+          ChangeLine('Piano doux', '30 %'),
+        ]);
+      },
+    );
+
+    test('malformed mute operations are skipped (decor has no mute)', () {
+      final before = snapshot();
+      final r = apply(before, [
+        {'op': 'couper', 'cible': 'decor'},
+        {'op': 'couper'},
+        {'op': 'remettre', 'cible': 'paysage'},
+      ]);
+      expect(r.snapshot.scene, before.scene);
+      expect(r.changes, isEmpty);
+    });
+
+    test('the voice state sent to the API carries the mute', () {
+      final before = snapshot();
+      final muted = before.copyWith(
+        scene: before.scene.withMuted(LayerKind.son, true),
+      );
+      expect((muted.toVoiceState()['scene'] as Map)['sourdine'], {
+        'sons': true,
+        'musique': false,
+      });
+    });
+  });
+
   group('landscape and moment', () {
     test('definir paysage loads the default mix, keeps moment and timer', () {
       final before = snapshot().copyWith(

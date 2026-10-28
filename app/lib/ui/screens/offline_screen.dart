@@ -1,7 +1,7 @@
 // Screen 13 · Hors connexion (free plan only, after a real failed attempt).
 import 'package:flutter/material.dart';
 
-import '../landscape/landscape_image.dart';
+import '../landscape/landscape_background.dart';
 import '../model_scope.dart';
 import '../navigation.dart';
 import '../theme/vitre.dart';
@@ -50,7 +50,7 @@ class _OfflineScreenState extends State<OfflineScreen> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: LandscapeImage(
+            child: LandscapeBackground(
               landscapeId: landscape.id,
               style: landscape.style,
               brightness: 0.5,
