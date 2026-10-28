@@ -1,0 +1,376 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.16.5",
+  "variables": {
+    "domain_name": {
+      "value": "eventide.app"
+    },
+    "aws_account_id": {
+      "value": "466494951409"
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "module.prod.aws_vpc_security_group_ingress_rule.shared_postgres",
+      "mode": "managed",
+      "type": "aws_vpc_security_group_ingress_rule",
+      "name": "shared_postgres",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "no-op"
+        ],
+        "before": {
+          "security_group_id": "sg-070b4372d5a95ad2d",
+          "ip_protocol": "tcp",
+          "from_port": 5432,
+          "to_port": 5432,
+          "cidr_ipv4": null,
+          "cidr_ipv6": null,
+          "prefix_list_id": null,
+          "referenced_security_group_id": "sg-0e7e7e7e7e7e7e7e7",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared",
+            "Name": "ev-prod-postgres"
+          }
+        },
+        "after": {
+          "security_group_id": "sg-070b4372d5a95ad2d",
+          "ip_protocol": "tcp",
+          "from_port": 5432,
+          "to_port": 5432,
+          "cidr_ipv4": null,
+          "cidr_ipv6": null,
+          "prefix_list_id": null,
+          "referenced_security_group_id": "sg-0e7e7e7e7e7e7e7e7",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared",
+            "Name": "ev-prod-postgres"
+          }
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.alb[0].aws_lb_listener_rule.api",
+      "mode": "managed",
+      "type": "aws_lb_listener_rule",
+      "name": "api",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "listener_arn": "arn:aws:elasticloadbalancing:us-east-1:466494951409:listener/app/cinaf-streaming-prod-alb/0123456789abcdef/fedcba9876543210",
+          "priority": 400,
+          "condition": [
+            {
+              "host_header": [
+                {
+                  "values": [
+                    "api.eventide.app"
+                  ]
+                }
+              ],
+              "http_header": [],
+              "http_request_method": [],
+              "path_pattern": [],
+              "query_string": [],
+              "source_ip": []
+            }
+          ],
+          "action": [
+            {
+              "type": "forward",
+              "target_group_arn": null
+            }
+          ],
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {
+          "action": [
+            {
+              "target_group_arn": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "address": "module.prod.module.alb[0].aws_lb_listener_rule.web[0]",
+      "mode": "managed",
+      "type": "aws_lb_listener_rule",
+      "name": "web",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "listener_arn": "arn:aws:elasticloadbalancing:us-east-1:466494951409:listener/app/cinaf-streaming-prod-alb/0123456789abcdef/fedcba9876543210",
+          "priority": 401,
+          "condition": [
+            {
+              "host_header": [
+                {
+                  "values": [
+                    "eventide.app",
+                    "www.eventide.app"
+                  ]
+                }
+              ],
+              "http_header": [],
+              "http_request_method": [],
+              "path_pattern": [],
+              "query_string": [],
+              "source_ip": []
+            }
+          ],
+          "action": [
+            {
+              "type": "forward",
+              "target_group_arn": null
+            }
+          ],
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {
+          "action": [
+            {
+              "target_group_arn": true
+            }
+          ]
+        }
+      }
+    },
+    {
+      "address": "module.prod.module.alb[0].aws_lb_listener_certificate.this",
+      "mode": "managed",
+      "type": "aws_lb_listener_certificate",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "listener_arn": "arn:aws:elasticloadbalancing:us-east-1:466494951409:listener/app/cinaf-streaming-prod-alb/0123456789abcdef/fedcba9876543210",
+          "certificate_arn": null
+        },
+        "after_unknown": {
+          "certificate_arn": true
+        }
+      }
+    },
+    {
+      "address": "module.prod.module.alb[0].aws_lb_target_group.api",
+      "mode": "managed",
+      "type": "aws_lb_target_group",
+      "name": "api",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "ev-prod-api",
+          "vpc_id": "vpc-0fbfe87b34e2b3903",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.ecs.aws_ecs_task_definition.api",
+      "mode": "managed",
+      "type": "aws_ecs_task_definition",
+      "name": "api",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "delete",
+          "create"
+        ],
+        "before": {
+          "family": "ev-prod-api",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after": {
+          "family": "ev-prod-api",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.aws_ssm_parameter.deploy_config",
+      "mode": "managed",
+      "type": "aws_ssm_parameter",
+      "name": "deploy_config",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "name": "/eventide/prod/deploy/config",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after": {
+          "name": "/eventide/prod/deploy/config",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.ecs.aws_ecs_service.api[0]",
+      "mode": "managed",
+      "type": "aws_ecs_service",
+      "name": "api",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "api",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {}
+      }
+    }
+  ],
+  "prior_state": {
+    "format_version": "1.0",
+    "terraform_version": "1.16.5",
+    "values": {
+      "root_module": {
+        "resources": [
+          {
+            "address": "data.aws_security_group.rds",
+            "mode": "data",
+            "type": "aws_security_group",
+            "name": "rds",
+            "values": {
+              "id": "sg-070b4372d5a95ad2d"
+            }
+          },
+          {
+            "address": "data.aws_lb.shared",
+            "mode": "data",
+            "type": "aws_lb",
+            "name": "shared",
+            "values": {
+              "name": "cinaf-streaming-prod-alb",
+              "security_groups": [
+                "sg-04bbc536ff0295918"
+              ]
+            }
+          },
+          {
+            "address": "data.aws_db_instance.shared",
+            "mode": "data",
+            "type": "aws_db_instance",
+            "name": "shared",
+            "values": {
+              "db_instance_identifier": "cinaf-streaming-prod-postgres",
+              "vpc_security_groups": [
+                "sg-070b4372d5a95ad2d"
+              ]
+            }
+          },
+          {
+            "address": "data.aws_vpc.shared",
+            "mode": "data",
+            "type": "aws_vpc",
+            "name": "shared",
+            "values": {
+              "id": "vpc-0fbfe87b34e2b3903"
+            }
+          }
+        ],
+        "child_modules": [
+          {
+            "address": "module.prod.module.alb[0]",
+            "resources": [
+              {
+                "address": "module.prod.module.alb[0].data.aws_lb.shared",
+                "mode": "data",
+                "type": "aws_lb",
+                "name": "shared",
+                "values": {
+                  "security_groups": [
+                    "sg-04bbc536ff0295918"
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

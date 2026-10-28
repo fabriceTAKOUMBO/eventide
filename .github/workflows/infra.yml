@@ -5,6 +5,12 @@ name: Infra CI
 # (terraform test, mock_provider : aucun identifiant ni appel AWS), garde des ressources à
 # l'échelle du compte partagé ; scripts PostgreSQL de modules/db_tools (amorçage, sauvegarde,
 # restauration) contre un vrai PostgreSQL 16, puis les migrations Django réelles.
+#
+# Non-influence sur CINAF, JobMinutes et Candidature Express (AGENTS.md, règle absolue) : le
+# job « guards » teste le contrôle statique, le contrôle de plan check-plan-additions-only.sh
+# (sur des plans JSON de test : la CI n'a aucun accès AWS et ne produit donc aucun vrai plan ;
+# le contrôle sur le vrai plan est une étape obligatoire du runbook avant chaque apply), le
+# registraire des définitions de tâche (code Python) et le script de déploiement qui l'appelle.
 
 on:
   push:
@@ -13,13 +19,15 @@ on:
       - "infra/**"
       - "backend/apps/**/migrations/**"
       - ".github/workflows/infra.yml"
-      - ".github/scripts/check-shared-account-resources.sh"
+      - ".github/workflows/deploy.yml"
+      - ".github/scripts/**"
   pull_request:
     paths:
       - "infra/**"
       - "backend/apps/**/migrations/**"
       - ".github/workflows/infra.yml"
-      - ".github/scripts/check-shared-account-resources.sh"
+      - ".github/workflows/deploy.yml"
+      - ".github/scripts/**"
   workflow_dispatch:
 
 permissions: {}
@@ -72,6 +80,37 @@ jobs:
             fi
             echo "::endgroup::"
           done
+
+  guards:
+    name: Non-influence guards (static, plan, registrar)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      AWS_EC2_METADATA_DISABLED: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Shell scripts (shellcheck, warnings and errors)
+        run: |
+          shellcheck --version | head -2
+          shellcheck -S warning -x .github/scripts/*.sh .github/scripts/tests/*.sh infra/terraform/modules/db_tools/tests/run-local.sh
+          shellcheck -S warning -s sh infra/terraform/modules/db_tools/files/*.sh
+
+      - name: Static guard of the Terraform code (fixtures)
+        run: bash .github/scripts/tests/check-shared-account-resources.test.sh
+
+      - name: Plan guard check-plan-additions-only.sh (JSON plan fixtures)
+        run: bash .github/scripts/tests/check-plan-additions-only.test.sh
+
+      - name: Task registrar (Lambda code) and the deploy script that calls it
+        run: |
+          python3 -I -m unittest discover -s infra/terraform/modules/task_registrar/tests -v
+          bash .github/scripts/tests/register-task-revision.test.sh
 
   db-tools:
     name: PostgreSQL bootstrap / backup / restore scripts

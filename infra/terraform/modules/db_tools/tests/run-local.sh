@@ -277,6 +277,31 @@ print('ok')" | grep -q ok || ko "écriture par ev_app après les migrations"
   backup > /dev/null
   restore > /dev/null || ko "sauvegarde et restauration après les migrations Django"
   ok "migrations Django (ev_migrator), écritures (ev_app), sauvegarde et restauration du vrai schéma"
+
+  # Pooled connection (as in production, DB_POOL_MAX_SIZE > 0) closed by the server, as
+  # idle_session_timeout does on the shared instance: the next query must get a new connection
+  # (CONN_HEALTH_CHECKS), not an error.
+  echo "== Pool de l'API : connexion fermée par le serveur (idle_session_timeout), remplacée"
+  pool_out=$(cd "$repo/backend" && env DJANGO_SETTINGS_MODULE=config.settings.dev DJANGO_READ_DOT_ENV=false \
+    DJANGO_SECRET_KEY="local-check-$(pass)" DB_POOL_MAX_SIZE=1 \
+    DATABASE_URL="postgres://ev_app:$APP_PW@127.0.0.1:$PORT/eventide?sslmode=disable" \
+    SUPER_DSN="postgres://postgres:$SUPER_PW@127.0.0.1:$PORT/postgres?sslmode=disable" \
+    uv run --frozen python manage.py shell -c "
+import os, time, psycopg
+from django.db import connection
+with connection.cursor() as c:
+    c.execute('SELECT pg_backend_pid()')
+    first = c.fetchone()[0]
+connection.close()
+with psycopg.connect(os.environ['SUPER_DSN'], autocommit=True) as s:
+    s.execute('SELECT pg_terminate_backend(%s)', [first])
+time.sleep(0.5)
+with connection.cursor() as c:
+    c.execute('SELECT pg_backend_pid()')
+    second = c.fetchone()[0]
+print('pool-ok' if second != first else 'pool-same')" 2>&1) || true
+  grep -q pool-ok <<< "$pool_out" || { echo "$pool_out"; ko "connexion du pool fermée par le serveur non remplacée"; }
+  ok "pool de l'API : une connexion fermée par le serveur est remplacée avant usage"
 fi
 
 echo "== Journaux du serveur (log_statement = all)"

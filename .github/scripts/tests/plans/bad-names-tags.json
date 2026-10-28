@@ -1,0 +1,177 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.16.5",
+  "variables": {
+    "domain_name": {
+      "value": ""
+    },
+    "aws_account_id": {
+      "value": "466494951409"
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "module.prod.module.db_tools.aws_s3_bucket.backups",
+      "mode": "managed",
+      "type": "aws_s3_bucket",
+      "name": "backups",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "bucket": "cinaf-backups",
+          "tags_all": {
+            "Project": "cinaf",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.observability.aws_cloudwatch_log_metric_filter.app_event[\"x\"]",
+      "mode": "managed",
+      "type": "aws_cloudwatch_log_metric_filter",
+      "name": "app_event",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "ev-prod-x",
+          "log_group_name": "/ecs/cinaf-streaming-prod/api"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.observability.aws_cloudwatch_metric_alarm.rds[\"cpu\"]",
+      "mode": "managed",
+      "type": "aws_cloudwatch_metric_alarm",
+      "name": "rds",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "alarm_name": "ev-prod-rds-cpu",
+          "alarm_actions": [
+            "arn:aws:automate:us-east-1:ec2:stop"
+          ],
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.ecs.aws_ecs_task_definition.api",
+      "mode": "managed",
+      "type": "aws_ecs_task_definition",
+      "name": "api",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "family": "ce-prod-api",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {}
+      }
+    }
+  ],
+  "prior_state": {
+    "format_version": "1.0",
+    "terraform_version": "1.16.5",
+    "values": {
+      "root_module": {
+        "resources": [
+          {
+            "address": "data.aws_security_group.rds",
+            "mode": "data",
+            "type": "aws_security_group",
+            "name": "rds",
+            "values": {
+              "id": "sg-070b4372d5a95ad2d"
+            }
+          },
+          {
+            "address": "data.aws_lb.shared",
+            "mode": "data",
+            "type": "aws_lb",
+            "name": "shared",
+            "values": {
+              "name": "cinaf-streaming-prod-alb",
+              "security_groups": [
+                "sg-04bbc536ff0295918"
+              ]
+            }
+          },
+          {
+            "address": "data.aws_db_instance.shared",
+            "mode": "data",
+            "type": "aws_db_instance",
+            "name": "shared",
+            "values": {
+              "db_instance_identifier": "cinaf-streaming-prod-postgres",
+              "vpc_security_groups": [
+                "sg-070b4372d5a95ad2d"
+              ]
+            }
+          },
+          {
+            "address": "data.aws_vpc.shared",
+            "mode": "data",
+            "type": "aws_vpc",
+            "name": "shared",
+            "values": {
+              "id": "vpc-0fbfe87b34e2b3903"
+            }
+          }
+        ],
+        "child_modules": [
+          {
+            "address": "module.prod.module.alb[0]",
+            "resources": [
+              {
+                "address": "module.prod.module.alb[0].data.aws_lb.shared",
+                "mode": "data",
+                "type": "aws_lb",
+                "name": "shared",
+                "values": {
+                  "security_groups": [
+                    "sg-04bbc536ff0295918"
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

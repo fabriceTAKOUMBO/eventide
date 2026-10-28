@@ -41,9 +41,43 @@ forbidden+='|aws_sesv2_account_[a-z0-9_]+|aws_ses_active_receipt_rule_set'
 forbidden+='|aws_ecr_registry_scanning_configuration|aws_ecr_registry_policy|aws_ecr_replication_configuration'
 forbidden+='|aws_ecr_pull_through_cache_rule|aws_sns_sms_preferences|aws_iam_openid_connect_provider'
 forbidden+='|aws_ssm_service_setting|aws_iam_security_token_service_preferences|aws_cloudwatch_log_resource_policy'
+# Account- or region-wide settings found in the non-influence review of 28 October 2026.
+forbidden+='|aws_ecr_account_setting|aws_ssm_default_patch_baseline|aws_ce_cost_allocation_tag|aws_resourceexplorer2_index'
+forbidden+='|aws_backup_global_settings|aws_backup_region_settings|aws_accessanalyzer_analyzer|aws_auditmanager_account_registration'
+forbidden+='|aws_emr_block_public_access_configuration|aws_glue_data_catalog_encryption_settings|aws_glue_resource_policy'
+forbidden+='|aws_lakeformation_data_lake_settings|aws_cloudwatch_event_bus_policy|aws_cloudwatch_event_permission'
+forbidden+='|aws_cloudwatch_event_archive|aws_cloudtrail|aws_iam_saml_provider|aws_s3control_[a-z0-9_]+|aws_default_[a-z0-9_]+'
+# Shared infrastructure of CINAF (and of the other guests): never managed by Eventide, only read
+# by data sources. Includes what would change the shared VPC's routing or DNS for everyone (VPC
+# endpoints, private DNS namespaces and zones, resolver rules, DHCP options), legacy security
+# group rules (can target any group), WAF associations (would filter the shared ALB) and log
+# subscriptions or event archives (would read the other platforms' logs or events).
+forbidden+='|aws_lb|aws_alb|aws_elb|aws_lb_listener|aws_alb_listener|aws_alb_listener_rule|aws_alb_listener_certificate'
+forbidden+='|aws_lb_target_group_attachment|aws_alb_target_group_attachment|aws_lb_cookie_stickiness_policy|aws_lb_ssl_negotiation_policy'
+forbidden+='|aws_wafv2_web_acl_association|aws_waf_[a-z0-9_]+|aws_wafregional_[a-z0-9_]+|aws_shield_protection[a-z0-9_]*'
+forbidden+='|aws_db_[a-z0-9_]+|aws_rds_[a-z0-9_]+|aws_vpc|aws_subnet|aws_nat_gateway|aws_internet_gateway'
+forbidden+='|aws_egress_only_internet_gateway|aws_eip_association|aws_route|aws_route_table|aws_route_table_association'
+forbidden+='|aws_main_route_table_association|aws_network_acl|aws_network_acl_rule|aws_network_acl_association'
+forbidden+='|aws_security_group_rule|aws_vpc_endpoint|aws_vpc_endpoint_[a-z0-9_]+|aws_vpc_ipv4_cidr_block_association'
+forbidden+='|aws_vpc_ipv6_cidr_block_association|aws_vpc_dhcp_options|aws_vpc_dhcp_options_association|aws_flow_log'
+forbidden+='|aws_ec2_traffic_mirror_[a-z0-9_]+|aws_ec2_tag|aws_route53_zone|aws_route53_zone_association'
+forbidden+='|aws_route53_vpc_association_authorization|aws_route53_resolver_[a-z0-9_]+|aws_service_discovery_private_dns_namespace'
+forbidden+='|aws_cloudwatch_log_subscription_filter'
+# Objects placed ON a shared resource: only the contact points of the ADR, only where they are
+# declared (see allowed_at below).
+forbidden+='|aws_lb_listener_rule|aws_lb_listener_certificate|aws_vpc_security_group_ingress_rule|aws_vpc_security_group_egress_rule'
 allowed='aws_guardduty_malware_protection_plan'
-# Autorisations par emplacement : "<type>@<fin du chemin du fichier>" (aucune pour Eventide).
-allowed_at=()
+# Autorisations par emplacement : "<type>@<fin du chemin du fichier>". Points de contact de
+# l'ADR (règles et certificat sur l'écouteur partagé, règle 5432 sur le groupe de la base) et
+# règles de NOTRE groupe de sécurité. Le contrôle du plan (check-plan-additions-only.sh) vérifie
+# ensuite leurs adresses, leurs cibles et leurs attributs.
+allowed_at=(
+  "aws_lb_listener_rule@/modules/alb/main.tf"
+  "aws_lb_listener_certificate@/modules/alb/main.tf"
+  "aws_vpc_security_group_ingress_rule@/modules/shared_platform/main.tf"
+  "aws_vpc_security_group_ingress_rule@/modules/ecs/main.tf"
+  "aws_vpc_security_group_egress_rule@/modules/ecs/main.tf"
+)
 
 is_allowed_at() { # type fichier
   local entry

@@ -1,0 +1,425 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.16.5",
+  "variables": {
+    "domain_name": {
+      "value": ""
+    },
+    "aws_account_id": {
+      "value": "466494951409"
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "module.prod.module.task_registrar.data.archive_file.package",
+      "mode": "data",
+      "type": "archive_file",
+      "name": "package",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "read"
+        ],
+        "before": null,
+        "after": null,
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "terraform_data.shared_infrastructure_checks",
+      "mode": "managed",
+      "type": "terraform_data",
+      "name": "shared_infrastructure_checks",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "input": "vpc-0fbfe87b34e2b3903"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.terraform_data.connection_budget",
+      "mode": "managed",
+      "type": "terraform_data",
+      "name": "connection_budget",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "input": 14
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.ecs.aws_ecs_cluster.this",
+      "mode": "managed",
+      "type": "aws_ecs_cluster",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "ev-prod",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.ecs.aws_security_group.api",
+      "mode": "managed",
+      "type": "aws_security_group",
+      "name": "api",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "ev-prod-api",
+          "vpc_id": "vpc-0fbfe87b34e2b3903",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.ecs.aws_vpc_security_group_ingress_rule.api_from_alb",
+      "mode": "managed",
+      "type": "aws_vpc_security_group_ingress_rule",
+      "name": "api_from_alb",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "security_group_id": null,
+          "ip_protocol": "tcp",
+          "from_port": 8000,
+          "to_port": 8000,
+          "referenced_security_group_id": "sg-04bbc536ff0295918",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {
+          "security_group_id": true
+        }
+      }
+    },
+    {
+      "address": "module.prod.module.ecs.aws_vpc_security_group_egress_rule.api_postgres",
+      "mode": "managed",
+      "type": "aws_vpc_security_group_egress_rule",
+      "name": "api_postgres",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "security_group_id": null,
+          "ip_protocol": "tcp",
+          "from_port": 5432,
+          "to_port": 5432,
+          "referenced_security_group_id": "sg-070b4372d5a95ad2d",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {
+          "security_group_id": true
+        }
+      }
+    },
+    {
+      "address": "module.prod.aws_vpc_security_group_ingress_rule.shared_postgres",
+      "mode": "managed",
+      "type": "aws_vpc_security_group_ingress_rule",
+      "name": "shared_postgres",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "security_group_id": "sg-070b4372d5a95ad2d",
+          "ip_protocol": "tcp",
+          "from_port": 5432,
+          "to_port": 5432,
+          "cidr_ipv4": null,
+          "cidr_ipv6": null,
+          "prefix_list_id": null,
+          "referenced_security_group_id": null,
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared",
+            "Name": "ev-prod-postgres"
+          }
+        },
+        "after_unknown": {
+          "referenced_security_group_id": true,
+          "id": true
+        }
+      }
+    },
+    {
+      "address": "module.prod.module.db_tools.aws_s3_bucket.backups",
+      "mode": "managed",
+      "type": "aws_s3_bucket",
+      "name": "backups",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "bucket": "ev-prod-db-backups-466494951409",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.observability.aws_cloudwatch_metric_alarm.rds[\"cpu\"]",
+      "mode": "managed",
+      "type": "aws_cloudwatch_metric_alarm",
+      "name": "rds",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "alarm_name": "ev-prod-rds-cpu",
+          "namespace": "AWS/RDS",
+          "alarm_actions": [
+            null
+          ],
+          "ok_actions": [
+            null
+          ],
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {
+          "alarm_actions": [
+            true
+          ],
+          "ok_actions": [
+            true
+          ]
+        }
+      }
+    },
+    {
+      "address": "module.prod.module.observability.aws_cloudwatch_log_metric_filter.app_event[\"voice-global-cap-api\"]",
+      "mode": "managed",
+      "type": "aws_cloudwatch_log_metric_filter",
+      "name": "app_event",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "ev-prod-voice-global-cap-api",
+          "log_group_name": "/ecs/ev-prod/api"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.task_registrar.aws_lambda_function.this",
+      "mode": "managed",
+      "type": "aws_lambda_function",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "function_name": "ev-prod-task-registrar",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.aws_ssm_parameter.deploy_config",
+      "mode": "managed",
+      "type": "aws_ssm_parameter",
+      "name": "deploy_config",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "/eventide/prod/deploy/config",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "aws_budgets_budget.monthly[0]",
+      "mode": "managed",
+      "type": "aws_budgets_budget",
+      "name": "monthly",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "eventide-mensuel",
+          "tags_all": {
+            "Project": "eventide"
+          }
+        },
+        "after_unknown": {}
+      }
+    }
+  ],
+  "prior_state": {
+    "format_version": "1.0",
+    "terraform_version": "1.16.5",
+    "values": {
+      "root_module": {
+        "resources": [
+          {
+            "address": "data.aws_security_group.rds",
+            "mode": "data",
+            "type": "aws_security_group",
+            "name": "rds",
+            "values": {
+              "id": "sg-070b4372d5a95ad2d"
+            }
+          },
+          {
+            "address": "data.aws_lb.shared",
+            "mode": "data",
+            "type": "aws_lb",
+            "name": "shared",
+            "values": {
+              "name": "cinaf-streaming-prod-alb",
+              "security_groups": [
+                "sg-04bbc536ff0295918"
+              ]
+            }
+          },
+          {
+            "address": "data.aws_db_instance.shared",
+            "mode": "data",
+            "type": "aws_db_instance",
+            "name": "shared",
+            "values": {
+              "db_instance_identifier": "cinaf-streaming-prod-postgres",
+              "vpc_security_groups": [
+                "sg-070b4372d5a95ad2d"
+              ]
+            }
+          },
+          {
+            "address": "data.aws_vpc.shared",
+            "mode": "data",
+            "type": "aws_vpc",
+            "name": "shared",
+            "values": {
+              "id": "vpc-0fbfe87b34e2b3903"
+            }
+          }
+        ],
+        "child_modules": [
+          {
+            "address": "module.prod.module.alb[0]",
+            "resources": [
+              {
+                "address": "module.prod.module.alb[0].data.aws_lb.shared",
+                "mode": "data",
+                "type": "aws_lb",
+                "name": "shared",
+                "values": {
+                  "security_groups": [
+                    "sg-04bbc536ff0295918"
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
