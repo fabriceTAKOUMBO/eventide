@@ -91,7 +91,7 @@ locals {
 
   # Per-role resource caps on the shared instance (variables.tf, role_resource_limits).
   resource_limits_environment = merge([
-    for key, prefix in { app = "EV_APP", migrator = "EV_MIGRATOR", backup = "EV_BACKUP" } : {
+    for key, prefix in { app           = "EV_APP", migrator = "EV_MIGRATOR", backup = "EV_BACKUP" } : {
       "${prefix}_WORK_MEM"             = var.role_resource_limits[key].work_mem
       "${prefix}_MAINTENANCE_WORK_MEM" = var.role_resource_limits[key].maintenance_work_mem
       "${prefix}_TEMP_FILE_LIMIT"      = var.role_resource_limits[key].temp_file_limit

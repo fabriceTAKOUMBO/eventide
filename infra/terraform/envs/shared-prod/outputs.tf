@@ -5,6 +5,9 @@ output "prod" {
     web_url                         = module.prod.web_url
     github_deploy_role_arn          = module.prod.github_deploy_role_arn
     deploy_config_parameter         = module.prod.deploy_config_parameter
+    task_registrar_function         = module.prod.task_registrar_function
+    shared_capacity                 = module.prod.shared_capacity
+    contact_points                  = module.prod.shared_contact_points
     ecr_repository_url              = module.prod.ecr_repository_url
     ecs_cluster_name                = module.prod.ecs_cluster_name
     ecs_task_families               = module.prod.ecs_task_families
@@ -28,6 +31,7 @@ output "preprod" {
     api_url                         = module.preprod[0].api_url
     github_deploy_role_arn          = module.preprod[0].github_deploy_role_arn
     deploy_config_parameter         = module.preprod[0].deploy_config_parameter
+    contact_points                  = module.preprod[0].shared_contact_points
     ecs_cluster_name                = module.preprod[0].ecs_cluster_name
     db_task_families                = module.preprod[0].db_task_families
     ecs_api_security_group_id       = module.preprod[0].ecs_api_security_group_id

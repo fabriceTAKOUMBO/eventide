@@ -1,6 +1,8 @@
 # Budget de connexions PostgreSQL sur l'instance partagée (décision du PO : ev_app 10,
 # ev_migrator 2, ev_backup 2, base 14) : le plan ÉCHOUE si l'autoscaling, chevauchement d'un
 # déploiement compris, peut ouvrir plus de connexions que la limite de ev_app. Sans AWS.
+# Also: the standalone 5432 rule on the shared database security group (port 5432, source =
+# our group only, never a CIDR) and the share of the account-wide Fargate vCPU quota.
 #   terraform init -backend=false && terraform test
 
 mock_provider "aws" {
@@ -9,6 +11,7 @@ mock_provider "aws" {
 
 mock_provider "random" {}
 mock_provider "tls" {}
+mock_provider "archive" {}
 
 variables {
   environment              = "prod"
@@ -51,7 +54,8 @@ run "one_more_task_fails" {
     api = { cpu = 256, memory = 512, min = 1, max = 3, workers = 1, threads = 8, db_pool_max = 2, requests = 600 }
   }
 
-  expect_failures = [terraform_data.connection_budget]
+  # 3 tasks: over the ev_app limit AND over the share of the account-wide Fargate quota.
+  expect_failures = [terraform_data.connection_budget, terraform_data.shared_capacity_budget]
 }
 
 run "bigger_pool_fails" {
@@ -72,4 +76,93 @@ run "role_limits_above_the_database_budget_fail" {
   }
 
   expect_failures = [terraform_data.connection_budget]
+}
+
+run "longer_deployment_overlap_fails" {
+  command = plan
+
+  variables {
+    deployment_maximum_percent = 300
+  }
+
+  expect_failures = [terraform_data.connection_budget, terraform_data.shared_capacity_budget]
+}
+
+run "shared_postgres_rule_is_port_5432_from_our_group_only" {
+  command = plan
+
+  override_resource {
+    target          = module.ecs.aws_security_group.api
+    override_during = plan
+    values = {
+      id = "sg-0e7e7e7e7e7e7e7e7"
+    }
+  }
+
+  assert {
+    condition     = aws_vpc_security_group_ingress_rule.shared_postgres.security_group_id == "sg-070b4372d5a95ad2d"
+    error_message = "La règle est posée sur le groupe de la base partagée."
+  }
+  assert {
+    condition = (
+      aws_vpc_security_group_ingress_rule.shared_postgres.ip_protocol == "tcp" &&
+      aws_vpc_security_group_ingress_rule.shared_postgres.from_port == 5432 &&
+      aws_vpc_security_group_ingress_rule.shared_postgres.to_port == 5432
+    )
+    error_message = "Port 5432 seulement."
+  }
+  assert {
+    condition = (
+      aws_vpc_security_group_ingress_rule.shared_postgres.cidr_ipv4 == null &&
+      aws_vpc_security_group_ingress_rule.shared_postgres.cidr_ipv6 == null &&
+      aws_vpc_security_group_ingress_rule.shared_postgres.prefix_list_id == null
+    )
+    error_message = "Jamais de bloc CIDR ni de liste de préfixes : seulement notre groupe."
+  }
+  assert {
+    condition     = aws_vpc_security_group_ingress_rule.shared_postgres.referenced_security_group_id == "sg-0e7e7e7e7e7e7e7e7"
+    error_message = "Source : le groupe de NOS tâches."
+  }
+  assert {
+    condition     = output.shared_capacity.peak_fargate_vcpu == 1.75
+    error_message = "Pic de production : (2 x 2 x 256 + 3 x 256) / 1024 = 1,75 vCPU."
+  }
+}
+
+run "postgres_port_other_than_5432_fails" {
+  command = plan
+
+  variables {
+    rds = {
+      identifier        = "cinaf-streaming-prod-postgres"
+      address           = "cinaf.example.rds.amazonaws.com"
+      port              = 5433
+      engine_version    = "16.3"
+      master_username   = "app_admin"
+      security_group_id = "sg-070b4372d5a95ad2d"
+    }
+  }
+
+  expect_failures = [aws_vpc_security_group_ingress_rule.shared_postgres]
+}
+
+run "bigger_tasks_exceed_the_shared_fargate_budget" {
+  command = plan
+
+  variables {
+    api = { cpu = 1024, memory = 2048, min = 1, max = 2, workers = 1, threads = 8, db_pool_max = 2, requests = 600 }
+  }
+
+  expect_failures = [terraform_data.shared_capacity_budget]
+}
+
+run "database_or_role_of_another_platform_is_refused" {
+  command = plan
+
+  variables {
+    db_name  = "cinaf"
+    db_roles = { app = "cinaf_app", migrator = "ev_migrator", backup = "ev_backup" }
+  }
+
+  expect_failures = [var.db_name, var.db_roles]
 }

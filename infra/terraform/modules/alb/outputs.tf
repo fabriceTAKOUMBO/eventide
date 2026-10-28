@@ -31,3 +31,11 @@ output "listener_ssl_policy" {
   description = "Politique TLS de l'écouteur partagé (non modifiable par nous)."
   value       = data.aws_lb_listener.shared.ssl_policy
 }
+
+output "listener_rules" {
+  description = "Nos règles sur l'écouteur partagé : priorité et noms d'hôte (contrôle du plan)."
+  value = merge(
+    { api = { priority = aws_lb_listener_rule.api.priority, hosts = sort(tolist(one(aws_lb_listener_rule.api.condition).host_header[0].values)) } },
+    { for r in aws_lb_listener_rule.web : "web" => { priority = r.priority, hosts = sort(tolist(one(r.condition).host_header[0].values)) } },
+  )
+}

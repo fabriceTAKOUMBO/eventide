@@ -45,6 +45,8 @@ mock_data "aws_lb_listener" {
     arn               = "arn:aws:elasticloadbalancing:us-east-1:466494951409:listener/app/cinaf-streaming-prod-alb/0123456789abcdef/fedcba9876543210"
     load_balancer_arn = "arn:aws:elasticloadbalancing:us-east-1:466494951409:loadbalancer/app/cinaf-streaming-prod-alb/0123456789abcdef"
     ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+    port              = 443
+    protocol          = "HTTPS"
   }
 }
 mock_data "aws_db_instance" {
@@ -61,7 +63,7 @@ mock_data "aws_security_group" {
   defaults = { id = "sg-070b4372d5a95ad2d" }
 }
 mock_data "aws_route53_zone" {
-  defaults = { zone_id = "Z0EVENTIDETEST", name = "eventide.example." }
+  defaults = { zone_id = "Z0EVENTIDETEST", name = "eventide.example.", tags = { Project = "eventide" } }
 }
 mock_data "aws_iam_openid_connect_provider" {
   defaults = { arn = "arn:aws:iam::466494951409:oidc-provider/token.actions.githubusercontent.com" }

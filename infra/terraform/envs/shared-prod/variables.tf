@@ -22,6 +22,16 @@ variable "domain_name" {
     condition     = var.domain_name == "" || can(regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", var.domain_name))
     error_message = "domain_name : vide, ou un domaine en minuscules (ex. eventide.app)."
   }
+
+  # Never a domain of another platform of the shared account (nor one of its subdomains or
+  # parents): our listener rules would capture its traffic and our records land in its zone.
+  validation {
+    condition = alltrue([
+      for d in ["cinaf.tv", "jobminutes.com", "candidatureexpress.com"] :
+      !(var.domain_name == d || endswith(var.domain_name, ".${d}") || endswith(d, ".${var.domain_name}"))
+    ])
+    error_message = "domain_name : domaine d'une autre plateforme du compte (CINAF, JobMinutes, Candidature Express), refusé."
+  }
 }
 
 variable "manage_caa" {
@@ -172,9 +182,9 @@ variable "content_custom_domain" {
 }
 
 variable "rds_alarms_enabled" {
-  description = "Alarmes sur l'instance partagée (métriques lues seulement) ; Candidature Express les a déjà."
+  description = "Alarmes sur la charge de l'instance partagée (métriques lues seulement, aucune action sur l'instance) : CPU, connexions, mémoire, disque, crédits CPU (AGENTS.md, règle 5)."
   type        = bool
-  default     = false
+  default     = true
 }
 
 # --- Exploitation et coûts ---

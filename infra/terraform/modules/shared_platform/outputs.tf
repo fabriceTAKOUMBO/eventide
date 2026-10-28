@@ -65,6 +65,33 @@ output "db_connection_limits" {
   }
 }
 
+output "shared_contact_points" {
+  description = "Ajouts posés sur des ressources de CINAF (ADR § 5) et alarmes de charge de l'instance partagée : contrôle du plan."
+  value = {
+    listener_rules       = local.ingress_enabled ? module.alb[0].listener_rules : {}
+    listener_certificate = local.ingress_enabled
+    postgres_ingress = {
+      security_group_id = aws_vpc_security_group_ingress_rule.shared_postgres.security_group_id
+      port              = aws_vpc_security_group_ingress_rule.shared_postgres.from_port
+      cidr_ipv4         = aws_vpc_security_group_ingress_rule.shared_postgres.cidr_ipv4
+    }
+    rds_metric_alarms = module.observability.rds_alarm_names
+  }
+}
+
+output "shared_capacity" {
+  description = "Part de l'environnement dans les capacités communes du compte : pic de vCPU Fargate et budget."
+  value = {
+    peak_fargate_vcpu   = local.peak_fargate_vcpu
+    fargate_vcpu_budget = var.fargate_vcpu_budget
+  }
+}
+
+output "task_registrar_function" {
+  description = "Registraire des définitions de tâche (seul moyen du déploiement d'enregistrer une révision)."
+  value       = module.task_registrar.function_name
+}
+
 output "backup_bucket" {
   description = "Bucket des sauvegardes logiques."
   value       = module.db_tools.backup_bucket

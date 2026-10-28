@@ -83,7 +83,7 @@ variable "log_ingestion_gb_per_day" {
 }
 
 variable "rds_alarms_enabled" {
-  description = "Alarmes sur l'instance PostgreSQL partagée (métriques lues seulement). false par défaut : Candidature Express les a déjà."
+  description = "Alarmes sur la charge de l'instance PostgreSQL partagée (métriques lues seulement, aucune action sur l'instance)."
   type        = bool
   default     = false
 }
@@ -103,4 +103,22 @@ variable "rds_connections_threshold" {
   description = "Seuil de connexions de l'instance partagée (toutes applications)."
   type        = number
   default     = 300
+}
+
+variable "rds_freeable_memory_mb" {
+  description = "Seuil de mémoire libre de l'instance partagée (Mo)."
+  type        = number
+  default     = 256
+}
+
+variable "rds_free_storage_gb" {
+  description = "Seuil de disque libre de l'instance partagée (Go)."
+  type        = number
+  default     = 10
+}
+
+variable "rds_cpu_credits_threshold" {
+  description = "Seuil de crédits CPU de l'instance partagée (classes db.t*)."
+  type        = number
+  default     = 100
 }

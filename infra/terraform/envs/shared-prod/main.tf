@@ -34,6 +34,10 @@ terraform {
       source  = "hashicorp/tls"
       version = "~> 4.1"
     }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.8"
+    }
   }
 
   # bucket et kms_key_id : fournis par -backend-config=backend.hcl (voir backend.hcl.example).
@@ -151,6 +155,13 @@ resource "terraform_data" "shared_infrastructure_checks" {
     precondition {
       condition     = var.domain_name == "" || trimsuffix(one(data.aws_route53_zone.this[*].name), ".") == var.domain_name
       error_message = "La zone Route 53 trouvée ne correspond pas à domain_name."
+    }
+    # The zone is looked up by name in the shared account, where the zones of the other
+    # platforms live too: we only write records (and match listener rules) in a zone the
+    # product owner marked as ours (runbook, phase 2).
+    precondition {
+      condition     = var.domain_name == "" || try(data.aws_route53_zone.this[0].tags["Project"], "") == "eventide"
+      error_message = "La zone Route 53 de domain_name ne porte pas l'étiquette Project = eventide : ce n'est peut-être pas la nôtre (compte partagé). Ne pas appliquer ; étiqueter NOTRE zone (runbook, phase 2) ou corriger domain_name."
     }
   }
 }

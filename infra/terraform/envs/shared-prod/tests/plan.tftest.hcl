@@ -4,6 +4,8 @@
 #   terraform init -backend=false && terraform test
 # Vérifie : le plan passe sans domaine et avec domaine ; les gardes de l'infrastructure partagée
 # (X-Forwarded-For, version PostgreSQL) font échouer le plan quand elles sont fausses.
+# Also: our listener rules (priorities and host names), the refusal of another platform's
+# domain or of a zone not marked Project = eventide, the RDS load alarms (prod only).
 
 # Toutes les configurations du fournisseur AWS sont simulées (défaut ET alias preprod) : sans
 # cela, la configuration non simulée tenterait un vrai appel STS.
@@ -18,6 +20,7 @@ mock_provider "aws" {
 
 mock_provider "random" {}
 mock_provider "tls" {}
+mock_provider "archive" {}
 
 variables {
   aws_account_id            = "466494951409"
@@ -56,6 +59,26 @@ run "without_domain_no_public_entry" {
     condition     = contains(output.prod.secrets_to_fill, "eventide/prod/gemini-api-key")
     error_message = "Secrets sous eventide/prod/*."
   }
+  assert {
+    condition     = length(output.prod.contact_points.listener_rules) == 0 && !output.prod.contact_points.listener_certificate
+    error_message = "Sans domaine : ni règle d'écouteur, ni certificat (seul point de contact réseau : la règle 5432)."
+  }
+  assert {
+    condition     = output.prod.contact_points.postgres_ingress.port == 5432 && output.prod.contact_points.postgres_ingress.cidr_ipv4 == null && output.prod.contact_points.postgres_ingress.security_group_id == "sg-070b4372d5a95ad2d"
+    error_message = "Règle d'entrée 5432 sur le groupe de la base, sans bloc CIDR."
+  }
+  assert {
+    condition     = length(output.prod.contact_points.rds_metric_alarms) == 5
+    error_message = "Alarmes de charge de l'instance partagée (métriques seulement) : CPU, connexions, mémoire, disque, crédits."
+  }
+  assert {
+    condition     = output.prod.shared_capacity.peak_fargate_vcpu <= output.prod.shared_capacity.fargate_vcpu_budget
+    error_message = "Part du quota Fargate commun au compte."
+  }
+  assert {
+    condition     = output.prod.task_registrar_function == "ev-prod-task-registrar"
+    error_message = "Registraire des définitions de tâche d'Eventide."
+  }
 }
 
 run "with_domain_public_entry" {
@@ -77,6 +100,21 @@ run "with_domain_public_entry" {
     condition     = output.prod.shared_alb != null
     error_message = "Avec un domaine, l'entrée passe par l'ALB partagé."
   }
+  assert {
+    condition     = output.prod.contact_points.listener_rules.api.priority == 400 && output.prod.contact_points.listener_rules.web.priority == 401
+    error_message = "Règles de production : 400 (api) et 401 (domaine nu et www)."
+  }
+  assert {
+    condition = (
+      join(",", output.prod.contact_points.listener_rules.api.hosts) == "api.eventide.example" &&
+      join(",", output.prod.contact_points.listener_rules.web.hosts) == "eventide.example,www.eventide.example"
+    )
+    error_message = "Nos règles ne correspondent qu'à nos noms d'hôte."
+  }
+  assert {
+    condition     = output.prod.contact_points.listener_certificate
+    error_message = "Notre certificat ajouté à l'écouteur (SNI)."
+  }
 }
 
 run "with_preprod" {
@@ -95,6 +133,48 @@ run "with_preprod" {
     condition     = output.preprod.db_connection_limits.total <= output.preprod.db_connection_limits.budget
     error_message = "Budget de connexions de la préproduction."
   }
+  assert {
+    condition = (
+      output.preprod.contact_points.listener_rules.api.priority == 420 &&
+      output.preprod.contact_points.listener_rules.web.priority == 421 &&
+      join(",", output.preprod.contact_points.listener_rules.api.hosts) == "api.preprod.eventide.example" &&
+      join(",", output.preprod.contact_points.listener_rules.web.hosts) == "preprod.eventide.example"
+    )
+    error_message = "Règles de préproduction : 420 et 421, sur les seuls noms preprod."
+  }
+  assert {
+    condition     = length(output.preprod.contact_points.rds_metric_alarms) == 0
+    error_message = "Une seule série d'alarmes sur l'instance partagée (production)."
+  }
+}
+
+run "domain_of_another_platform_is_refused" {
+  command = plan
+
+  variables {
+    domain_name = "app.candidatureexpress.com"
+  }
+
+  expect_failures = [var.domain_name]
+}
+
+run "zone_not_marked_ours_fails" {
+  command = plan
+
+  variables {
+    domain_name = "eventide.example"
+  }
+
+  override_data {
+    target = data.aws_route53_zone.this
+    values = {
+      zone_id = "Z0SOMEONEELSE"
+      name    = "eventide.example."
+      tags    = { Project = "cinaf" }
+    }
+  }
+
+  expect_failures = [terraform_data.shared_infrastructure_checks]
 }
 
 run "shared_alb_xff_changed_fails" {

@@ -136,12 +136,20 @@ resource "aws_cloudwatch_metric_alarm" "ecs" {
   ok_actions          = local.alarm_actions
 }
 
-# --- Instance PostgreSQL partagée (facultatif, métriques lues seulement) ------------------------
+# --- Instance PostgreSQL partagée (métriques lues seulement) -------------------------------------
+# Load of the shared instance (AGENTS.md rule 5): metric-only alarms (AWS/RDS metrics are read,
+# nothing of the instance is), notifying OUR topic. A CloudWatch alarm cannot act on an RDS
+# instance; the only actions here are SNS publications (checked again at plan time by
+# .github/scripts/check-plan-additions-only.sh). CPUCreditBalance only exists on burstable
+# classes (db.t*): absent metric = not breaching.
 
 resource "aws_cloudwatch_metric_alarm" "rds" {
   for_each = var.rds_alarms_enabled ? {
     cpu         = { metric = "CPUUtilization", statistic = "Average", threshold = var.rds_cpu_threshold, operator = "GreaterThanThreshold", description = "CPU de l instance partagee superieur a ${var.rds_cpu_threshold} %" }
     connections = { metric = "DatabaseConnections", statistic = "Maximum", threshold = var.rds_connections_threshold, operator = "GreaterThanThreshold", description = "Connexions de l instance partagee (toutes applications) superieures a ${var.rds_connections_threshold}" }
+    memory      = { metric = "FreeableMemory", statistic = "Minimum", threshold = var.rds_freeable_memory_mb * 1048576, operator = "LessThanThreshold", description = "Memoire libre de l instance partagee inferieure a ${var.rds_freeable_memory_mb} Mo" }
+    storage     = { metric = "FreeStorageSpace", statistic = "Minimum", threshold = var.rds_free_storage_gb * 1073741824, operator = "LessThanThreshold", description = "Disque libre de l instance partagee inferieur a ${var.rds_free_storage_gb} Go (nos bases, nos fichiers temporaires et le test de restauration y ecrivent)" }
+    cpu-credits = { metric = "CPUCreditBalance", statistic = "Minimum", threshold = var.rds_cpu_credits_threshold, operator = "LessThanThreshold", description = "Credits CPU de l instance partagee inferieurs a ${var.rds_cpu_credits_threshold} (classe db.t*)" }
   } : {}
   alarm_name          = "${var.name}-rds-${each.key}"
   alarm_description   = "${each.value.description} : verifier la part d Eventide dans Performance Insights (dimensions base et utilisateur)."

@@ -7,3 +7,8 @@ output "metric_namespace" {
   description = "Espace de noms CloudWatch des métriques issues des journaux."
   value       = local.metric_namespace
 }
+
+output "rds_alarm_names" {
+  description = "Alarmes de charge de l'instance partagée (métriques seulement)."
+  value       = [for a in aws_cloudwatch_metric_alarm.rds : a.alarm_name]
+}

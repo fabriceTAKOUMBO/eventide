@@ -89,9 +89,16 @@ variable "github_oidc_provider_arn" {
 
 # --- Base de données ---
 
+# Shared instance: only our own names (eventide*, ev_*), never a database or role of another
+# platform (checked again by modules/db_tools and at run time by its scripts).
 variable "db_name" {
   description = "Base applicative sur l'instance partagée (eventide)."
   type        = string
+
+  validation {
+    condition     = can(regex("^eventide(_[a-z0-9_]{1,40})?$", var.db_name))
+    error_message = "db_name : eventide ou eventide_<suffixe> ; jamais une base d'une autre plateforme."
+  }
 }
 
 variable "db_roles" {
@@ -101,6 +108,11 @@ variable "db_roles" {
     migrator = string
     backup   = string
   })
+
+  validation {
+    condition     = alltrue([for r in values(var.db_roles) : can(regex("^ev_[a-z0-9_]{1,60}$", r))])
+    error_message = "db_roles : ev_<nom> (préfixe d'Eventide) ; jamais un rôle d'une autre plateforme."
+  }
 }
 
 variable "db_role_connection_limits" {
@@ -151,6 +163,12 @@ variable "api" {
     db_pool_max = number
     requests    = number
   })
+}
+
+variable "fargate_vcpu_budget" {
+  description = "Pic de vCPU Fargate permis à l'environnement (quota commun à tout le compte partagé) : tâches api pendant un déploiement + 3 tâches ponctuelles."
+  type        = number
+  default     = 2
 }
 
 variable "deployment_maximum_percent" {

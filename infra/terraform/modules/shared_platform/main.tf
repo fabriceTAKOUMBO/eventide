@@ -7,8 +7,8 @@
 # Ressources propres (créées ici) : clé KMS alias/ev-<env>, dépôt ECR, cluster ECS (service api),
 # groupe de sécurité, secrets eventide/<env>/*, groupe cible, certificat, enregistrements DNS dans
 # NOTRE zone, base et rôles PostgreSQL (par tâche d'amorçage), sauvegardes logiques, contenu
-# (S3 + CloudFront + clé de signature), alarmes et sujet SNS, tâches planifiées, rôle de
-# déploiement GitHub.
+# (S3 + CloudFront + clé de signature), alarmes et sujet SNS, tâches planifiées, registraire des
+# définitions de tâche (Lambda), rôle de déploiement GitHub.
 #
 # Ajouts sur des ressources partagées (points de contact, détaillés et réversibles) :
 #   1. règles d'écouteur sur le 443 de l'ALB partagé (priorités 400-409 ; 420-429 en
@@ -64,6 +64,25 @@ resource "terraform_data" "connection_budget" {
     precondition {
       condition     = local.total_connection_limit <= var.db_connection_budget
       error_message = "Somme des limites des rôles (${local.total_connection_limit}) au-delà du budget ${var.db_connection_budget} accordé sur l'instance partagée."
+    }
+  }
+}
+
+# Shared account capacity: the Fargate vCPU quota is account-wide (CINAF, JobMinutes,
+# Candidature Express). The plan fails if this environment could hold more than its vCPU budget
+# at its peak: every api task during a deployment (max x surge) plus three one-off tasks
+# (migration, scheduled job, backup) of 0.25 vCPU.
+locals {
+  peak_fargate_vcpu = (var.api.max * local.deployment_surge * var.api.cpu + 3 * 256) / 1024
+}
+
+resource "terraform_data" "shared_capacity_budget" {
+  input = local.peak_fargate_vcpu
+
+  lifecycle {
+    precondition {
+      condition     = local.peak_fargate_vcpu <= var.fargate_vcpu_budget
+      error_message = "Pic de vCPU Fargate de l'environnement (${local.peak_fargate_vcpu} = ${var.api.max} tâches api x ${local.deployment_surge} (déploiement) x ${var.api.cpu / 1024} vCPU + 3 tâches ponctuelles x 0,25) au-delà du budget ${var.fargate_vcpu_budget} vCPU : le quota Fargate est commun à tout le compte (CINAF, JobMinutes, Candidature Express). Réduire, ou relever le budget après accord du product owner et lecture du quota."
     }
   }
 }
@@ -128,6 +147,7 @@ module "alb" {
   name                     = local.name
   vpc_id                   = var.vpc_id
   https_listener_arn       = var.https_listener_arn
+  domain                   = var.domain
   listener_rule_priorities = var.listener_rule_priorities
   api_hostname             = local.api_hostname
   web_hostnames            = local.web_hostnames
@@ -147,6 +167,15 @@ resource "aws_vpc_security_group_ingress_rule" "shared_postgres" {
   referenced_security_group_id = module.ecs.api_security_group_id
 
   tags = { Name = "${local.name}-postgres" }
+
+  # Standalone rule: PostgreSQL port only, source = OUR task security group only (never a CIDR,
+  # a prefix list or another group), on the database's own security group.
+  lifecycle {
+    precondition {
+      condition     = var.rds.port == 5432
+      error_message = "Règle d'entrée sur le groupe de la base partagée : port 5432 seulement (lu : ${var.rds.port})."
+    }
+  }
 }
 
 # --- Contenu (S3 privé + CloudFront + adresses signées) -----------------------------------------
@@ -387,22 +416,42 @@ module "observability" {
 
 # --- Déploiement continu -------------------------------------------------------------------------
 
+# Registers new revisions of OUR families only (the deploy role never reads nor writes a task
+# definition itself: modules/task_registrar).
+module "task_registrar" {
+  source = "../task_registrar"
+
+  name                 = local.name
+  register_inputs      = module.ecs.register_inputs
+  image_repository_url = module.ecr.repository_urls["api"]
+  pass_role_arns       = values(module.ecs.execution_role_arns)
+  kms_key_arn          = module.kms.key_arn
+  log_retention_days   = var.log_retention_days
+  revision_tags = {
+    Project     = "eventide"
+    Environment = var.environment
+    Repository  = var.github_repository
+    Hosting     = "shared"
+    ManagedBy   = "github-deploy"
+  }
+}
+
 resource "aws_ssm_parameter" "deploy_config" {
   name        = "${local.ssm_prefix}/deploy/config"
   description = "Configuration lue par .github/workflows/deploy.yml (aucun secret)"
   type        = "String"
   tier        = "Standard"
   value = jsonencode({
-    environment               = var.environment
-    hosting                   = "shared"
-    region                    = local.region
-    cpu_architecture          = var.cpu_architecture
-    cluster                   = module.ecs.cluster_name
-    services                  = module.ecs.service_names
-    task_families             = module.ecs.task_families
-    task_definition_templates = module.ecs.task_definition_arns
-    containers                = module.ecs.container_names
-    ecr                       = { api = module.ecr.repository_urls["api"] }
+    environment      = var.environment
+    hosting          = "shared"
+    region           = local.region
+    cpu_architecture = var.cpu_architecture
+    cluster          = module.ecs.cluster_name
+    services         = module.ecs.service_names
+    task_families    = module.ecs.task_families
+    task_registrar   = module.task_registrar.function_name
+    containers       = module.ecs.container_names
+    ecr              = { api = module.ecr.repository_urls["api"] }
     network = {
       subnets         = var.app_subnet_ids
       security_groups = [module.ecs.api_security_group_id]
@@ -429,6 +478,7 @@ module "github_oidc" {
   ecs_cluster_arn             = module.ecs.cluster_arn
   ecs_cluster_name            = module.ecs.cluster_name
   ecs_service_arns            = module.ecs.service_arns
+  task_registrar_function_arn = module.task_registrar.function_arn
   migrate_task_family         = module.ecs.task_families["migrate"]
   pass_role_arns              = values(module.ecs.execution_role_arns)
   deploy_config_parameter_arn = aws_ssm_parameter.deploy_config.arn

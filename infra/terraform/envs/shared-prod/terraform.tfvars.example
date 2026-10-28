@@ -62,6 +62,10 @@ voice = {
 
 content_custom_domain = false # true : cdn.<domaine> (exige domain_name)
 
+# Alarmes sur la charge de l'instance PostgreSQL partagée (métriques lues seulement, aucune
+# action sur l'instance) : CPU, connexions, mémoire, disque, crédits CPU.
+rds_alarms_enabled = true
+
 alert_emails  = ["alertes@example.com"]
 budget_emails = ["alertes@example.com"]
 
