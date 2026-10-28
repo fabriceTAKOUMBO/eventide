@@ -28,7 +28,11 @@ class BrandLogo extends StatelessWidget {
         decoration: BoxDecoration(
           borderRadius: radius,
           boxShadow: const [
-            BoxShadow(color: Color(0x80000000), blurRadius: 36, offset: Offset(0, 14)),
+            BoxShadow(
+              color: Color(0x80000000),
+              blurRadius: 36,
+              offset: Offset(0, 14),
+            ),
           ],
         ),
         foregroundDecoration: BoxDecoration(
@@ -40,7 +44,11 @@ class BrandLogo extends StatelessWidget {
           child: ValueListenableBuilder<String?>(
             valueListenable: LandscapeImages.brandLogo,
             builder: (context, asset, _) => asset != null
-                ? Image.asset(asset, fit: BoxFit.cover, errorBuilder: (c, e, s) => _painted())
+                ? Image.asset(
+                    asset,
+                    fit: BoxFit.cover,
+                    errorBuilder: (c, e, s) => _painted(),
+                  )
                 : _painted(),
           ),
         ),
@@ -48,7 +56,12 @@ class BrandLogo extends StatelessWidget {
     );
   }
 
-  Widget _painted() => RepaintBoundary(child: CustomPaint(size: Size.square(size), painter: const BrandDropPainter()));
+  Widget _painted() => RepaintBoundary(
+    child: CustomPaint(
+      size: Size.square(size),
+      painter: const BrandDropPainter(),
+    ),
+  );
 }
 
 const String _dropPath =
@@ -62,10 +75,30 @@ class BrandDropPainter extends CustomPainter {
   static final Path _drop = parseSvgPath(_dropPath);
 
   static const List<(double, double, double)> _droplets = [
-    (92, 128, 11), (428, 98, 7), (74, 392, 13), (444, 410, 9), (420, 292, 5), (150, 70, 5.5), (448, 48, 19),
-    (58, 66, 8), (210, 50, 9), (300, 38, 6), (366, 64, 12), (474, 176, 6), (462, 336, 10), (408, 372, 17),
-    (40, 178, 9), (116, 304, 7), (62, 448, 21), (180, 468, 12), (296, 466, 7), (346, 440, 10), (132, 204, 15),
-    (398, 206, 11), (140, 410, 6), (470, 470, 7),
+    (92, 128, 11),
+    (428, 98, 7),
+    (74, 392, 13),
+    (444, 410, 9),
+    (420, 292, 5),
+    (150, 70, 5.5),
+    (448, 48, 19),
+    (58, 66, 8),
+    (210, 50, 9),
+    (300, 38, 6),
+    (366, 64, 12),
+    (474, 176, 6),
+    (462, 336, 10),
+    (408, 372, 17),
+    (40, 178, 9),
+    (116, 304, 7),
+    (62, 448, 21),
+    (180, 468, 12),
+    (296, 466, 7),
+    (346, 440, 10),
+    (132, 204, 15),
+    (398, 206, 11),
+    (140, 410, 6),
+    (470, 470, 7),
   ];
 
   @override
@@ -77,43 +110,76 @@ class BrandDropPainter extends CustomPainter {
     canvas.clipRRect(RRect.fromRectAndRadius(full, const Radius.circular(112)));
 
     // Blurred landscape behind dark glass.
-    canvas.saveLayer(full, Paint()..imageFilter = ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16, tileMode: TileMode.clamp));
+    canvas.saveLayer(
+      full,
+      Paint()
+        ..imageFilter = ui.ImageFilter.blur(
+          sigmaX: 16,
+          sigmaY: 16,
+          tileMode: TileMode.clamp,
+        ),
+    );
     paintLandscapeCover(canvas, const Size(512, 512), 'cascade');
     canvas.restore();
     canvas.drawRect(full, Paint()..color = const Color(0xBD04140F));
     canvas.drawRect(
       full,
       Paint()
-        ..shader = ui.Gradient.radial(const Offset(256, 235), 400, const [Color(0x00000000), Color(0x9E000000)], const [0.35, 1]),
+        ..shader = ui.Gradient.radial(
+          const Offset(256, 235),
+          400,
+          const [Color(0x00000000), Color(0x9E000000)],
+          const [0.35, 1],
+        ),
     );
 
     // Small drops on the glass.
     for (final (x, y, r) in _droplets) {
       final c = Offset(x, y);
-      canvas.drawCircle(c.translate(r * 0.12, r * 0.28), r * 1.02, Paint()
-        ..color = const Color(0x66000000)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.4));
+      canvas.drawCircle(
+        c.translate(r * 0.12, r * 0.28),
+        r * 1.02,
+        Paint()
+          ..color = const Color(0x66000000)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.4),
+      );
       canvas.drawCircle(
         c,
         r,
         Paint()
-          ..shader = ui.Gradient.radial(c.translate(0, r * 0.24), r * 1.2,
-              const [Color(0x57CDEEE0), Color(0x401B3D35), Color(0x8C000000)], const [0, 0.6, 1]),
+          ..shader = ui.Gradient.radial(
+            c.translate(0, r * 0.24),
+            r * 1.2,
+            const [Color(0x57CDEEE0), Color(0x401B3D35), Color(0x8C000000)],
+            const [0, 0.6, 1],
+          ),
       );
-      canvas.drawCircle(c, r, Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2
-        ..color = const Color(0x47FFFFFF));
-      canvas.drawCircle(c.translate(-r * 0.36, -r * 0.4), r * 0.2 < 1.6 ? 1.6 : r * 0.2, Paint()..color = const Color(0xD9FFFFFF));
+      canvas.drawCircle(
+        c,
+        r,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2
+          ..color = const Color(0x47FFFFFF),
+      );
+      canvas.drawCircle(
+        c.translate(-r * 0.36, -r * 0.4),
+        r * 0.2 < 1.6 ? 1.6 : r * 0.2,
+        Paint()..color = const Color(0xD9FFFFFF),
+      );
     }
     for (final (x, y, r, color) in const [
       (120.0, 210.0, 54.0, Color(0x1A8FD3B0)),
       (400.0, 170.0, 44.0, Color(0x1AF2C98A)),
       (380.0, 380.0, 64.0, Color(0x177FC6C0)),
     ]) {
-      canvas.drawCircle(Offset(x, y), r, Paint()
-        ..color = color
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8));
+      canvas.drawCircle(
+        Offset(x, y),
+        r,
+        Paint()
+          ..color = color
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+      );
     }
 
     // Main drop.
@@ -129,7 +195,13 @@ class BrandDropPainter extends CustomPainter {
     );
     canvas.save();
     canvas.clipPath(_drop);
-    canvas.saveLayer(full, Paint()..colorFilter = ColorFilter.matrix(landscapeMatrix(brightness: 1.35, saturation: 1.7)));
+    canvas.saveLayer(
+      full,
+      Paint()
+        ..colorFilter = ColorFilter.matrix(
+          landscapeMatrix(brightness: 1.35, saturation: 1.7),
+        ),
+    );
     canvas.translate(256, 259);
     canvas.rotate(3.14159265);
     canvas.translate(-256, -259);
@@ -139,12 +211,21 @@ class BrandDropPainter extends CustomPainter {
     canvas.drawRect(
       const Rect.fromLTWH(120, 90, 280, 340),
       Paint()
-        ..shader = ui.Gradient.radial(const Offset(256, 316), 132,
-            const [Color(0x00000000), Color(0x61000000), Color(0xC7000000)], const [0.5, 0.82, 1]),
+        ..shader = ui.Gradient.radial(
+          const Offset(256, 316),
+          132,
+          const [Color(0x00000000), Color(0x61000000), Color(0xC7000000)],
+          const [0.5, 0.82, 1],
+        ),
     );
     canvas.drawRect(
       const Rect.fromLTWH(120, 90, 280, 340),
-      Paint()..shader = ui.Gradient.linear(const Offset(0, 90), const Offset(0, 226), const [Color(0x47000000), Color(0x00000000)]),
+      Paint()
+        ..shader = ui.Gradient.linear(
+          const Offset(0, 90),
+          const Offset(0, 226),
+          const [Color(0x47000000), Color(0x00000000)],
+        ),
     );
     canvas.drawOval(
       Rect.fromCenter(center: const Offset(262, 388), width: 172, height: 56),
@@ -155,8 +236,12 @@ class BrandDropPainter extends CustomPainter {
     canvas.drawPath(
       _drop,
       Paint()
-        ..shader = ui.Gradient.linear(const Offset(144, 108), const Offset(368, 412),
-            const [Color(0x8CFFFFFF), Color(0x00FFFFFF)], const [0, 0.45]),
+        ..shader = ui.Gradient.linear(
+          const Offset(144, 108),
+          const Offset(368, 412),
+          const [Color(0x8CFFFFFF), Color(0x00FFFFFF)],
+          const [0, 0.45],
+        ),
     );
     canvas.restore();
     canvas.drawPath(
@@ -165,23 +250,55 @@ class BrandDropPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3
         ..strokeJoin = StrokeJoin.round
-        ..shader = ui.Gradient.linear(const Offset(144, 108), const Offset(368, 412),
-            const [Color(0xD9FFFFFF), Color(0x38FFFFFF), Color(0x80FFFFFF)], const [0, 0.5, 1]),
+        ..shader = ui.Gradient.linear(
+          const Offset(144, 108),
+          const Offset(368, 412),
+          const [Color(0xD9FFFFFF), Color(0x38FFFFFF), Color(0x80FFFFFF)],
+          const [0, 0.5, 1],
+        ),
     );
-    void highlight(Offset c, double rx, double ry, double deg, Color color, {double blur = 0}) {
+    void highlight(
+      Offset c,
+      double rx,
+      double ry,
+      double deg,
+      Color color, {
+      double blur = 0,
+    }) {
       canvas.save();
       canvas.translate(c.dx, c.dy);
       canvas.rotate(deg * 3.14159265 / 180);
       final paint = Paint()..color = color;
       if (blur > 0) paint.maskFilter = MaskFilter.blur(BlurStyle.normal, blur);
-      canvas.drawOval(Rect.fromCenter(center: Offset.zero, width: rx * 2, height: ry * 2), paint);
+      canvas.drawOval(
+        Rect.fromCenter(center: Offset.zero, width: rx * 2, height: ry * 2),
+        paint,
+      );
       canvas.restore();
     }
 
-    highlight(const Offset(190, 280), 8, 46, 10, const Color(0x66FFFFFF), blur: 2.4);
+    highlight(
+      const Offset(190, 280),
+      8,
+      46,
+      10,
+      const Color(0x66FFFFFF),
+      blur: 2.4,
+    );
     highlight(const Offset(190, 280), 3.8, 38, 10, const Color(0xE6FFFFFF));
-    canvas.drawCircle(const Offset(238, 200), 5, Paint()..color = const Color(0xD9FFFFFF));
-    highlight(const Offset(332, 366), 6, 17, 34, const Color(0x80FFFFFF), blur: 2.4);
+    canvas.drawCircle(
+      const Offset(238, 200),
+      5,
+      Paint()..color = const Color(0xD9FFFFFF),
+    );
+    highlight(
+      const Offset(332, 366),
+      6,
+      17,
+      34,
+      const Color(0x80FFFFFF),
+      blur: 2.4,
+    );
     canvas.restore();
     canvas.restore();
   }
@@ -202,6 +319,7 @@ class Wordmark extends StatelessWidget {
     final painter = _WordmarkPainter(fontSize);
     return Semantics(
       label: 'Eventide',
+      container: true,
       excludeSemantics: true,
       child: CustomPaint(size: painter.measure(), painter: painter),
     );
@@ -212,11 +330,15 @@ class _WordmarkPainter extends CustomPainter {
   _WordmarkPainter(this.fontSize);
 
   final double fontSize;
-  static final Path _dropPath = parseSvgPath('M10 1 C10 1 2 11 2 18 a8 8 0 0 0 16 0 C18 11 10 1 10 1 Z');
+  static final Path _dropPath = parseSvgPath(
+    'M10 1 C10 1 2 11 2 18 a8 8 0 0 0 16 0 C18 11 10 1 10 1 Z',
+  );
 
   TextPainter _layout() {
     final style = fraunces(fontSize).copyWith(
-      shadows: const [Shadow(color: Color(0x8C000000), blurRadius: 18, offset: Offset(0, 2))],
+      shadows: const [
+        Shadow(color: Color(0x8C000000), blurRadius: 18, offset: Offset(0, 2)),
+      ],
     );
     return TextPainter(
       text: TextSpan(text: 'Eventıde', style: style),
@@ -237,8 +359,12 @@ class _WordmarkPainter extends CustomPainter {
     final tp = _layout();
     tp.paint(canvas, Offset.zero);
     final em = fontSize;
-    final end = tp.getOffsetForCaret(const TextPosition(offset: 6), Rect.zero).dx;
-    final baseline = tp.computeDistanceToActualBaseline(TextBaseline.alphabetic);
+    final end = tp
+        .getOffsetForCaret(const TextPosition(offset: 6), Rect.zero)
+        .dx;
+    final baseline = tp.computeDistanceToActualBaseline(
+      TextBaseline.alphabetic,
+    );
     tp.dispose();
     final w = 0.21 * em;
     final h = 0.29 * em;
@@ -250,14 +376,22 @@ class _WordmarkPainter extends CustomPainter {
     canvas.drawPath(
       _dropPath,
       Paint()
-        ..shader = ui.Gradient.linear(const Offset(0, 0), const Offset(0, 28), const [Color(0xFFEAFCF3), Color(0xFF74C4AB)]),
+        ..shader = ui.Gradient.linear(
+          const Offset(0, 0),
+          const Offset(0, 28),
+          const [Color(0xFFEAFCF3), Color(0xFF74C4AB)],
+        ),
     );
     canvas.translate(7, 17);
     canvas.rotate(12 * 3.14159265 / 180);
-    canvas.drawOval(Rect.fromCenter(center: Offset.zero, width: 3.2, height: 6.4), Paint()..color = const Color(0xD9FFFFFF));
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset.zero, width: 3.2, height: 6.4),
+      Paint()..color = const Color(0xD9FFFFFF),
+    );
     canvas.restore();
   }
 
   @override
-  bool shouldRepaint(_WordmarkPainter oldDelegate) => oldDelegate.fontSize != fontSize;
+  bool shouldRepaint(_WordmarkPainter oldDelegate) =>
+      oldDelegate.fontSize != fontSize;
 }

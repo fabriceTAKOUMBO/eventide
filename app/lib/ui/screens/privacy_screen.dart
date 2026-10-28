@@ -41,7 +41,10 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
     }
     if (!mounted) return;
     if (data.isEmpty) {
-      ToastHost.show(context, 'L’export n’a pas pu être préparé. Réessayez plus tard.');
+      ToastHost.show(
+        context,
+        'L’export n’a pas pu être préparé. Réessayez plus tard.',
+      );
       return;
     }
     final copy = await showVitreDialog<bool>(
@@ -59,7 +62,10 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
           borderRadius: BorderRadius.circular(16),
         ),
         child: SingleChildScrollView(
-          child: SelectableText(data, style: manrope(14, color: VitreColors.whiteA(0.86))),
+          child: SelectableText(
+            data,
+            style: manrope(14, color: VitreColors.whiteA(0.86)),
+          ),
         ),
       ),
     );
@@ -75,8 +81,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
       context,
       icon: VIcons.trash,
       title: 'Supprimer mes données ?',
-      message:
-          'Vos favoris, vos programmations et vos nuits seront effacés de ce téléphone et de nos serveurs. Vos achats restent liés à votre compte Google Play.',
+      message: 'Vos favoris, vos programmations et vos nuits seront effacés de ce téléphone et de nos serveurs. Vos achats restent liés à votre compte Google Play.',
       confirm: 'Supprimer',
       cancel: 'Garder mes données',
     );
@@ -94,20 +99,20 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
   Widget build(BuildContext context) {
     final p = Vitre.of(context);
     Widget section(String title, String body) => Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: GlassCard(
-            radius: 24,
-            padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: manrope(19, weight: 700)),
-                const SizedBox(height: 6),
-                Text(body, style: manrope(17, height: 1.4, color: p.text(0.84))),
-              ],
-            ),
-          ),
-        );
+      padding: const EdgeInsets.only(bottom: 12),
+      child: GlassCard(
+        radius: 24,
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: manrope(19, weight: 700)),
+            const SizedBox(height: 6),
+            Text(body, style: manrope(17, height: 1.4, color: p.text(0.84))),
+          ],
+        ),
+      ),
+    );
     return VitreSheet(
       title: 'Confidentialité et données',
       titleSize: 24,
@@ -153,9 +158,19 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
               style: manrope(16, height: 1.35, color: p.text(0.72)),
             ),
           const SizedBox(height: 22),
-          PrimaryButton(label: 'Exporter mes données', icon: VIcons.download, busy: _exporting, onPressed: _export),
+          PrimaryButton(
+            label: 'Exporter mes données',
+            icon: VIcons.download,
+            busy: _exporting,
+            onPressed: _export,
+          ),
           const SizedBox(height: 12),
-          SecondaryButton(label: 'Supprimer mes données', icon: VIcons.trash, busy: _deleting, onPressed: _delete),
+          SecondaryButton(
+            label: 'Supprimer mes données',
+            icon: VIcons.trash,
+            busy: _deleting,
+            onPressed: _delete,
+          ),
         ],
       ),
     );

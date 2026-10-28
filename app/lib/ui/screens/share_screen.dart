@@ -39,10 +39,13 @@ class _ShareScreenState extends State<ShareScreen> {
     final model = context.model;
     final p = Vitre.of(context);
     final scene = model.scene;
-    final landscape = model.catalog.landscape(scene.landscapeId) ?? model.catalog.defaultLandscape;
+    final landscape =
+        model.catalog.landscape(scene.landscapeId) ??
+        model.catalog.defaultLandscape;
     final names = [
       for (final kind in LayerKind.values)
-        for (final l in scene.layers(kind)) model.catalog.item(kind, l.id)?.name,
+        for (final l in scene.layers(kind))
+          model.catalog.item(kind, l.id)?.name,
     ].whereType<String>().join(' · ');
     return VitreSheet(
       title: 'Partager',
@@ -57,14 +60,24 @@ class _ShareScreenState extends State<ShareScreen> {
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(28),
               color: VitreColors.thumbFallback,
-              boxShadow: const [BoxShadow(color: Color(0x66000000), blurRadius: 40, offset: Offset(0, 16))],
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x66000000),
+                  blurRadius: 40,
+                  offset: Offset(0, 16),
+                ),
+              ],
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(28),
               child: Stack(
                 children: [
                   Positioned.fill(
-                    child: LandscapeImage(landscapeId: landscape.id, style: landscape.style, moment: scene.moment),
+                    child: LandscapeImage(
+                      landscapeId: landscape.id,
+                      style: landscape.style,
+                      moment: scene.moment,
+                    ),
                   ),
                   const Positioned.fill(
                     child: DecoratedBox(
@@ -84,9 +97,20 @@ class _ShareScreenState extends State<ShareScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(landscape.name, style: manrope(26, weight: 600, letterSpacingEm: -0.015, height: 1.2)),
+                        Text(
+                          landscape.name,
+                          style: manrope(
+                            26,
+                            weight: 600,
+                            letterSpacingEm: -0.015,
+                            height: 1.2,
+                          ),
+                        ),
                         const SizedBox(height: 4),
-                        Text(names.isEmpty ? 'Sans son' : names, style: manrope(17, color: p.text(0.82))),
+                        Text(
+                          names.isEmpty ? 'Sans son' : names,
+                          style: manrope(17, color: p.text(0.82)),
+                        ),
                       ],
                     ),
                   ),
@@ -103,7 +127,12 @@ class _ShareScreenState extends State<ShareScreen> {
             ),
           ),
           const SizedBox(height: 24),
-          PrimaryButton(label: 'Envoyer à un proche', icon: VIcons.share, busy: _sending, onPressed: _send),
+          PrimaryButton(
+            label: 'Envoyer à un proche',
+            icon: VIcons.share,
+            busy: _sending,
+            onPressed: _send,
+          ),
           const SizedBox(height: 12),
           Semantics(
             liveRegion: true,

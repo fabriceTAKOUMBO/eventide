@@ -5,7 +5,8 @@ import '../app/app_model.dart';
 /// Makes the [AppModel] available to every screen and rebuilds dependents when it
 /// notifies.
 class ModelScope extends InheritedNotifier<AppModel> {
-  const ModelScope({super.key, required AppModel model, required super.child}) : super(notifier: model);
+  const ModelScope({super.key, required AppModel model, required super.child})
+    : super(notifier: model);
 
   /// Reads the model and rebuilds the caller when it changes.
   static AppModel of(BuildContext context) {

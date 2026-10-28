@@ -27,12 +27,14 @@ class VitrePalette {
   final bool highContrast;
 
   /// Glass panel background.
-  Color glass(double alpha) =>
-      VitreColors.glassBase(highContrast ? math.min(0.94, alpha + 0.24) : alpha);
+  Color glass(double alpha) => VitreColors.glassBase(
+    highContrast ? math.min(0.94, alpha + 0.24) : alpha,
+  );
 
   /// Hairline borders of panels and buttons.
-  Color border(double alpha) =>
-      VitreColors.whiteA(highContrast ? math.max(0.62, math.min(1, alpha * 3)) : alpha);
+  Color border(double alpha) => VitreColors.whiteA(
+    highContrast ? math.max(0.62, math.min(1, alpha * 3)) : alpha,
+  );
 
   /// Secondary text (white with reduced opacity; pure white in high contrast).
   Color text(double alpha) => VitreColors.whiteA(highContrast ? 1 : alpha);
@@ -44,7 +46,8 @@ class VitrePalette {
   Color get primaryText => VitreColors.white;
 
   @override
-  bool operator ==(Object other) => other is VitrePalette && other.highContrast == highContrast;
+  bool operator ==(Object other) =>
+      other is VitrePalette && other.highContrast == highContrast;
 
   @override
   int get hashCode => highContrast.hashCode;
@@ -94,7 +97,11 @@ TextStyle manrope(
 }
 
 /// Fraunces (wordmark only). Optical size follows the font size like browsers do.
-TextStyle fraunces(double size, {int weight = 500, Color color = VitreColors.wordmark}) {
+TextStyle fraunces(
+  double size, {
+  int weight = 500,
+  Color color = VitreColors.wordmark,
+}) {
   return TextStyle(
     fontFamily: 'Fraunces',
     fontSize: size,
@@ -116,7 +123,8 @@ FontWeight _weight(int w) {
 }
 
 /// Durations that collapse to zero with reduced motion.
-Duration motion(BuildContext context, Duration d) => Vitre.reduceMotion(context) ? Duration.zero : d;
+Duration motion(BuildContext context, Duration d) =>
+    Vitre.reduceMotion(context) ? Duration.zero : d;
 
 /// Multiplies the system text scale by the in-app A−/A+ factor.
 /// Keeps Android 14 non-linear scaling of the system scaler.
@@ -135,7 +143,9 @@ class MultipliedTextScaler extends TextScaler {
 
   @override
   bool operator ==(Object other) =>
-      other is MultipliedTextScaler && other.base == base && other.factor == factor;
+      other is MultipliedTextScaler &&
+      other.base == base &&
+      other.factor == factor;
 
   @override
   int get hashCode => Object.hash(base, factor);
@@ -157,10 +167,17 @@ ThemeData vitreMaterialTheme() {
     splashFactory: InkSparkle.splashFactory,
   );
   return base.copyWith(
-    textTheme: base.textTheme.apply(fontFamily: 'Manrope', bodyColor: Colors.white, displayColor: Colors.white),
+    textTheme: base.textTheme.apply(
+      fontFamily: 'Manrope',
+      bodyColor: Colors.white,
+      displayColor: Colors.white,
+    ),
     tooltipTheme: TooltipThemeData(
       textStyle: manrope(16, weight: 600, color: VitreColors.ink),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+      ),
       waitDuration: const Duration(milliseconds: 600),
     ),
   );

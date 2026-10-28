@@ -31,7 +31,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
   Widget build(BuildContext context) {
     final model = context.model;
     final p = Vitre.of(context);
-    final landscape = model.catalog.landscape(model.scene.landscapeId) ?? model.catalog.defaultLandscape;
+    final landscape =
+        model.catalog.landscape(model.scene.landscapeId) ??
+        model.catalog.defaultLandscape;
     final media = MediaQuery.of(context);
     return Scaffold(
       backgroundColor: VitreColors.page,
@@ -53,7 +55,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Color(0x66000000), Color(0x00000000), Color(0x00000000), Color(0x80000000)],
+                    colors: [
+                      Color(0x66000000),
+                      Color(0x00000000),
+                      Color(0x00000000),
+                      Color(0x80000000),
+                    ],
                     stops: [0, 0.22, 0.5, 1],
                   ),
                 ),
@@ -67,7 +74,12 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                   constraints: BoxConstraints(minHeight: constraints.maxHeight),
                   child: IntrinsicHeight(
                     child: Padding(
-                      padding: EdgeInsets.fromLTRB(14, media.padding.top + 40, 14, 18 + media.padding.bottom),
+                      padding: EdgeInsets.fromLTRB(
+                        14,
+                        media.padding.top + 40,
+                        14,
+                        18 + media.padding.bottom,
+                      ),
                       child: Column(
                         children: [
                           const BrandLogo(size: 104),
@@ -82,18 +94,31 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                               children: [
                                 Semantics(
                                   header: true,
-                                  child: Text('Bienvenue', style: manrope(34, weight: 600, letterSpacingEm: -0.02, height: 1.15)),
+                                  child: Text(
+                                    'Bienvenue',
+                                    style: manrope(
+                                      34,
+                                      weight: 600,
+                                      letterSpacingEm: -0.02,
+                                      height: 1.15,
+                                    ),
+                                  ),
                                 ),
                                 const SizedBox(height: 10),
                                 Text(
                                   'Des sons de nature pour vous détendre et mieux dormir.',
-                                  style: manrope(19, height: 1.4, color: p.text(0.84)),
+                                  style: manrope(
+                                    19,
+                                    height: 1.4,
+                                    color: p.text(0.84),
+                                  ),
                                 ),
                                 const SizedBox(height: 26),
                                 PrimaryButton(
                                   label: 'Commencer',
                                   busy: _busy,
-                                  onPressed: () => _run(model.completeOnboarding),
+                                  onPressed: () =>
+                                      _run(model.completeOnboarding),
                                 ),
                                 const SizedBox(height: 8),
                                 LinkButton(
@@ -104,9 +129,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                                   onPressed: _busy
                                       ? null
                                       : () => _run(() async {
-                                            await model.signInWithGoogle();
-                                            if (!model.onboarded) await model.completeOnboarding();
-                                          }),
+                                          await model.signInWithGoogle();
+                                          if (!model.onboarded) {
+                                            await model.completeOnboarding();
+                                          }
+                                        }),
                                 ),
                                 const SizedBox(height: 2),
                                 Padding(

@@ -15,7 +15,15 @@ import '../widgets/vicons.dart';
 import 'home/home_menu.dart' show LandscapeThumbnail;
 
 const List<String> _letters = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
-const List<String> _names = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+const List<String> _names = [
+  'Lundi',
+  'Mardi',
+  'Mercredi',
+  'Jeudi',
+  'Vendredi',
+  'Samedi',
+  'Dimanche',
+];
 
 class ScheduleEditorScreen extends StatefulWidget {
   const ScheduleEditorScreen({super.key, this.existing});
@@ -54,10 +62,10 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
   void _update(Schedule s) => setState(() => _draft = s);
 
   int get _rampMinutes => switch (_ramp) {
-        _Ramp.five => 5,
-        _Ramp.ten => 10,
-        _Ramp.custom => _custom,
-      };
+    _Ramp.five => 5,
+    _Ramp.ten => 10,
+    _Ramp.custom => _custom,
+  };
 
   Future<void> _save() async {
     final model = context.readModel;
@@ -66,8 +74,14 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
     setState(() => _saving = true);
     try {
       // The reminder is a notification: explain before asking (dossier § 4).
-      await explainAndRequestPermission(context, model, PermissionKind.notifications);
-      final ok = await model.saveSchedule(draft.copyWith(rampMinutes: _rampMinutes));
+      await explainAndRequestPermission(
+        context,
+        model,
+        PermissionKind.notifications,
+      );
+      final ok = await model.saveSchedule(
+        draft.copyWith(rampMinutes: _rampMinutes),
+      );
       if (ok) {
         toasts?.show('Programmation enregistrée');
         navigator.maybePop();
@@ -84,7 +98,8 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
       context,
       icon: VIcons.trash,
       title: 'Supprimer cette programmation ?',
-      message: 'Le son ne démarrera plus à ${formatClock(draft.hour, draft.minute)}.',
+      message:
+          'Le son ne démarrera plus à ${formatClock(draft.hour, draft.minute)}.',
       confirm: 'Supprimer',
       cancel: 'Garder',
     );
@@ -97,11 +112,17 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
   Widget build(BuildContext context) {
     final model = context.model;
     final p = Vitre.of(context);
-    final landscape = model.catalog.landscape(draft.landscapeId) ?? model.catalog.defaultLandscape;
-    final summary = draft.days.isEmpty ? 'Choisissez au moins un jour' : draft.daysSummary();
+    final landscape =
+        model.catalog.landscape(draft.landscapeId) ??
+        model.catalog.defaultLandscape;
+    final summary = draft.days.isEmpty
+        ? 'Choisissez au moins un jour'
+        : draft.daysSummary();
 
     return VitreSheet(
-      title: widget.existing == null ? 'Nouvelle programmation' : 'Modifier la programmation',
+      title: widget.existing == null
+          ? 'Nouvelle programmation'
+          : 'Modifier la programmation',
       titleSize: 24,
       top: 60,
       headerTop: 24,
@@ -117,7 +138,10 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SectionLabel('Heure de départ', padding: EdgeInsets.fromLTRB(4, 2, 4, 2)),
+          const SectionLabel(
+            'Heure de départ',
+            padding: EdgeInsets.fromLTRB(4, 2, 4, 2),
+          ),
           Semantics(
             label: 'Heure de départ : ${formatClock(draft.hour, draft.minute)}',
             container: true,
@@ -128,8 +152,10 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
                   text: draft.hour.toString().padLeft(2, '0'),
                   upLabel: 'Une heure plus tard',
                   downLabel: 'Une heure plus tôt',
-                  onUp: () => _update(draft.copyWith(hour: (draft.hour + 1) % 24)),
-                  onDown: () => _update(draft.copyWith(hour: (draft.hour + 23) % 24)),
+                  onUp: () =>
+                      _update(draft.copyWith(hour: (draft.hour + 1) % 24)),
+                  onDown: () =>
+                      _update(draft.copyWith(hour: (draft.hour + 23) % 24)),
                 ),
                 const SizedBox(width: 6),
                 ExcludeSemantics(
@@ -143,8 +169,14 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
                   text: draft.minute.toString().padLeft(2, '0'),
                   upLabel: 'Cinq minutes plus tard',
                   downLabel: 'Cinq minutes plus tôt',
-                  onUp: () => _update(draft.copyWith(minute: ((draft.minute ~/ 5) * 5 + 5) % 60)),
-                  onDown: () => _update(draft.copyWith(minute: ((draft.minute + 4) ~/ 5 * 5 + 55) % 60)),
+                  onUp: () => _update(
+                    draft.copyWith(minute: ((draft.minute ~/ 5) * 5 + 5) % 60),
+                  ),
+                  onDown: () => _update(
+                    draft.copyWith(
+                      minute: ((draft.minute + 4) ~/ 5 * 5 + 55) % 60,
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -154,37 +186,45 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
             label: 'Jours de la semaine',
             container: true,
             explicitChildNodes: true,
-            child: LayoutBuilder(builder: (context, constraints) {
-              final size = ((constraints.maxWidth - 6 * 4) / 7).clamp(40.0, 48.0);
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  for (var d = 1; d <= 7; d++)
-                    SizedBox(
-                      width: size,
-                      child: ChoiceChipButton(
-                        label: _letters[d - 1],
-                        semanticLabel: _names[d - 1],
-                        selected: draft.days.contains(d),
-                        radio: false,
-                        height: 48,
-                        fontSize: 17,
-                        onTap: () {
-                          final days = {...draft.days};
-                          if (!days.remove(d)) days.add(d);
-                          _update(draft.copyWith(days: days));
-                        },
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final size = ((constraints.maxWidth - 6 * 4) / 7).clamp(
+                  40.0,
+                  48.0,
+                );
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    for (var d = 1; d <= 7; d++)
+                      SizedBox(
+                        width: size,
+                        child: ChoiceChipButton(
+                          label: _letters[d - 1],
+                          semanticLabel: _names[d - 1],
+                          selected: draft.days.contains(d),
+                          radio: false,
+                          height: 48,
+                          fontSize: 17,
+                          onTap: () {
+                            final days = {...draft.days};
+                            if (!days.remove(d)) days.add(d);
+                            _update(draft.copyWith(days: days));
+                          },
+                        ),
                       ),
-                    ),
-                ],
-              );
-            }),
+                  ],
+                );
+              },
+            ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 10, 4, 0),
             child: Text(summary, style: manrope(17, color: p.text(0.84))),
           ),
-          const SectionLabel('Le son monte doucement pendant', padding: EdgeInsets.fromLTRB(4, 18, 4, 8)),
+          const SectionLabel(
+            'Le son monte doucement pendant',
+            padding: EdgeInsets.fromLTRB(4, 18, 4, 8),
+          ),
           Semantics(
             label: 'Durée du démarrage progressif',
             container: true,
@@ -193,17 +233,29 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
               children: [
                 Expanded(
                   flex: 10,
-                  child: ChoiceChipButton(label: '5 min', selected: _ramp == _Ramp.five, onTap: () => setState(() => _ramp = _Ramp.five)),
+                  child: ChoiceChipButton(
+                    label: '5 min',
+                    selected: _ramp == _Ramp.five,
+                    onTap: () => setState(() => _ramp = _Ramp.five),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   flex: 10,
-                  child: ChoiceChipButton(label: '10 min', selected: _ramp == _Ramp.ten, onTap: () => setState(() => _ramp = _Ramp.ten)),
+                  child: ChoiceChipButton(
+                    label: '10 min',
+                    selected: _ramp == _Ramp.ten,
+                    onTap: () => setState(() => _ramp = _Ramp.ten),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   flex: 17,
-                  child: ChoiceChipButton(label: 'Personnalisé', selected: _ramp == _Ramp.custom, onTap: () => setState(() => _ramp = _Ramp.custom)),
+                  child: ChoiceChipButton(
+                    label: 'Personnalisé',
+                    selected: _ramp == _Ramp.custom,
+                    onTap: () => setState(() => _ramp = _Ramp.custom),
+                  ),
                 ),
               ],
             ),
@@ -217,20 +269,28 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
                     icon: VIcons.minus,
                     label: 'Réduire la durée',
                     size: 56,
-                    onPressed: _custom > 15 ? () => setState(() => _custom -= 5) : null,
+                    onPressed: _custom > 15
+                        ? () => setState(() => _custom -= 5)
+                        : null,
                     opacity: _custom > 15 ? 1 : 0.4,
                   ),
                   Expanded(
                     child: Semantics(
                       liveRegion: true,
-                      child: Text('$_custom min', textAlign: TextAlign.center, style: manrope(28, weight: 700)),
+                      child: Text(
+                        '$_custom min',
+                        textAlign: TextAlign.center,
+                        style: manrope(28, weight: 700),
+                      ),
                     ),
                   ),
                   RoundIconButton(
                     icon: VIcons.plus,
                     label: 'Allonger la durée',
                     size: 56,
-                    onPressed: _custom < 60 ? () => setState(() => _custom += 5) : null,
+                    onPressed: _custom < 60
+                        ? () => setState(() => _custom += 5)
+                        : null,
                     opacity: _custom < 60 ? 1 : 0.4,
                   ),
                 ],
@@ -239,8 +299,13 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
           const SectionLabel('Ambiance'),
           Pressable(
             onTap: () async {
-              final picked = await Nav.pickLandscape(context, draft.landscapeId);
-              if (picked != null && mounted) _update(draft.copyWith(landscapeId: picked));
+              final picked = await Nav.pickLandscape(
+                context,
+                draft.landscapeId,
+              );
+              if (picked != null && mounted) {
+                _update(draft.copyWith(landscapeId: picked));
+              }
             },
             borderRadius: BorderRadius.circular(22),
             semanticLabel: 'Ambiance : ${landscape.name}. Toucher pour changer',
@@ -256,10 +321,21 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(14),
-                    child: SizedBox.square(dimension: 44, child: LandscapeThumbnail(landscapeId: landscape.id, style: landscape.style)),
+                    child: SizedBox.square(
+                      dimension: 44,
+                      child: LandscapeThumbnail(
+                        landscapeId: landscape.id,
+                        style: landscape.style,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 14),
-                  Expanded(child: Text(landscape.name, style: manrope(19, weight: 700))),
+                  Expanded(
+                    child: Text(
+                      landscape.name,
+                      style: manrope(19, weight: 700),
+                    ),
+                  ),
                   VIcon(VIcons.chevronRight, size: 20, color: p.text(0.7)),
                 ],
               ),
@@ -287,11 +363,18 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 10, 4, 0),
-            child: Text('« ${draft.reminder.notificationText} »', style: manrope(17, color: p.text(0.8))),
+            child: Text(
+              '« ${draft.reminder.notificationText} »',
+              style: manrope(17, color: p.text(0.8)),
+            ),
           ),
           if (widget.existing != null) ...[
             const SizedBox(height: 20),
-            LinkButton(label: 'Supprimer la programmation', underline: true, onPressed: _delete),
+            LinkButton(
+              label: 'Supprimer la programmation',
+              underline: true,
+              onPressed: _delete,
+            ),
           ],
         ],
       ),
@@ -319,19 +402,33 @@ class _Stepper extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        RoundIconButton(icon: VIcons.chevronUp, label: upLabel, onPressed: onUp),
+        RoundIconButton(
+          icon: VIcons.chevronUp,
+          label: upLabel,
+          onPressed: onUp,
+        ),
         ConstrainedBox(
           constraints: const BoxConstraints(minWidth: 100),
           child: ExcludeSemantics(
             child: Text(
               text,
               textAlign: TextAlign.center,
-              textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.5),
-              style: manrope(56, weight: 300, letterSpacingEm: -0.02, height: 1.1),
+              textScaler: MediaQuery.textScalerOf(context)
+                  .clamp(maxScaleFactor: 1.5),
+              style: manrope(
+                56,
+                weight: 300,
+                letterSpacingEm: -0.02,
+                height: 1.1,
+              ),
             ),
           ),
         ),
-        RoundIconButton(icon: VIcons.chevronDown, label: downLabel, onPressed: onDown),
+        RoundIconButton(
+          icon: VIcons.chevronDown,
+          label: downLabel,
+          onPressed: onDown,
+        ),
       ],
     );
   }

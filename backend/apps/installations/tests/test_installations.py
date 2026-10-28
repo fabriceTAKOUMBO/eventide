@@ -98,14 +98,29 @@ def test_reinstall_keeps_the_trial_counter(settings):
         {"device_hash": "G" * 64},
         {"request_hash": "short"},
         {"app_version": "v1"},
-        {"integrity_token": ""},
         {"integrity_token": 12},
+        {"integrity_token": "x" * 8193},
     ],
 )
 def test_invalid_bodies_are_400(overrides):
     response = APIClient().post("/v1/installations", body(**overrides), format="json")
     assert response.status_code == 400
     assert response.json()["error"] == "invalid_request"
+
+
+@pytest.mark.django_db
+def test_empty_integrity_token_is_403_when_enforced(google_http):
+    response = APIClient().post("/v1/installations", body(integrity_token=""), format="json")
+    assert response.status_code == 403
+    assert response.json()["error"] == "integrity_failed"
+    assert len(google_http.calls) == 0
+
+
+@pytest.mark.django_db
+def test_empty_integrity_token_is_accepted_when_not_enforced(settings):
+    settings.PLAY_INTEGRITY_ENFORCED = False
+    response = APIClient().post("/v1/installations", body(integrity_token=""), format="json")
+    assert response.status_code == 201
 
 
 @pytest.mark.django_db

@@ -32,7 +32,11 @@ class _VoiceScreenState extends State<VoiceScreen> {
   Future<void> _start() async {
     if (!mounted) return;
     final model = context.readModel;
-    final granted = await explainAndRequestPermission(context, model, PermissionKind.microphone);
+    final granted = await explainAndRequestPermission(
+      context,
+      model,
+      PermissionKind.microphone,
+    );
     if (!mounted) return;
     if (!granted) {
       setState(() => _micRefused = true);
@@ -60,13 +64,16 @@ class _VoiceScreenState extends State<VoiceScreen> {
       case VoiceIdle():
         break;
     }
-    Navigator.of(context).maybePop();
+    // pop(), not maybePop(): PopScope below would send us back here.
+    Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final model = context.model;
-    final landscape = model.catalog.landscape(model.browsedLandscapeId) ?? model.catalog.defaultLandscape;
+    final landscape =
+        model.catalog.landscape(model.browsedLandscapeId) ??
+        model.catalog.defaultLandscape;
     final media = MediaQuery.of(context);
     final state = model.voiceState;
     return PopScope(
@@ -104,7 +111,10 @@ class _VoiceScreenState extends State<VoiceScreen> {
               left: 0,
               right: 0,
               bottom: 0,
-              top: math.max(media.padding.top + 12, math.min(240, media.size.height * 0.28)),
+              top: math.max(
+                media.padding.top + 12,
+                math.min(240, media.size.height * 0.28),
+              ),
               child: GlassPanel(
                 alpha: 0.74,
                 borderAlpha: 0.2,
@@ -124,22 +134,45 @@ class _VoiceScreenState extends State<VoiceScreen> {
                               Expanded(
                                 child: Semantics(
                                   header: true,
-                                  child: Text('Régler à la voix', style: manrope(26, weight: 600, letterSpacingEm: -0.015)),
+                                  child: Text(
+                                    'Régler à la voix',
+                                    style: manrope(
+                                      26,
+                                      weight: 600,
+                                      letterSpacingEm: -0.015,
+                                    ),
+                                  ),
                                 ),
                               ),
-                              RoundIconButton(icon: VIcons.close, label: 'Fermer', onPressed: _close),
+                              RoundIconButton(
+                                icon: VIcons.close,
+                                label: 'Fermer',
+                                onPressed: _close,
+                              ),
                             ],
                           ),
                         ),
                         Expanded(
                           child: SingleChildScrollView(
-                            padding: EdgeInsets.fromLTRB(20, 6, 20, 24 + media.padding.bottom),
+                            padding: EdgeInsets.fromLTRB(
+                              20,
+                              6,
+                              20,
+                              24 + media.padding.bottom,
+                            ),
                             child: Semantics(
                               liveRegion: true,
                               child: AnimatedSwitcher(
-                                duration: motion(context, const Duration(milliseconds: 250)),
+                                duration: motion(
+                                  context,
+                                  const Duration(milliseconds: 250),
+                                ),
                                 child: KeyedSubtree(
-                                  key: ValueKey(_micRefused ? 'refused-mic' : state.runtimeType),
+                                  key: ValueKey(
+                                    _micRefused
+                                        ? 'refused-mic'
+                                        : state.runtimeType,
+                                  ),
                                   child: _body(context, model, state),
                                 ),
                               ),
@@ -156,7 +189,10 @@ class _VoiceScreenState extends State<VoiceScreen> {
                         child: Container(
                           width: 44,
                           height: 5,
-                          decoration: BoxDecoration(color: VitreColors.whiteA(0.35), borderRadius: BorderRadius.circular(3)),
+                          decoration: BoxDecoration(
+                            color: VitreColors.whiteA(0.35),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
                         ),
                       ),
                     ),
@@ -184,51 +220,51 @@ class _VoiceScreenState extends State<VoiceScreen> {
     }
     return switch (state) {
       VoiceListening(:final partialText, :final soundLevel) => _Listening(
-          text: partialText,
-          level: soundLevel,
-          onStop: model.stopVoice,
-        ),
+        text: partialText,
+        level: soundLevel,
+        onStop: model.stopVoice,
+      ),
       VoiceThinking() => const _Thinking(),
       VoiceResult() => _Result(
-          result: state,
-          onUndo: () async {
-            await model.undoVoice();
-            if (context.mounted) Navigator.of(context).maybePop();
-          },
-          onKeep: () {
-            model.keepVoice();
-            Navigator.of(context).maybePop();
-          },
-        ),
+        result: state,
+        onUndo: () async {
+          await model.undoVoice();
+          if (context.mounted) Navigator.of(context).pop();
+        },
+        onKeep: () {
+          model.keepVoice();
+          Navigator.of(context).pop();
+        },
+      ),
       VoiceRephrase(:final phrase, :final message) => _Message(
-          icon: VIcons.question,
-          title: 'Pouvez-vous reformuler ?',
-          message: message,
-          phrase: phrase,
-          primary: 'Parler à nouveau',
-          onPrimary: model.startVoice,
-          secondary: 'Fermer',
-          onSecondary: _close,
-        ),
+        icon: VIcons.question,
+        title: 'Pouvez-vous reformuler ?',
+        message: message,
+        phrase: phrase,
+        primary: 'Parler à nouveau',
+        onPrimary: model.startVoice,
+        secondary: 'Fermer',
+        onSecondary: _close,
+      ),
       VoiceRefused(:final phrase, :final message) => _Message(
-          icon: VIcons.close,
-          title: 'Je ne peux pas faire cela',
-          message: message,
-          phrase: phrase,
-          primary: 'Faire une autre demande',
-          onPrimary: model.startVoice,
-          secondary: 'Fermer',
-          onSecondary: _close,
-        ),
+        icon: VIcons.close,
+        title: 'Je ne peux pas faire cela',
+        message: message,
+        phrase: phrase,
+        primary: 'Faire une autre demande',
+        onPrimary: model.startVoice,
+        secondary: 'Fermer',
+        onSecondary: _close,
+      ),
       VoiceError(:final message, :final offline) => _Message(
-          icon: offline ? VIcons.wifiOff : VIcons.refresh,
-          title: offline ? 'Pas de connexion' : 'Un souci est survenu',
-          message: message,
-          primary: 'Réessayer',
-          onPrimary: model.startVoice,
-          secondary: 'Fermer',
-          onSecondary: _close,
-        ),
+        icon: offline ? VIcons.wifiOff : VIcons.refresh,
+        title: offline ? 'Pas de connexion' : 'Un souci est survenu',
+        message: message,
+        primary: 'Réessayer',
+        onPrimary: model.startVoice,
+        secondary: 'Fermer',
+        onSecondary: _close,
+      ),
       VoiceIdle() => _Idle(onStart: _started ? model.startVoice : _start),
     };
   }
@@ -237,7 +273,11 @@ class _VoiceScreenState extends State<VoiceScreen> {
 const List<double> _barHeights = [26, 40, 54, 62, 46, 58, 36, 50, 28];
 
 class _Listening extends StatelessWidget {
-  const _Listening({required this.text, required this.level, required this.onStop});
+  const _Listening({
+    required this.text,
+    required this.level,
+    required this.onStop,
+  });
 
   final String text;
   final double level;
@@ -259,16 +299,27 @@ class _Listening extends StatelessWidget {
         const SizedBox(height: 20),
         Center(child: _StopButton(onStop: onStop)),
         const SizedBox(height: 10),
-        Text('Touchez pour arrêter', textAlign: TextAlign.center, style: manrope(17, color: p.text(0.78))),
+        Text(
+          'Touchez pour arrêter',
+          textAlign: TextAlign.center,
+          style: manrope(17, color: p.text(0.78)),
+        ),
         const SizedBox(height: 22),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('Vous pouvez aussi dire', style: manrope(16, weight: 700, color: p.text(0.7))),
+              Text(
+                'Vous pouvez aussi dire',
+                style: manrope(16, weight: 700, color: p.text(0.7)),
+              ),
               const SizedBox(height: 6),
-              for (final s in const ['« Change de paysage »', '« Ajoute du piano doux »', '« Active le suivi du sommeil »'])
+              for (final s in const [
+                '« Change de paysage »',
+                '« Ajoute du piano doux »',
+                '« Active le suivi du sommeil »',
+              ])
                 Text(s, style: manrope(17, height: 1.5, color: p.text(0.84))),
             ],
           ),
@@ -288,8 +339,12 @@ class _WaveBars extends StatefulWidget {
   State<_WaveBars> createState() => _WaveBarsState();
 }
 
-class _WaveBarsState extends State<_WaveBars> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1100));
+class _WaveBarsState extends State<_WaveBars>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+  );
 
   @override
   void didChangeDependencies() {
@@ -323,11 +378,22 @@ class _WaveBarsState extends State<_WaveBars> with SingleTickerProviderStateMixi
                 if (i > 0) const SizedBox(width: 8),
                 Container(
                   width: 8,
-                  height: _barHeights[i] *
+                  height:
+                      _barHeights[i] *
                       (still
                           ? 0.6
-                          : (0.3 + 0.7 * (0.35 + 0.65 * level) * (0.5 + 0.5 * math.sin((_c.value + i * 0.12) * math.pi)))),
-                  decoration: BoxDecoration(color: VitreColors.white, borderRadius: BorderRadius.circular(4)),
+                          : (0.3 +
+                                0.7 *
+                                    (0.35 + 0.65 * level) *
+                                    (0.5 +
+                                        0.5 *
+                                            math.sin(
+                                              (_c.value + i * 0.12) * math.pi,
+                                            )))),
+                  decoration: BoxDecoration(
+                    color: VitreColors.white,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
                 ),
               ],
             ],
@@ -347,8 +413,12 @@ class _StopButton extends StatefulWidget {
   State<_StopButton> createState() => _StopButtonState();
 }
 
-class _StopButtonState extends State<_StopButton> with SingleTickerProviderStateMixin {
-  late final AnimationController _ring = AnimationController(vsync: this, duration: const Duration(milliseconds: 1600));
+class _StopButtonState extends State<_StopButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ring = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1600),
+  );
 
   @override
   void didChangeDependencies() {
@@ -386,7 +456,10 @@ class _StopButtonState extends State<_StopButton> with SingleTickerProviderState
                   child: Container(
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(color: VitreColors.whiteA(0.8), width: 2),
+                      border: Border.all(
+                        color: VitreColors.whiteA(0.8),
+                        width: 2,
+                      ),
                     ),
                   ),
                 ),
@@ -397,7 +470,13 @@ class _StopButtonState extends State<_StopButton> with SingleTickerProviderState
             child: DecoratedBox(
               decoration: const BoxDecoration(
                 shape: BoxShape.circle,
-                boxShadow: [BoxShadow(color: Color(0x59000000), blurRadius: 24, offset: Offset(0, 8))],
+                boxShadow: [
+                  BoxShadow(
+                    color: Color(0x59000000),
+                    blurRadius: 24,
+                    offset: Offset(0, 8),
+                  ),
+                ],
               ),
               child: Material(
                 color: VitreColors.white,
@@ -405,6 +484,7 @@ class _StopButtonState extends State<_StopButton> with SingleTickerProviderState
                 child: Semantics(
                   button: true,
                   label: 'Arrêter l’enregistrement',
+                  container: true,
                   excludeSemantics: true,
                   onTap: widget.onStop,
                   child: InkWell(
@@ -414,7 +494,10 @@ class _StopButtonState extends State<_StopButton> with SingleTickerProviderState
                       child: Container(
                         width: 28,
                         height: 28,
-                        decoration: BoxDecoration(color: VitreColors.ink, borderRadius: BorderRadius.circular(7)),
+                        decoration: BoxDecoration(
+                          color: VitreColors.ink,
+                          borderRadius: BorderRadius.circular(7),
+                        ),
                       ),
                     ),
                   ),
@@ -435,8 +518,12 @@ class _Thinking extends StatefulWidget {
   State<_Thinking> createState() => _ThinkingState();
 }
 
-class _ThinkingState extends State<_Thinking> with SingleTickerProviderStateMixin {
-  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200));
+class _ThinkingState extends State<_Thinking>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1200),
+  );
 
   @override
   void didChangeDependencies() {
@@ -461,7 +548,11 @@ class _ThinkingState extends State<_Thinking> with SingleTickerProviderStateMixi
       padding: const EdgeInsets.only(top: 60),
       child: Column(
         children: [
-          Text('Je prépare vos réglages', textAlign: TextAlign.center, style: manrope(24, weight: 500)),
+          Text(
+            'Je prépare vos réglages',
+            textAlign: TextAlign.center,
+            style: manrope(24, weight: 500),
+          ),
           const SizedBox(height: 22),
           ExcludeSemantics(
             child: AnimatedBuilder(
@@ -472,11 +563,24 @@ class _ThinkingState extends State<_Thinking> with SingleTickerProviderStateMixi
                   for (var i = 0; i < 3; i++) ...[
                     if (i > 0) const SizedBox(width: 10),
                     Opacity(
-                      opacity: still ? 0.7 : 0.25 + 0.75 * (0.5 - 0.5 * math.cos(((_c.value - i * 0.17) % 1) * 2 * math.pi)),
+                      opacity: still
+                          ? 0.7
+                          : 0.25 +
+                                0.75 *
+                                    (0.5 -
+                                        0.5 *
+                                            math.cos(
+                                              ((_c.value - i * 0.17) % 1) *
+                                                  2 *
+                                                  math.pi,
+                                            )),
                       child: Container(
                         width: 12,
                         height: 12,
-                        decoration: const BoxDecoration(color: VitreColors.white, shape: BoxShape.circle),
+                        decoration: const BoxDecoration(
+                          color: VitreColors.white,
+                          shape: BoxShape.circle,
+                        ),
                       ),
                     ),
                   ],
@@ -491,7 +595,11 @@ class _ThinkingState extends State<_Thinking> with SingleTickerProviderStateMixi
 }
 
 class _Result extends StatelessWidget {
-  const _Result({required this.result, required this.onUndo, required this.onKeep});
+  const _Result({
+    required this.result,
+    required this.onUndo,
+    required this.onKeep,
+  });
 
   final VoiceResult result;
   final VoidCallback onUndo;
@@ -508,16 +616,29 @@ class _Result extends StatelessWidget {
             Container(
               width: 44,
               height: 44,
-              decoration: const BoxDecoration(color: VitreColors.white, shape: BoxShape.circle),
+              decoration: const BoxDecoration(
+                color: VitreColors.white,
+                shape: BoxShape.circle,
+              ),
               alignment: Alignment.center,
-              child: const VIcon(VIcons.check, size: 24, color: VitreColors.ink, strokeWidth: 3),
+              child: const VIcon(
+                VIcons.check,
+                size: 24,
+                color: VitreColors.ink,
+                strokeWidth: 3,
+              ),
             ),
             const SizedBox(width: 12),
-            Expanded(child: Text('C’est fait', style: manrope(26, weight: 600))),
+            Expanded(
+              child: Text('C’est fait', style: manrope(26, weight: 600)),
+            ),
           ],
         ),
         const SizedBox(height: 14),
-        Text('« ${result.phrase} »', style: manrope(18, height: 1.35, color: p.text(0.76))),
+        Text(
+          '« ${result.phrase} »',
+          style: manrope(18, height: 1.35, color: p.text(0.76)),
+        ),
         const SizedBox(height: 16),
         GlassCard(
           radius: 24,
@@ -530,20 +651,31 @@ class _Result extends StatelessWidget {
               if (result.changes.isEmpty)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Text('Rien n’a changé.', style: manrope(17, color: p.text(0.76))),
+                  child: Text(
+                    'Rien n’a changé.',
+                    style: manrope(17, color: p.text(0.76)),
+                  ),
                 ),
               for (var i = 0; i < result.changes.length; i++)
                 Container(
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   decoration: BoxDecoration(
-                    border: i == 0 ? null : Border(top: BorderSide(color: p.border(0.14))),
+                    border: i == 0
+                        ? null
+                        : Border(top: BorderSide(color: p.border(0.14))),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(result.changes[i].label, style: manrope(19, weight: 700)),
+                      Text(
+                        result.changes[i].label,
+                        style: manrope(19, weight: 700),
+                      ),
                       const SizedBox(height: 2),
-                      Text(result.changes[i].value, style: manrope(17, color: p.text(0.76))),
+                      Text(
+                        result.changes[i].value,
+                        style: manrope(17, color: p.text(0.76)),
+                      ),
                     ],
                   ),
                 ),
@@ -554,15 +686,30 @@ class _Result extends StatelessWidget {
         Row(
           children: [
             Expanded(
-              child: SecondaryButton(label: 'Annuler', height: 64, fontSize: 19, onPressed: onUndo),
+              child: SecondaryButton(
+                label: 'Annuler',
+                height: 64,
+                fontSize: 19,
+                onPressed: onUndo,
+              ),
             ),
             const SizedBox(width: 12),
-            Expanded(child: PrimaryButton(label: 'Garder', fontSize: 19, onPressed: onKeep)),
+            Expanded(
+              child: PrimaryButton(
+                label: 'Garder',
+                fontSize: 19,
+                onPressed: onKeep,
+              ),
+            ),
           ],
         ),
         if (result.quotaLabel != null) ...[
           const SizedBox(height: 16),
-          Text(result.quotaLabel!, textAlign: TextAlign.center, style: manrope(16, color: p.text(0.72))),
+          Text(
+            result.quotaLabel!,
+            textAlign: TextAlign.center,
+            style: manrope(16, color: p.text(0.72)),
+          ),
         ],
       ],
     );
@@ -610,12 +757,17 @@ class _Message extends StatelessWidget {
               child: VIcon(icon, size: 24, color: VitreColors.white),
             ),
             const SizedBox(width: 12),
-            Expanded(child: Text(title, style: manrope(24, weight: 600, height: 1.2))),
+            Expanded(
+              child: Text(title, style: manrope(24, weight: 600, height: 1.2)),
+            ),
           ],
         ),
         if (phrase != null && phrase!.isNotEmpty) ...[
           const SizedBox(height: 14),
-          Text('« $phrase »', style: manrope(18, height: 1.35, color: p.text(0.76))),
+          Text(
+            '« $phrase »',
+            style: manrope(18, height: 1.35, color: p.text(0.76)),
+          ),
         ],
         const SizedBox(height: 14),
         Text(message, style: manrope(19, height: 1.4, color: p.text(0.9))),
@@ -643,6 +795,7 @@ class _Idle extends StatelessWidget {
           Semantics(
             button: true,
             label: 'Parler',
+            container: true,
             excludeSemantics: true,
             onTap: onStart,
             child: Material(
@@ -654,13 +807,19 @@ class _Idle extends StatelessWidget {
                 child: const SizedBox(
                   width: 84,
                   height: 84,
-                  child: Center(child: VIcon(VIcons.mic, size: 36, color: VitreColors.ink)),
+                  child: Center(
+                    child: VIcon(VIcons.mic, size: 36, color: VitreColors.ink),
+                  ),
                 ),
               ),
             ),
           ),
           const SizedBox(height: 14),
-          Text('Touchez le micro pour parler', textAlign: TextAlign.center, style: manrope(18, color: p.text(0.84))),
+          Text(
+            'Touchez le micro pour parler',
+            textAlign: TextAlign.center,
+            style: manrope(18, color: p.text(0.84)),
+          ),
         ],
       ),
     );

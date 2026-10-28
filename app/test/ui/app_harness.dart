@@ -1,5 +1,6 @@
 // Pumps the whole UI with a FakeAppModel and opens screens directly.
 import 'package:eventide/ui/app.dart';
+import 'package:eventide/ui/landscape/landscape_image.dart';
 import 'package:eventide/ui/navigation.dart';
 import 'package:eventide/ui/screens/home/home_screen.dart';
 import 'package:flutter/material.dart';
@@ -9,9 +10,28 @@ import 'fake_app_model.dart';
 
 const Key kAppBoundary = Key('app-boundary');
 
-Future<void> pumpApp(WidgetTester tester, FakeAppModel model, {bool showHint = false}) async {
+Future<void> pumpApp(
+  WidgetTester tester,
+  FakeAppModel model, {
+  bool showHint = false,
+}) async {
   HomeScreen.hintShownThisSession = !showHint;
-  await tester.pumpWidget(RepaintBoundary(key: kAppBoundary, child: EventideApp(model: model)));
+  await tester.pumpWidget(
+    RepaintBoundary(
+      key: kAppBoundary,
+      child: EventideApp(model: model),
+    ),
+  );
+  await settle(tester);
+  // Asset images decode outside the fake-async zone.
+  final context = tester.element(find.byType(Navigator).first);
+  await tester.runAsync(() async {
+    await LandscapeImages.discoverAssets();
+    final logo = LandscapeImages.brandLogo.value;
+    if (logo != null && context.mounted) {
+      await precacheImage(AssetImage(logo), context);
+    }
+  });
   await settle(tester);
 }
 
@@ -23,9 +43,14 @@ Future<void> settle(WidgetTester tester) async {
   }
 }
 
-NavigatorState navigatorOf(WidgetTester tester) => tester.state<NavigatorState>(find.byType(Navigator).first);
+NavigatorState navigatorOf(WidgetTester tester) =>
+    tester.state<NavigatorState>(find.byType(Navigator).first);
 
-Future<void> openRoute(WidgetTester tester, String name, WidgetBuilder builder) async {
+Future<void> openRoute(
+  WidgetTester tester,
+  String name,
+  WidgetBuilder builder,
+) async {
   navigatorOf(tester).push(VitreRoute<void>(builder: builder, name: name));
   await settle(tester);
 }

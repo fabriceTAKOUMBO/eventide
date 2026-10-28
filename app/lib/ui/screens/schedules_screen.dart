@@ -42,21 +42,31 @@ class SchedulesScreen extends StatelessWidget {
             Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: DashedBorderBox(
-                child: Wrap(
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  alignment: WrapAlignment.end,
-                  spacing: 12,
-                  runSpacing: 10,
-                  children: [
-                    ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 200),
-                      child: Text(
-                        'Pour démarrer à l’heure, Android demande votre autorisation.',
-                        style: manrope(16, height: 1.35, color: p.text(0.88)),
-                      ),
-                    ),
-                    _AllowButton(onTap: () => model.requestPermission(PermissionKind.exactAlarm)),
-                  ],
+                child: Builder(
+                  builder: (context) {
+                    final text = Text(
+                      'Pour démarrer à l’heure, Android demande votre autorisation.',
+                      style: manrope(16, height: 1.35, color: p.text(0.88)),
+                    );
+                    final button = _AllowButton(
+                      onTap: () =>
+                          model.requestPermission(PermissionKind.exactAlarm),
+                    );
+                    // Side by side like the mockup; stacked when the text is large.
+                    if (MediaQuery.textScalerOf(context).scale(16) > 21) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [text, const SizedBox(height: 12), button],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: text),
+                        const SizedBox(width: 12),
+                        button,
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
@@ -65,7 +75,9 @@ class SchedulesScreen extends StatelessWidget {
           SecondaryButton(
             label: 'Ajouter une programmation',
             icon: limitReached ? VIcons.lock : VIcons.plus,
-            semanticLabel: limitReached ? 'Ajouter une programmation, avec Premium' : 'Ajouter une programmation',
+            semanticLabel: limitReached
+                ? 'Ajouter une programmation, avec Premium'
+                : 'Ajouter une programmation',
             onPressed: () {
               if (limitReached) {
                 Nav.premium(context);
@@ -109,6 +121,7 @@ class _AllowButton extends StatelessWidget {
       child: Semantics(
         button: true,
         label: 'Autoriser',
+        container: true,
         excludeSemantics: true,
         onTap: onTap,
         child: InkWell(
@@ -118,7 +131,10 @@ class _AllowButton extends StatelessWidget {
             constraints: const BoxConstraints(minHeight: 48),
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
             alignment: Alignment.center,
-            child: Text('Autoriser', style: manrope(17, weight: 700, color: VitreColors.ink)),
+            child: Text(
+              'Autoriser',
+              style: manrope(17, weight: 700, color: VitreColors.ink),
+            ),
           ),
         ),
       ),
@@ -155,10 +171,13 @@ class _ScheduleRow extends StatelessWidget {
               child: Semantics(
                 button: true,
                 label: 'Modifier la programmation de $time, $line1, $line2',
+                container: true,
                 excludeSemantics: true,
                 onTap: () => Nav.scheduleEditor(context, existing: schedule),
                 child: InkWell(
-                  borderRadius: const BorderRadius.horizontal(left: Radius.circular(26)),
+                  borderRadius: const BorderRadius.horizontal(
+                    left: Radius.circular(26),
+                  ),
                   onTap: () => Nav.scheduleEditor(context, existing: schedule),
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(18, 16, 4, 16),
@@ -167,7 +186,15 @@ class _ScheduleRow extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(time, style: manrope(40, weight: 300, letterSpacingEm: -0.02, height: 1.1)),
+                          Text(
+                            time,
+                            style: manrope(
+                              40,
+                              weight: 300,
+                              letterSpacingEm: -0.02,
+                              height: 1.1,
+                            ),
+                          ),
                           const SizedBox(height: 4),
                           Text(line1, style: manrope(17, weight: 600)),
                           const SizedBox(height: 2),
@@ -182,15 +209,20 @@ class _ScheduleRow extends StatelessWidget {
             Semantics(
               toggled: schedule.active,
               label: 'Programmation de $time',
+              container: true,
               excludeSemantics: true,
-              onTap: () => model.setScheduleActive(schedule.id, !schedule.active),
+              onTap: () =>
+                  model.setScheduleActive(schedule.id, !schedule.active),
               child: InkWell(
                 customBorder: const CircleBorder(),
-                onTap: () => model.setScheduleActive(schedule.id, !schedule.active),
+                onTap: () =>
+                    model.setScheduleActive(schedule.id, !schedule.active),
                 child: SizedBox(
                   width: 82,
                   height: 82,
-                  child: Center(child: VitreSwitchVisual(value: schedule.active)),
+                  child: Center(
+                    child: VitreSwitchVisual(value: schedule.active),
+                  ),
                 ),
               ),
             ),

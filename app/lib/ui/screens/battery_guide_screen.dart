@@ -72,7 +72,10 @@ class BatteryGuideScreen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Semantics(header: true, child: Text(brand, style: manrope(19, weight: 700))),
+                    Semantics(
+                      header: true,
+                      child: Text(brand, style: manrope(19, weight: 700)),
+                    ),
                     const SizedBox(height: 8),
                     for (var i = 0; i < steps.length; i++)
                       Padding(
@@ -82,9 +85,25 @@ class BatteryGuideScreen extends StatelessWidget {
                           children: [
                             SizedBox(
                               width: 26,
-                              child: Text('${i + 1}.', style: manrope(17, weight: 700, color: p.text(0.84))),
+                              child: Text(
+                                '${i + 1}.',
+                                style: manrope(
+                                  17,
+                                  weight: 700,
+                                  color: p.text(0.84),
+                                ),
+                              ),
                             ),
-                            Expanded(child: Text(steps[i], style: manrope(17, height: 1.4, color: p.text(0.84)))),
+                            Expanded(
+                              child: Text(
+                                steps[i],
+                                style: manrope(
+                                  17,
+                                  height: 1.4,
+                                  color: p.text(0.84),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),

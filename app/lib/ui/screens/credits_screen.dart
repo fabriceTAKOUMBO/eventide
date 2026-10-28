@@ -45,17 +45,30 @@ class _CreditsScreenState extends State<CreditsScreen> {
                 Container(
                   width: 56,
                   height: 56,
-                  decoration: const BoxDecoration(color: VitreColors.white, shape: BoxShape.circle),
+                  decoration: const BoxDecoration(
+                    color: VitreColors.white,
+                    shape: BoxShape.circle,
+                  ),
                   alignment: Alignment.center,
-                  child: const VIcon(VIcons.mic, size: 28, color: VitreColors.ink),
+                  child: const VIcon(
+                    VIcons.mic,
+                    size: 28,
+                    color: VitreColors.ink,
+                  ),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Demandes restantes', style: manrope(17, weight: 600, color: p.text(0.78))),
-                      Text('$credits', style: manrope(40, weight: 300, height: 1.1)),
+                      Text(
+                        'Demandes restantes',
+                        style: manrope(17, weight: 600, color: p.text(0.78)),
+                      ),
+                      Text(
+                        '$credits',
+                        style: manrope(40, weight: 300, height: 1.1),
+                      ),
                     ],
                   ),
                 ),
@@ -73,7 +86,11 @@ class _CreditsScreenState extends State<CreditsScreen> {
             alpha: 0.78,
           ),
           const SizedBox(height: 26),
-          PrimaryButton(label: 'Acheter un pack de crédits', busy: _buying, onPressed: _buy),
+          PrimaryButton(
+            label: 'Acheter un pack de crédits',
+            busy: _buying,
+            onPressed: _buy,
+          ),
           const SizedBox(height: 12),
           Text(
             'Le prix s’affiche dans Google Play avant de payer.',

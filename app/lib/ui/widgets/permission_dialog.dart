@@ -9,29 +9,30 @@ import 'glass.dart';
 import 'vicons.dart';
 
 String permissionTitle(PermissionKind kind) => switch (kind) {
-      PermissionKind.microphone => 'Le micro',
-      PermissionKind.notifications => 'Les notifications',
-      PermissionKind.exactAlarm => 'Démarrer à l’heure',
-    };
+  PermissionKind.microphone => 'Le micro',
+  PermissionKind.notifications => 'Les notifications',
+  PermissionKind.exactAlarm => 'Démarrer à l’heure',
+};
 
 String permissionSentence(PermissionKind kind) => switch (kind) {
-      PermissionKind.microphone =>
-        'Pour vous écouter quand vous parlez, Eventide a besoin du micro. Votre voix n’est pas enregistrée.',
-      PermissionKind.notifications =>
-        'Pour vous rappeler l’heure d’aller dormir et afficher les commandes du son, Eventide a besoin des notifications.',
-      PermissionKind.exactAlarm =>
-        'Pour lancer le son exactement à l’heure choisie, Android demande votre autorisation.',
-    };
+  PermissionKind.microphone => 'Pour vous écouter quand vous parlez, Eventide a besoin du micro. Votre voix n’est pas enregistrée.',
+  PermissionKind.notifications => 'Pour vous rappeler l’heure d’aller dormir et afficher les commandes du son, Eventide a besoin des notifications.',
+  PermissionKind.exactAlarm => 'Pour lancer le son exactement à l’heure choisie, Android demande votre autorisation.',
+};
 
 VIconData _permissionIcon(PermissionKind kind) => switch (kind) {
-      PermissionKind.microphone => VIcons.mic,
-      PermissionKind.notifications => VIcons.bell,
-      PermissionKind.exactAlarm => VIcons.alarm,
-    };
+  PermissionKind.microphone => VIcons.mic,
+  PermissionKind.notifications => VIcons.bell,
+  PermissionKind.exactAlarm => VIcons.alarm,
+};
 
 /// Explains why, then asks Android. Returns true when the permission is granted.
 /// Already granted: returns true without showing anything.
-Future<bool> explainAndRequestPermission(BuildContext context, AppModel model, PermissionKind kind) async {
+Future<bool> explainAndRequestPermission(
+  BuildContext context,
+  AppModel model,
+  PermissionKind kind,
+) async {
   if (model.permissionGranted(kind)) return true;
   final go = await showVitreDialog<bool>(
     context,
@@ -99,21 +100,43 @@ Future<T?> showVitreDialog<T>(
                                   border: Border.all(color: p.border(0.24)),
                                 ),
                                 alignment: Alignment.center,
-                                child: VIcon(icon, size: 28, color: VitreColors.white),
+                                child: VIcon(
+                                  icon,
+                                  size: 28,
+                                  color: VitreColors.white,
+                                ),
                               ),
                             ),
                           if (icon != null) const SizedBox(height: 16),
                           Semantics(
                             header: true,
-                            child: Text(title, style: manrope(24, weight: 600, letterSpacingEm: -0.015)),
+                            child: Text(
+                              title,
+                              style: manrope(
+                                24,
+                                weight: 600,
+                                letterSpacingEm: -0.015,
+                              ),
+                            ),
                           ),
                           const SizedBox(height: 10),
-                          Text(message, style: manrope(18, height: 1.4, color: p.text(0.86))),
-                          if (extra != null) ...[const SizedBox(height: 14), extra],
+                          Text(
+                            message,
+                            style: manrope(
+                              18,
+                              height: 1.4,
+                              color: p.text(0.86),
+                            ),
+                          ),
+                          if (extra != null) ...[
+                            const SizedBox(height: 14),
+                            extra,
+                          ],
                           const SizedBox(height: 22),
                           PrimaryButton(
                             label: confirm,
-                            onPressed: () => Navigator.of(dialogContext).pop(true),
+                            onPressed: () =>
+                                Navigator.of(dialogContext).pop(true),
                             height: 60,
                             fontSize: 19,
                           ),
@@ -121,7 +144,8 @@ Future<T?> showVitreDialog<T>(
                             const SizedBox(height: 6),
                             LinkButton(
                               label: cancel,
-                              onPressed: () => Navigator.of(dialogContext).pop(false),
+                              onPressed: () =>
+                                  Navigator.of(dialogContext).pop(false),
                               fontSize: 18,
                               height: 52,
                             ),
@@ -137,7 +161,9 @@ Future<T?> showVitreDialog<T>(
         ),
       );
     },
-    transitionBuilder: (context, animation, secondary, child) =>
-        FadeTransition(opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut), child: child),
+    transitionBuilder: (context, animation, secondary, child) => FadeTransition(
+      opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
+      child: child,
+    ),
   );
 }

@@ -2,6 +2,7 @@
 
 import threading
 from decimal import Decimal
+
 import pytest
 from django.db import connection
 

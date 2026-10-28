@@ -46,7 +46,8 @@ class _StandbyScreenState extends State<StandbyScreen> {
     final model = context.readModel;
     final navigator = Navigator.of(context);
     await model.leaveStandby();
-    if (mounted) navigator.maybePop();
+    // pop(), not maybePop(): PopScope would call _wake again.
+    if (mounted) navigator.pop();
   }
 
   /// Small deterministic drift (± 14 px) changing every minute.
@@ -66,7 +67,9 @@ class _StandbyScreenState extends State<StandbyScreen> {
       remaining = model.playing ? 'Le son continue' : 'Le son est arrêté';
     } else {
       final left = endsAt.difference(DateTime.now());
-      remaining = left.inSeconds <= 0 ? 'Le son s’arrête' : 'Il reste ${formatDuration(left + const Duration(seconds: 59))}';
+      remaining = left.inSeconds <= 0
+          ? 'Le son s’arrête'
+          : 'Il reste ${formatDuration(left + const Duration(seconds: 59))}';
     }
     final drift = _drift();
     const dim = Color(0x80FFFFFF);
@@ -85,7 +88,7 @@ class _StandbyScreenState extends State<StandbyScreen> {
           behavior: HitTestBehavior.opaque,
           onTap: _wake,
           onPanDown: (_) => _wake(),
-          child: ColoredBox(
+          child: Material(
             color: Colors.black,
             child: SafeArea(
               child: Stack(
@@ -96,12 +99,25 @@ class _StandbyScreenState extends State<StandbyScreen> {
                       child: Column(
                         children: [
                           const Spacer(flex: 5),
-                          const VIcon(VIcons.moon, size: 44, color: dim, strokeWidth: 1.3),
+                          const VIcon(
+                            VIcons.moon,
+                            size: 44,
+                            color: dim,
+                            strokeWidth: 1.3,
+                          ),
                           const SizedBox(height: 22),
-                          Text(remaining, textAlign: TextAlign.center, style: manrope(26, weight: 300, color: dim)),
+                          Text(
+                            remaining,
+                            textAlign: TextAlign.center,
+                            style: manrope(26, weight: 300, color: dim),
+                          ),
                           if (landscape != null) ...[
                             const SizedBox(height: 8),
-                            Text(landscape.name, textAlign: TextAlign.center, style: manrope(17, color: dimmer)),
+                            Text(
+                              landscape.name,
+                              textAlign: TextAlign.center,
+                              style: manrope(17, color: dimmer),
+                            ),
                           ],
                           const Spacer(flex: 6),
                           Text(

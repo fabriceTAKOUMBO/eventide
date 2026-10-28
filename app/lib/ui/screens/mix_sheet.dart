@@ -22,9 +22,21 @@ class MixSheet extends StatefulWidget {
 }
 
 const Map<LayerKind, (String, String, String)> _texts = {
-  LayerKind.son: ('Dans mon mix', 'Ajouter un son', 'Baissez à 0 % pour retirer un son.'),
-  LayerKind.musique: ('Musique de fond', 'Ajouter une musique', 'Baissez à 0 % pour retirer une musique.'),
-  LayerKind.decor: ('Sur l’image', 'Ajouter à l’image', 'Baissez à 0 % pour retirer un effet.'),
+  LayerKind.son: (
+    'Dans mon mix',
+    'Ajouter un son',
+    'Baissez à 0 % pour retirer un son.',
+  ),
+  LayerKind.musique: (
+    'Musique de fond',
+    'Ajouter une musique',
+    'Baissez à 0 % pour retirer une musique.',
+  ),
+  LayerKind.decor: (
+    'Sur l’image',
+    'Ajouter à l’image',
+    'Baissez à 0 % pour retirer un effet.',
+  ),
 };
 
 class _MixSheetState extends State<MixSheet> {
@@ -39,7 +51,10 @@ class _MixSheetState extends State<MixSheet> {
     final texts = _texts[_kind]!;
     final active = scene.layers(_kind);
     final activeIds = {for (final l in active) l.id};
-    final available = [for (final item in catalog.items(_kind)) if (!activeIds.contains(item.id)) item];
+    final available = [
+      for (final item in catalog.items(_kind))
+        if (!activeIds.contains(item.id)) item,
+    ];
 
     return VitreSheet(
       title: 'Mon mix',
@@ -47,7 +62,11 @@ class _MixSheetState extends State<MixSheet> {
       panelAlpha: 0.72,
       backgroundBrightness: 0.62,
       actions: [
-        RoundIconButton(icon: VIcons.share, label: 'Partager mon ambiance', onPressed: () => Nav.share(context)),
+        RoundIconButton(
+          icon: VIcons.share,
+          label: 'Partager mon ambiance',
+          onPressed: () => Nav.share(context),
+        ),
       ],
       scrollable: false,
       contentPadding: EdgeInsets.zero,
@@ -65,10 +84,20 @@ class _MixSheetState extends State<MixSheet> {
           ),
           Expanded(
             child: ListView(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, 40 + MediaQuery.paddingOf(context).bottom),
+              // One list per tab: switching tabs starts at the top.
+              key: ValueKey(_kind),
+              padding: EdgeInsets.fromLTRB(
+                20,
+                0,
+                20,
+                40 + MediaQuery.paddingOf(context).bottom,
+              ),
               children: [
                 if (_kind == LayerKind.decor) ...[
-                  const SectionLabel('Moment de la journée', padding: EdgeInsets.fromLTRB(4, 4, 4, 10)),
+                  const SectionLabel(
+                    'Moment de la journée',
+                    padding: EdgeInsets.fromLTRB(4, 4, 4, 10),
+                  ),
                   Semantics(
                     label: 'Moment de la journée',
                     container: true,
@@ -92,7 +121,10 @@ class _MixSheetState extends State<MixSheet> {
                   const SizedBox(height: 22),
                 ],
                 if (active.isNotEmpty)
-                  SectionLabel(texts.$1, padding: const EdgeInsets.fromLTRB(4, 4, 4, 10))
+                  SectionLabel(
+                    texts.$1,
+                    padding: const EdgeInsets.fromLTRB(4, 4, 4, 10),
+                  )
                 else
                   Padding(
                     padding: const EdgeInsets.fromLTRB(4, 4, 4, 14),
@@ -111,9 +143,15 @@ class _MixSheetState extends State<MixSheet> {
                 if (active.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-                    child: Text(texts.$3, style: manrope(16, height: 1.35, color: p.text(0.66))),
+                    child: Text(
+                      texts.$3,
+                      style: manrope(16, height: 1.35, color: p.text(0.66)),
+                    ),
                   ),
-                SectionLabel(texts.$2, padding: const EdgeInsets.fromLTRB(4, 22, 4, 10)),
+                SectionLabel(
+                  texts.$2,
+                  padding: const EdgeInsets.fromLTRB(4, 22, 4, 10),
+                ),
                 for (final item in available)
                   _AddRow(
                     item: item,
@@ -130,7 +168,11 @@ class _MixSheetState extends State<MixSheet> {
 }
 
 class _AddRow extends StatelessWidget {
-  const _AddRow({required this.item, required this.locked, required this.onTap});
+  const _AddRow({
+    required this.item,
+    required this.locked,
+    required this.onTap,
+  });
 
   final CatalogItem item;
   final bool locked;
@@ -139,7 +181,8 @@ class _AddRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = Vitre.of(context);
-    final label = 'Ajouter ${item.name.toLowerCase()}${locked ? ', avec Premium' : ''}';
+    final label =
+        'Ajouter ${item.name.toLowerCase()}${locked ? ', avec Premium' : ''}';
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Pressable(
@@ -159,13 +202,25 @@ class _AddRow extends StatelessWidget {
               Container(
                 width: 36,
                 height: 36,
-                decoration: BoxDecoration(color: p.fill(0.14), shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: p.fill(0.14),
+                  shape: BoxShape.circle,
+                ),
                 alignment: Alignment.center,
-                child: VIcon(locked ? VIcons.lock : VIcons.plus, size: locked ? 18 : 20, color: VitreColors.white, strokeWidth: locked ? 2.1 : 2.4),
+                child: VIcon(
+                  locked ? VIcons.lock : VIcons.plus,
+                  size: locked ? 18 : 20,
+                  color: VitreColors.white,
+                  strokeWidth: locked ? 2.1 : 2.4,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(child: Text(item.name, style: manrope(18, weight: 600))),
-              if (locked) Text('Premium', style: manrope(16, weight: 600, color: p.text(0.7))),
+              if (locked && !isLargeText(context))
+                Text(
+                  'Premium',
+                  style: manrope(16, weight: 600, color: p.text(0.7)),
+                ),
             ],
           ),
         ),
@@ -176,7 +231,12 @@ class _AddRow extends StatelessWidget {
 
 /// One active element: name, percentage, − / slider / +.
 class _LevelRow extends StatefulWidget {
-  const _LevelRow({super.key, required this.name, required this.level, required this.onChanged});
+  const _LevelRow({
+    super.key,
+    required this.name,
+    required this.level,
+    required this.onChanged,
+  });
 
   final String name;
   final int level;
@@ -210,7 +270,9 @@ class _LevelRowState extends State<_LevelRow> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Expanded(child: Text(widget.name, style: manrope(19, weight: 700))),
+                Expanded(
+                  child: Text(widget.name, style: manrope(19, weight: 700)),
+                ),
                 Text('$_value %', style: manrope(17, color: p.text(0.78))),
               ],
             ),
@@ -218,7 +280,12 @@ class _LevelRowState extends State<_LevelRow> {
           const SizedBox(height: 2),
           Row(
             children: [
-              RoundIconButton(icon: VIcons.minus, iconSize: 22, label: 'Baisser $lower', onPressed: () => _step(-10)),
+              RoundIconButton(
+                icon: VIcons.minus,
+                iconSize: 22,
+                label: 'Baisser $lower',
+                onPressed: () => _step(-10),
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: LevelSlider(
@@ -237,7 +304,12 @@ class _LevelRowState extends State<_LevelRow> {
                 ),
               ),
               const SizedBox(width: 8),
-              RoundIconButton(icon: VIcons.plus, iconSize: 22, label: 'Augmenter $lower', onPressed: () => _step(10)),
+              RoundIconButton(
+                icon: VIcons.plus,
+                iconSize: 22,
+                label: 'Augmenter $lower',
+                onPressed: () => _step(10),
+              ),
             ],
           ),
         ],
@@ -266,39 +338,49 @@ class LevelSlider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = Vitre.of(context);
-    return LayoutBuilder(builder: (context, constraints) {
-      final width = constraints.maxWidth;
-      int toValue(double dx) => (((dx - 14) / (width - 28)) * 100).round().clamp(0, 100);
-      return Semantics(
-        slider: true,
-        label: label,
-        value: '$value %',
-        increasedValue: '${(value + 10).clamp(0, 100)} %',
-        decreasedValue: '${(value - 10).clamp(0, 100)} %',
-        onIncrease: () => onStep(10),
-        onDecrease: () => onStep(-10),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTapUp: (d) => onChangeEnd(toValue(d.localPosition.dx)),
-          onHorizontalDragStart: (d) {
-            HapticFeedback.selectionClick();
-            onChanged(toValue(d.localPosition.dx));
-          },
-          onHorizontalDragUpdate: (d) => onChanged(toValue(d.localPosition.dx)),
-          onHorizontalDragEnd: (_) => onChangeEnd(value),
-          child: SizedBox(
-            height: 48,
-            child: CustomPaint(
-              painter: _SliderPainter(
-                fraction: value / 100,
-                track: p.fill(0.2),
-                border: p.highContrast ? p.border(0.6) : null,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.maxWidth;
+        int toValue(double dx) =>
+            (((dx - 14) / (width - 28)) * 100).round().clamp(0, 100);
+        // The drag can end before the next rebuild: remember the last value here.
+        var latest = value;
+        void changed(int v) {
+          latest = v;
+          onChanged(v);
+        }
+
+        return Semantics(
+          slider: true,
+          label: label,
+          value: '$value %',
+          increasedValue: '${(value + 10).clamp(0, 100)} %',
+          decreasedValue: '${(value - 10).clamp(0, 100)} %',
+          onIncrease: () => onStep(10),
+          onDecrease: () => onStep(-10),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapUp: (d) => onChangeEnd(toValue(d.localPosition.dx)),
+            onHorizontalDragStart: (d) {
+              HapticFeedback.selectionClick();
+              changed(toValue(d.localPosition.dx));
+            },
+            onHorizontalDragUpdate: (d) => changed(toValue(d.localPosition.dx)),
+            onHorizontalDragEnd: (_) => onChangeEnd(latest),
+            child: SizedBox(
+              height: 48,
+              child: CustomPaint(
+                painter: _SliderPainter(
+                  fraction: value / 100,
+                  track: p.fill(0.2),
+                  border: p.highContrast ? p.border(0.6) : null,
+                ),
               ),
             ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
   }
 }
 
@@ -312,21 +394,38 @@ class _SliderPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     const inset = 14.0;
-    final trackRect = RRect.fromLTRBR(inset, 19, size.width - inset, 29, const Radius.circular(5));
+    final trackRect = RRect.fromLTRBR(
+      inset,
+      19,
+      size.width - inset,
+      29,
+      const Radius.circular(5),
+    );
     canvas.drawRRect(trackRect, Paint()..color = track);
     if (border != null) {
-      canvas.drawRRect(trackRect, Paint()
-        ..color = border!
-        ..style = PaintingStyle.stroke);
+      canvas.drawRRect(
+        trackRect,
+        Paint()
+          ..color = border!
+          ..style = PaintingStyle.stroke,
+      );
     }
     final x = inset + (size.width - inset * 2) * fraction;
-    canvas.drawRRect(RRect.fromLTRBR(inset, 19, x, 29, const Radius.circular(5)), Paint()..color = Colors.white);
-    canvas.drawCircle(Offset(x, 24), 14, Paint()
-      ..color = const Color(0x80000000)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4));
+    canvas.drawRRect(
+      RRect.fromLTRBR(inset, 19, x, 29, const Radius.circular(5)),
+      Paint()..color = Colors.white,
+    );
+    canvas.drawCircle(
+      Offset(x, 24),
+      14,
+      Paint()
+        ..color = const Color(0x80000000)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+    );
     canvas.drawCircle(Offset(x, 24), 14, Paint()..color = Colors.white);
   }
 
   @override
-  bool shouldRepaint(_SliderPainter old) => old.fraction != fraction || old.track != track || old.border != border;
+  bool shouldRepaint(_SliderPainter old) =>
+      old.fraction != fraction || old.track != track || old.border != border;
 }

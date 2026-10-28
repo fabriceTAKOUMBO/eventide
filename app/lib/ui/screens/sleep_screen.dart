@@ -12,7 +12,15 @@ import '../widgets/sheet_scaffold.dart';
 import '../widgets/vicons.dart';
 
 const List<String> _dayLetters = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
-const List<String> _dayNames = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche'];
+const List<String> _dayNames = [
+  'lundi',
+  'mardi',
+  'mercredi',
+  'jeudi',
+  'vendredi',
+  'samedi',
+  'dimanche',
+];
 
 class SleepScreen extends StatelessWidget {
   const SleepScreen({super.key});
@@ -78,13 +86,26 @@ class SleepScreen extends StatelessWidget {
                     children: [
                       VIcon(VIcons.lock, size: 20, color: p.text(0.9)),
                       const SizedBox(width: 8),
-                      Expanded(child: Text('7 derniers jours', style: manrope(17, weight: 600, color: p.text(0.78)))),
+                      Expanded(
+                        child: Text(
+                          '7 derniers jours',
+                          style: manrope(17, weight: 600, color: p.text(0.78)),
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text('L’historique de vos nuits est inclus dans Premium.', style: manrope(17, height: 1.4, color: p.text(0.86))),
+                  Text(
+                    'L’historique de vos nuits est inclus dans Premium.',
+                    style: manrope(17, height: 1.4, color: p.text(0.86)),
+                  ),
                   const SizedBox(height: 14),
-                  SecondaryButton(label: 'Découvrir Premium', height: 56, fontSize: 18, onPressed: () => Nav.premium(context)),
+                  SecondaryButton(
+                    label: 'Découvrir Premium',
+                    height: 56,
+                    fontSize: 18,
+                    onPressed: () => Nav.premium(context),
+                  ),
                 ],
               ),
             ),
@@ -95,7 +116,12 @@ class SleepScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
               child: Row(
                 children: [
-                  Expanded(child: Text('Écoute', style: manrope(16, color: p.text(0.76)))),
+                  Expanded(
+                    child: Text(
+                      'Écoute',
+                      style: manrope(16, color: p.text(0.76)),
+                    ),
+                  ),
                   Text(
                     formatDuration(Duration(minutes: night.listenedMinutes)),
                     style: manrope(24, weight: 700),
@@ -105,7 +131,11 @@ class SleepScreen extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 20),
-          PrimaryButton(label: 'Commencer la nuit', icon: VIcons.moon, onPressed: model.startNight),
+          PrimaryButton(
+            label: 'Commencer la nuit',
+            icon: VIcons.moon,
+            onPressed: model.startNight,
+          ),
           const SizedBox(height: 16),
           Text(
             'Mesures indicatives, calculées sur votre téléphone. Ne remplace pas un avis médical.',
@@ -126,7 +156,12 @@ class SleepScreen extends StatelessWidget {
 }
 
 class _SmallButton extends StatelessWidget {
-  const _SmallButton({required this.icon, required this.label, required this.semanticLabel, required this.onTap});
+  const _SmallButton({
+    required this.icon,
+    required this.label,
+    required this.semanticLabel,
+    required this.onTap,
+  });
 
   final VIconData icon;
   final String label;
@@ -176,9 +211,20 @@ class _LastNightCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Cette nuit', style: manrope(17, weight: 600, color: p.text(0.78))),
+          Text(
+            'Cette nuit',
+            style: manrope(17, weight: 600, color: p.text(0.78)),
+          ),
           const SizedBox(height: 4),
-          Text(formatDuration(night.duration), style: manrope(56, weight: 300, letterSpacingEm: -0.02, height: 1.1)),
+          Text(
+            formatDuration(night.duration),
+            style: manrope(
+              56,
+              weight: 300,
+              letterSpacingEm: -0.02,
+              height: 1.1,
+            ),
+          ),
           const SizedBox(height: 4),
           Text(
             'Couché ${formatClock(start.hour, start.minute)} · Réveil ${formatClock(end.hour, end.minute)}',
@@ -210,8 +256,15 @@ class _HistoryCard extends StatelessWidget {
             alignment: WrapAlignment.spaceBetween,
             runSpacing: 4,
             children: [
-              Text('7 derniers jours', style: manrope(17, weight: 600, color: p.text(0.78))),
-              if (stats.average7 != null) Text('Moyenne ${formatDuration(stats.average7!)}', style: manrope(17, weight: 700)),
+              Text(
+                '7 derniers jours',
+                style: manrope(17, weight: 600, color: p.text(0.78)),
+              ),
+              if (stats.average7 != null)
+                Text(
+                  'Moyenne ${formatDuration(stats.average7!)}',
+                  style: manrope(17, weight: 700),
+                ),
             ],
           ),
           const SizedBox(height: 14),
@@ -226,15 +279,20 @@ class _HistoryCard extends StatelessWidget {
                     label: days[i].duration == null
                         ? '${_dayNames[days[i].day.weekday - 1]} : pas de nuit'
                         : '${_dayNames[days[i].day.weekday - 1]} : ${formatDuration(days[i].duration!)}',
+                    container: true,
                     excludeSemantics: true,
                     child: Container(
                       width: 28,
                       height: days[i].duration == null
                           ? 6
-                          : (days[i].duration!.inMinutes / 60 / maxHours * 96).clamp(6, 96).toDouble(),
+                          : (days[i].duration!.inMinutes / 60 / maxHours * 96)
+                                .clamp(6, 96)
+                                .toDouble(),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(10),
-                        color: i == days.length - 1 ? VitreColors.white : p.fill(days[i].duration == null ? 0.12 : 0.32),
+                        color: i == days.length - 1
+                            ? VitreColors.white
+                            : p.fill(days[i].duration == null ? 0.12 : 0.32),
                       ),
                     ),
                   ),
@@ -256,7 +314,9 @@ class _HistoryCard extends StatelessWidget {
                       style: manrope(
                         16,
                         weight: i == days.length - 1 ? 700 : 500,
-                        color: i == days.length - 1 ? VitreColors.white : p.text(0.72),
+                        color: i == days.length - 1
+                            ? VitreColors.white
+                            : p.text(0.72),
                       ),
                     ),
                   ),

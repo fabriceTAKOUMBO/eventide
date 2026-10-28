@@ -4,7 +4,7 @@
 # la garder le temps d'un contrôle manuel ; relancer alors la tâche pour la vider).
 # Code de sortie 0 seulement si la restauration réussit et que les tables sont les mêmes.
 #
-# Incident uniquement (docs/runbooks/restauration-sauvegarde.md § 6) : avec les surcharges
+# Incident uniquement (docs/runbooks/premier-deploiement.md § 12) : avec les surcharges
 # EV_RESTORE_DB_NAME = base applicative, KEEP_RESTORED=true et RESTORE_WITH_PRIVILEGES=true,
 # la même tâche remplace le contenu de la base applicative par la sauvegarde, droits et
 # privilèges par défaut compris (services arrêtés au préalable).

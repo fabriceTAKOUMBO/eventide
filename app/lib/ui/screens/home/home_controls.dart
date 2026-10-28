@@ -64,7 +64,12 @@ class HomeTopBar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Row(
             children: [
-              RoundIconButton(icon: VIcons.moon, label: 'Sommeil', onPressed: onSleep, blur: 20),
+              RoundIconButton(
+                icon: VIcons.moon,
+                label: 'Sommeil',
+                onPressed: onSleep,
+                blur: 20,
+              ),
               Expanded(
                 child: Center(
                   child: FittedBox(
@@ -73,6 +78,7 @@ class HomeTopBar extends StatelessWidget {
                       button: true,
                       expanded: timerMenuOpen,
                       label: aria,
+                      container: true,
                       excludeSemantics: true,
                       onTap: onTimer,
                       child: ClipRRect(
@@ -90,22 +96,39 @@ class HomeTopBar extends StatelessWidget {
                               borderRadius: BorderRadius.circular(24),
                               child: Container(
                                 height: 48,
-                                padding: const EdgeInsets.fromLTRB(16, 0, 14, 0),
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  0,
+                                  14,
+                                  0,
+                                ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    const VIcon(VIcons.timer, size: 22, color: VitreColors.white),
+                                    const VIcon(
+                                      VIcons.timer,
+                                      size: 22,
+                                      color: VitreColors.white,
+                                    ),
                                     const SizedBox(width: 8),
                                     Text(
                                       chipLabel,
                                       maxLines: 1,
-                                      textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.6),
+                                      textScaler: MediaQuery.textScalerOf(
+                                        context,
+                                      ).clamp(maxScaleFactor: 1.6),
                                       style: manrope(17, weight: 700),
                                     ),
                                     const SizedBox(width: 8),
                                     Opacity(
                                       opacity: 0.75,
-                                      child: VIcon(timerMenuOpen ? VIcons.chevronUp : VIcons.chevronDown, size: 16, color: VitreColors.white),
+                                      child: VIcon(
+                                        timerMenuOpen
+                                            ? VIcons.chevronUp
+                                            : VIcons.chevronDown,
+                                        size: 16,
+                                        color: VitreColors.white,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -118,7 +141,12 @@ class HomeTopBar extends StatelessWidget {
                   ),
                 ),
               ),
-              RoundIconButton(icon: VIcons.settings, label: 'Réglages', onPressed: onSettings, blur: 20),
+              RoundIconButton(
+                icon: VIcons.settings,
+                label: 'Réglages',
+                onPressed: onSettings,
+                blur: 20,
+              ),
             ],
           ),
         ),
@@ -183,59 +211,69 @@ class HomeRightEdge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      const buttons = 48.0 * 3 + 10 * 3;
-      final pagerHeight = 20.0 + 22 + (dots.length - 1) * 16;
-      final showPager = constraints.maxHeight >= buttons + pagerHeight;
-      final column = Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          RoundIconButton(
-            icon: favorite ? VIcons.heartFilled : VIcons.heart,
-            iconSize: 26,
-            label: favorite ? 'Retirer des favoris' : 'Ajouter aux favoris',
-            onPressed: onFavorite,
-            dark: !favorite,
-            background: favorite ? VitreColors.white : null,
-            foreground: favorite ? VitreColors.ink : VitreColors.white,
-            borderAlpha: 0.3,
-            blur: 14,
-            selected: favorite,
-          ),
-          const SizedBox(height: 10),
-          RoundIconButton(
-            icon: VIcons.arrowUp,
-            iconSize: 26,
-            label: 'Paysage précédent',
-            onPressed: onPrevious,
-            dark: true,
-            blur: 14,
-            opacity: onPrevious == null ? 0.22 : 0.92,
-          ),
-          if (showPager) ...[
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        const buttons = 48.0 * 3 + 10 * 3;
+        final pagerHeight = 20.0 + 22 + (dots.length - 1) * 16;
+        final showPager = constraints.maxHeight >= buttons + pagerHeight;
+        final column = Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            RoundIconButton(
+              icon: favorite ? VIcons.heartFilled : VIcons.heart,
+              iconSize: 26,
+              label: favorite ? 'Retirer des favoris' : 'Ajouter aux favoris',
+              onPressed: onFavorite,
+              dark: !favorite,
+              background: favorite ? VitreColors.white : null,
+              foreground: favorite ? VitreColors.ink : VitreColors.white,
+              borderAlpha: 0.3,
+              blur: 14,
+              selected: favorite,
+            ),
             const SizedBox(height: 10),
-            _Pager(dots: dots, current: current, label: pagerLabel),
+            RoundIconButton(
+              icon: VIcons.arrowUp,
+              iconSize: 26,
+              label: 'Paysage précédent',
+              onPressed: onPrevious,
+              dark: true,
+              blur: 14,
+              opacity: onPrevious == null ? 0.22 : 0.92,
+            ),
+            if (showPager) ...[
+              const SizedBox(height: 10),
+              _Pager(dots: dots, current: current, label: pagerLabel),
+            ],
+            const SizedBox(height: 10),
+            RoundIconButton(
+              icon: VIcons.arrowDown,
+              iconSize: 26,
+              label: 'Paysage suivant',
+              onPressed: onNext,
+              dark: true,
+              blur: 14,
+              opacity: onNext == null ? 0.22 : 0.92,
+            ),
           ],
-          const SizedBox(height: 10),
-          RoundIconButton(
-            icon: VIcons.arrowDown,
-            iconSize: 26,
-            label: 'Paysage suivant',
-            onPressed: onNext,
-            dark: true,
-            blur: 14,
-            opacity: onNext == null ? 0.22 : 0.92,
-          ),
-        ],
-      );
-      if (constraints.maxHeight >= buttons) return column;
-      return FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.topRight, child: column);
-    });
+        );
+        if (constraints.maxHeight >= buttons) return column;
+        return FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.topRight,
+          child: column,
+        );
+      },
+    );
   }
 }
 
 class _Pager extends StatelessWidget {
-  const _Pager({required this.dots, required this.current, required this.label});
+  const _Pager({
+    required this.dots,
+    required this.current,
+    required this.label,
+  });
 
   final List<bool> dots;
   final int current;
@@ -248,6 +286,7 @@ class _Pager extends StatelessWidget {
     return Semantics(
       label: label,
       image: true,
+      container: true,
       excludeSemantics: true,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(14),
@@ -255,7 +294,10 @@ class _Pager extends StatelessWidget {
           filter: ui.ImageFilter.blur(sigmaX: 6, sigmaY: 6),
           child: Container(
             padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
-            decoration: BoxDecoration(color: p.glass(0.45), borderRadius: BorderRadius.circular(14)),
+            decoration: BoxDecoration(
+              color: p.glass(0.45),
+              borderRadius: BorderRadius.circular(14),
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -270,9 +312,11 @@ class _Pager extends StatelessWidget {
                       color: i == current
                           ? VitreColors.white
                           : dots[i]
-                              ? p.text(0.55)
-                              : Colors.transparent,
-                      border: i != current && !dots[i] ? Border.all(color: p.text(0.6), width: 1.5) : null,
+                          ? p.text(0.55)
+                          : Colors.transparent,
+                      border: i != current && !dots[i]
+                          ? Border.all(color: p.text(0.6), width: 1.5)
+                          : null,
                     ),
                   ),
                 ],
@@ -302,6 +346,7 @@ class TimerMenu extends StatelessWidget {
       child: GlassPanel(
         alpha: 0.78,
         borderAlpha: 0.18,
+        shadow: false,
         radius: BorderRadius.circular(28),
         padding: const EdgeInsets.all(8),
         child: SingleChildScrollView(
@@ -314,6 +359,7 @@ class TimerMenu extends StatelessWidget {
                   checked: timer == current,
                   button: true,
                   label: label,
+                  container: true,
                   excludeSemantics: true,
                   onTap: () => onPick(timer),
                   child: Material(
@@ -324,14 +370,26 @@ class TimerMenu extends StatelessWidget {
                       onTap: () => onPick(timer),
                       child: Container(
                         constraints: const BoxConstraints(minHeight: 52),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 6,
+                        ),
                         child: Row(
                           children: [
-                            Expanded(child: Text(label, style: manrope(18, weight: 600))),
+                            Expanded(
+                              child: Text(
+                                label,
+                                style: manrope(18, weight: 600),
+                              ),
+                            ),
                             const SizedBox(width: 8),
                             Opacity(
                               opacity: timer == current ? 1 : 0,
-                              child: const VIcon(VIcons.check, size: 20, color: VitreColors.white),
+                              child: const VIcon(
+                                VIcons.check,
+                                size: 20,
+                                color: VitreColors.white,
+                              ),
                             ),
                           ],
                         ),

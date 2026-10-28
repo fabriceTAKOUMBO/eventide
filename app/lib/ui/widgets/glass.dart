@@ -7,6 +7,11 @@ import 'package:flutter/services.dart';
 import '../theme/vitre.dart';
 import 'vicons.dart';
 
+/// True when text is shown above 150 % (system size × in-app size): layouts with a
+/// wide trailing element then stack it under the text.
+bool isLargeText(BuildContext context) =>
+    MediaQuery.textScalerOf(context).scale(20) > 30;
+
 /// Dark translucent panel with backdrop blur, hairline border and deep shadow.
 class GlassPanel extends StatelessWidget {
   const GlassPanel({
@@ -36,10 +41,16 @@ class GlassPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = Vitre.of(context);
     final side = BorderSide(color: p.border(borderAlpha));
-    final border = topBorderOnly ? Border(top: side) : Border.fromBorderSide(side);
+    final border = topBorderOnly
+        ? Border(top: side)
+        : Border.fromBorderSide(side);
     Widget content = Container(
       padding: padding,
-      decoration: BoxDecoration(color: p.glass(alpha), borderRadius: radius, border: border),
+      decoration: BoxDecoration(
+        color: p.glass(alpha),
+        borderRadius: radius,
+        border: border,
+      ),
       child: child,
     );
     if (blur > 0) {
@@ -52,7 +63,13 @@ class GlassPanel extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: radius,
         boxShadow: shadow
-            ? const [BoxShadow(color: Color(0x80000000), blurRadius: 60, offset: Offset(0, 24))]
+            ? const [
+                BoxShadow(
+                  color: Color(0x80000000),
+                  blurRadius: 60,
+                  offset: Offset(0, 24),
+                ),
+              ]
             : null,
       ),
       child: ClipRRect(borderRadius: radius, child: content),
@@ -110,6 +127,7 @@ class Pressable extends StatelessWidget {
         selected: selected,
         toggled: toggled,
         label: semanticLabel,
+        container: true,
         excludeSemantics: true,
         onTap: active ? onTap : null,
         child: w,
@@ -171,12 +189,19 @@ class RoundIconButton extends StatelessWidget {
         border: Border.all(color: p.border(borderAlpha)),
       ),
       alignment: Alignment.center,
-      child: VIcon(icon, size: iconSize, color: foreground ?? VitreColors.white),
+      child: VIcon(
+        icon,
+        size: iconSize,
+        color: foreground ?? VitreColors.white,
+      ),
     );
     if (blur > 0) {
       body = ClipRRect(
         borderRadius: radius,
-        child: BackdropFilter(filter: ui.ImageFilter.blur(sigmaX: blur / 2, sigmaY: blur / 2), child: body),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: blur / 2, sigmaY: blur / 2),
+          child: body,
+        ),
       );
     }
     return Opacity(
@@ -223,7 +248,13 @@ class PrimaryButton extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           borderRadius: radius,
-          boxShadow: const [BoxShadow(color: Color(0x59000000), blurRadius: 24, offset: Offset(0, 8))],
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x59000000),
+              blurRadius: 24,
+              offset: Offset(0, 8),
+            ),
+          ],
         ),
         child: Material(
           color: VitreColors.white,
@@ -232,6 +263,7 @@ class PrimaryButton extends StatelessWidget {
             button: true,
             enabled: enabled,
             label: semanticLabel ?? label,
+            container: true,
             excludeSemantics: true,
             onTap: enabled ? onPressed : null,
             child: InkWell(
@@ -245,17 +277,27 @@ class PrimaryButton extends StatelessWidget {
               child: ConstrainedBox(
                 constraints: BoxConstraints(minHeight: height),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 20,
+                    vertical: 8,
+                  ),
                   child: Center(
                     child: busy
                         ? const SizedBox.square(
                             dimension: 26,
-                            child: CircularProgressIndicator(strokeWidth: 2.6, color: VitreColors.ink),
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.6,
+                              color: VitreColors.ink,
+                            ),
                           )
                         : _IconLabel(
                             icon: icon,
                             label: label,
-                            style: manrope(fontSize, weight: 700, color: VitreColors.ink),
+                            style: manrope(
+                              fontSize,
+                              weight: 700,
+                              color: VitreColors.ink,
+                            ),
                             iconSize: 24,
                             color: VitreColors.ink,
                           ),
@@ -319,7 +361,10 @@ class SecondaryButton extends StatelessWidget {
           child: busy
               ? const SizedBox.square(
                   dimension: 24,
-                  child: CircularProgressIndicator(strokeWidth: 2.4, color: VitreColors.white),
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    color: VitreColors.white,
+                  ),
                 )
               : _IconLabel(
                   icon: icon,
@@ -417,7 +462,11 @@ class _IconLabel extends StatelessWidget {
 
 /// Small uppercase-free section label (« Écoute », « Jours »…).
 class SectionLabel extends StatelessWidget {
-  const SectionLabel(this.text, {super.key, this.padding = const EdgeInsets.fromLTRB(4, 18, 4, 10)});
+  const SectionLabel(
+    this.text, {
+    super.key,
+    this.padding = const EdgeInsets.fromLTRB(4, 18, 4, 10),
+  });
 
   final String text;
   final EdgeInsetsGeometry padding;
@@ -428,7 +477,10 @@ class SectionLabel extends StatelessWidget {
       padding: padding,
       child: Semantics(
         header: true,
-        child: Text(text, style: manrope(16, weight: 700, color: Vitre.of(context).text(0.7))),
+        child: Text(
+          text,
+          style: manrope(16, weight: 700, color: Vitre.of(context).text(0.7)),
+        ),
       ),
     );
   }
@@ -451,7 +503,9 @@ class VitreSwitchVisual extends StatelessWidget {
       decoration: BoxDecoration(
         color: value ? VitreColors.white : p.fill(0.22),
         borderRadius: BorderRadius.circular(18),
-        border: p.highContrast && !value ? Border.all(color: p.border(0.5)) : null,
+        border: p.highContrast && !value
+            ? Border.all(color: p.border(0.5))
+            : null,
       ),
       child: AnimatedAlign(
         duration: d,
@@ -503,39 +557,61 @@ class SwitchRow extends StatelessWidget {
         button: locked,
         label: locked ? '$title, avec Premium' : title,
         hint: subtitle,
+        container: true,
         excludeSemantics: true,
-        onTap: locked ? onLockedTap : (onChanged == null ? null : () => onChanged!(!value)),
+        onTap: locked
+            ? onLockedTap
+            : (onChanged == null ? null : () => onChanged!(!value)),
         child: Material(
           color: p.fill(0.07),
           borderRadius: radius,
           child: InkWell(
             borderRadius: radius,
-            onTap: locked ? onLockedTap : (onChanged == null ? null : () => onChanged!(!value)),
+            onTap: locked
+                ? onLockedTap
+                : (onChanged == null ? null : () => onChanged!(!value)),
             child: ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 68),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(title, style: manrope(18, weight: 700)),
-                          if (subtitle != null) ...[
-                            const SizedBox(height: 2),
-                            Text(subtitle!, style: manrope(16, color: p.text(0.72))),
-                          ],
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                child: Builder(
+                  builder: (context) {
+                    final texts = Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(title, style: manrope(18, weight: 700)),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle!,
+                            style: manrope(16, color: p.text(0.72)),
+                          ),
                         ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    if (locked)
-                      VIcon(VIcons.lock, size: 24, color: p.text(0.9))
-                    else
-                      VitreSwitchVisual(value: value),
-                  ],
+                      ],
+                    );
+                    final control = locked
+                        ? VIcon(VIcons.lock, size: 24, color: p.text(0.9))
+                        : VitreSwitchVisual(value: value);
+                    // Large text: the switch goes under the words, which keep
+                    // the full width (no word split in two).
+                    if (isLargeText(context)) {
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [texts, const SizedBox(height: 10), control],
+                      );
+                    }
+                    return Row(
+                      children: [
+                        Expanded(child: texts),
+                        const SizedBox(width: 12),
+                        control,
+                      ],
+                    );
+                  },
                 ),
               ),
             ),
@@ -548,7 +624,14 @@ class SwitchRow extends StatelessWidget {
 
 /// Navigation row with a chevron.
 class LinkRow extends StatelessWidget {
-  const LinkRow({super.key, required this.title, required this.onTap, this.subtitle, this.leading, this.trailing});
+  const LinkRow({
+    super.key,
+    required this.title,
+    required this.onTap,
+    this.subtitle,
+    this.leading,
+    this.trailing,
+  });
 
   final String title;
   final String? subtitle;
@@ -566,6 +649,7 @@ class LinkRow extends StatelessWidget {
         button: true,
         label: title,
         hint: subtitle,
+        container: true,
         excludeSemantics: true,
         onTap: onTap,
         child: Material(
@@ -575,12 +659,20 @@ class LinkRow extends StatelessWidget {
             borderRadius: radius,
             onTap: onTap,
             child: ConstrainedBox(
-              constraints: BoxConstraints(minHeight: subtitle == null ? 60 : 68),
+              constraints: BoxConstraints(
+                minHeight: subtitle == null ? 60 : 68,
+              ),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
                 child: Row(
                   children: [
-                    if (leading != null) ...[leading!, const SizedBox(width: 12)],
+                    if (leading != null) ...[
+                      leading!,
+                      const SizedBox(width: 12),
+                    ],
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -589,13 +681,21 @@ class LinkRow extends StatelessWidget {
                           Text(title, style: manrope(18, weight: 700)),
                           if (subtitle != null) ...[
                             const SizedBox(height: 2),
-                            Text(subtitle!, style: manrope(16, color: p.text(0.72))),
+                            Text(
+                              subtitle!,
+                              style: manrope(16, color: p.text(0.72)),
+                            ),
                           ],
                         ],
                       ),
                     ),
                     const SizedBox(width: 12),
-                    trailing ?? VIcon(VIcons.chevronRight, size: 20, color: p.text(0.7)),
+                    trailing ??
+                        VIcon(
+                          VIcons.chevronRight,
+                          size: 20,
+                          color: p.text(0.7),
+                        ),
                   ],
                 ),
               ),
@@ -640,13 +740,16 @@ class ChoiceChipButton extends StatelessWidget {
       toggled: radio ? null : selected,
       button: true,
       label: semanticLabel ?? label,
+      container: true,
       excludeSemantics: true,
       onTap: onTap,
       child: Material(
         color: selected ? VitreColors.white : p.fill(0.08),
         shape: RoundedRectangleBorder(
           borderRadius: radius,
-          side: BorderSide(color: selected ? VitreColors.white : p.border(0.22)),
+          side: BorderSide(
+            color: selected ? VitreColors.white : p.border(0.22),
+          ),
         ),
         child: InkWell(
           borderRadius: radius,
@@ -664,7 +767,11 @@ class ChoiceChipButton extends StatelessWidget {
             child: Text(
               label,
               textAlign: TextAlign.center,
-              style: manrope(fontSize, weight: 700, color: selected ? VitreColors.ink : VitreColors.white),
+              style: manrope(
+                fontSize,
+                weight: 700,
+                color: selected ? VitreColors.ink : VitreColors.white,
+              ),
             ),
           ),
         ),
@@ -703,8 +810,7 @@ class SegmentedTabs extends StatelessWidget {
     final p = Vitre.of(context);
     final inner = height - 8;
     final items = <Widget>[
-      for (var i = 0; i < labels.length; i++)
-        _segment(context, i, inner),
+      for (var i = 0; i < labels.length; i++) _segment(context, i, inner),
     ];
     return Semantics(
       container: true,
@@ -712,15 +818,23 @@ class SegmentedTabs extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(4),
         decoration: BoxDecoration(
-          color: dark ? p.glass(backgroundAlpha ?? 0.42) : p.fill(backgroundAlpha ?? 0.08),
+          color: dark
+              ? p.glass(backgroundAlpha ?? 0.42)
+              : p.fill(backgroundAlpha ?? 0.08),
           borderRadius: BorderRadius.circular(height / 2),
           border: Border.all(color: p.border(dark ? 0.18 : 0.14)),
         ),
         child: expand
             ? Row(children: [for (final w in items) Expanded(child: w)])
-            : Row(mainAxisSize: MainAxisSize.min, children: [
-                for (var i = 0; i < items.length; i++) ...[if (i > 0) const SizedBox(width: 4), items[i]],
-              ]),
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < items.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 4),
+                    items[i],
+                  ],
+                ],
+              ),
       ),
     );
   }
@@ -733,6 +847,7 @@ class SegmentedTabs extends StatelessWidget {
       selected: on,
       button: true,
       label: labels[i],
+      container: true,
       excludeSemantics: true,
       onTap: () => onSelected(i),
       child: Material(
@@ -746,14 +861,23 @@ class SegmentedTabs extends StatelessWidget {
           },
           child: Container(
             constraints: BoxConstraints(minHeight: inner),
-            padding: EdgeInsets.symmetric(horizontal: expand ? 4 : 18, vertical: 4),
+            padding: EdgeInsets.symmetric(
+              horizontal: expand ? 4 : 18,
+              vertical: 4,
+            ),
             alignment: Alignment.center,
-            child: Text(
-              labels[i],
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: manrope(fontSize, weight: 700, color: on ? VitreColors.ink : p.text(0.86)),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                labels[i],
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                style: manrope(
+                  fontSize,
+                  weight: 700,
+                  color: on ? VitreColors.ink : p.text(0.86),
+                ),
+              ),
             ),
           ),
         ),
@@ -817,7 +941,10 @@ class DashedBorderBox extends StatelessWidget {
       painter: _DashedRRectPainter(color: p.border(alpha), radius: radius),
       child: Container(
         padding: padding,
-        decoration: BoxDecoration(color: p.fill(0.06), borderRadius: BorderRadius.circular(radius)),
+        decoration: BoxDecoration(
+          color: p.fill(0.06),
+          borderRadius: BorderRadius.circular(radius),
+        ),
         child: child,
       ),
     );
@@ -832,7 +959,10 @@ class _DashedRRectPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rrect = RRect.fromRectAndRadius(Offset.zero & size, Radius.circular(radius)).deflate(0.5);
+    final rrect = RRect.fromRectAndRadius(
+      Offset.zero & size,
+      Radius.circular(radius),
+    ).deflate(0.5);
     final source = Path()..addRRect(rrect);
     final paint = Paint()
       ..color = color
@@ -848,5 +978,6 @@ class _DashedRRectPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_DashedRRectPainter old) => old.color != color || old.radius != radius;
+  bool shouldRepaint(_DashedRRectPainter old) =>
+      old.color != color || old.radius != radius;
 }

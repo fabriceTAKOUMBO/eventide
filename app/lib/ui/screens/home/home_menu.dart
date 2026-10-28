@@ -69,7 +69,11 @@ class HomeMenu extends StatelessWidget {
     final d = motion(context, const Duration(milliseconds: 300));
     final body = expanded ? _expanded(context) : _collapsed(context);
     if (d == Duration.zero) {
-      return GlassPanel(alpha: 0.55, radius: BorderRadius.circular(36), child: body);
+      return GlassPanel(
+        alpha: 0.55,
+        radius: BorderRadius.circular(36),
+        child: body,
+      );
     }
     return GlassPanel(
       alpha: 0.55,
@@ -82,7 +86,12 @@ class HomeMenu extends StatelessWidget {
           duration: d,
           layoutBuilder: (current, previous) => Stack(
             alignment: Alignment.bottomCenter,
-            children: [...previous.map((w) => Positioned(left: 0, right: 0, bottom: 0, child: w)), ?current],
+            children: [
+              ...previous.map(
+                (w) => Positioned(left: 0, right: 0, bottom: 0, child: w),
+              ),
+              ?current,
+            ],
           ),
           child: body,
         ),
@@ -99,7 +108,9 @@ class HomeMenu extends StatelessWidget {
         child: Pressable(
           onTap: onToggleExpanded,
           borderRadius: BorderRadius.circular(22),
-          semanticLabel: collapse ? 'Réduire le menu pour voir plus de paysage' : 'Afficher le menu complet',
+          semanticLabel: collapse
+              ? 'Réduire le menu pour voir plus de paysage'
+              : 'Afficher le menu complet',
           child: SizedBox(
             width: collapse ? 140 : 96,
             height: 44,
@@ -120,12 +131,21 @@ class HomeMenu extends StatelessWidget {
     );
   }
 
-  Widget _title(BuildContext context, {required double size, int maxLines = 1}) => Text(
-        data.name,
-        maxLines: maxLines,
-        overflow: TextOverflow.ellipsis,
-        style: manrope(size, weight: 600, letterSpacingEm: size > 21 ? -0.015 : -0.01, height: 1.15),
-      );
+  Widget _title(
+    BuildContext context, {
+    required double size,
+    int maxLines = 1,
+  }) => Text(
+    data.name,
+    maxLines: maxLines,
+    overflow: TextOverflow.ellipsis,
+    style: manrope(
+      size,
+      weight: 600,
+      letterSpacingEm: size > 21 ? -0.015 : -0.01,
+      height: 1.15,
+    ),
+  );
 
   Widget _subtitle(BuildContext context) {
     final p = Vitre.of(context);
@@ -134,7 +154,9 @@ class HomeMenu extends StatelessWidget {
         children: [
           const VIcon(VIcons.lock, size: 17, color: VitreColors.white),
           const SizedBox(width: 6),
-          Flexible(child: Text('Avec Premium', style: manrope(17, weight: 600))),
+          Flexible(
+            child: Text('Avec Premium', style: manrope(17, weight: 600)),
+          ),
         ],
       );
     }
@@ -143,7 +165,10 @@ class HomeMenu extends StatelessWidget {
         if (data.loading) ...[
           SizedBox.square(
             dimension: 14,
-            child: CircularProgressIndicator(strokeWidth: 2, color: p.text(0.8)),
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: p.text(0.8),
+            ),
           ),
           const SizedBox(width: 8),
         ],
@@ -169,7 +194,11 @@ class HomeMenu extends StatelessWidget {
       label = 'Débloquer ce paysage avec Premium';
       onTap = onUnlock;
     } else {
-      icon = VIcon(data.playing ? VIcons.pause : VIcons.play, size: iconSize, color: VitreColors.ink);
+      icon = VIcon(
+        data.playing ? VIcons.pause : VIcons.play,
+        size: iconSize,
+        color: VitreColors.ink,
+      );
       label = data.playing ? 'Mettre en pause' : 'Lancer la lecture';
       onTap = onPlay;
     }
@@ -178,7 +207,13 @@ class HomeMenu extends StatelessWidget {
       height: size,
       decoration: const BoxDecoration(
         shape: BoxShape.circle,
-        boxShadow: [BoxShadow(color: Color(0x59000000), blurRadius: 24, offset: Offset(0, 8))],
+        boxShadow: [
+          BoxShadow(
+            color: Color(0x59000000),
+            blurRadius: 24,
+            offset: Offset(0, 8),
+          ),
+        ],
       ),
       child: Material(
         color: VitreColors.white,
@@ -186,6 +221,7 @@ class HomeMenu extends StatelessWidget {
         child: Semantics(
           button: true,
           label: label,
+          container: true,
           excludeSemantics: true,
           onTap: onTap,
           child: InkWell(
@@ -198,7 +234,10 @@ class HomeMenu extends StatelessWidget {
                 if (data.loading && !data.locked)
                   SizedBox.square(
                     dimension: size - 6,
-                    child: const CircularProgressIndicator(strokeWidth: 2.4, color: Color(0x660A0F0D)),
+                    child: const CircularProgressIndicator(
+                      strokeWidth: 2.4,
+                      color: Color(0x660A0F0D),
+                    ),
                   ),
               ],
             ),
@@ -248,7 +287,10 @@ class HomeMenu extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                         child: SizedBox.square(
                           dimension: 38,
-                          child: LandscapeThumbnail(landscapeId: data.landscapeId, style: data.style),
+                          child: LandscapeThumbnail(
+                            landscapeId: data.landscapeId,
+                            style: data.style,
+                          ),
                         ),
                       ),
                     ),
@@ -262,9 +304,16 @@ class HomeMenu extends StatelessWidget {
                       leading: Container(
                         width: 38,
                         height: 38,
-                        decoration: BoxDecoration(color: p.fill(0.12), borderRadius: BorderRadius.circular(12)),
+                        decoration: BoxDecoration(
+                          color: p.fill(0.12),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         alignment: Alignment.center,
-                        child: const VIcon(VIcons.mixer, size: 24, color: VitreColors.white),
+                        child: const VIcon(
+                          VIcons.mixer,
+                          size: 24,
+                          color: VitreColors.white,
+                        ),
                       ),
                     ),
                   ),
@@ -290,7 +339,11 @@ class HomeMenu extends StatelessWidget {
                         ),
                         child: Row(
                           children: [
-                            const VIcon(VIcons.alarm, size: 26, color: VitreColors.white),
+                            const VIcon(
+                              VIcons.alarm,
+                              size: 26,
+                              color: VitreColors.white,
+                            ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: FittedBox(
@@ -300,12 +353,21 @@ class HomeMenu extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Text(data.scheduleTop, style: manrope(16, weight: 500, color: p.text(0.78))),
+                                    Text(
+                                      data.scheduleTop,
+                                      style: manrope(
+                                        16,
+                                        weight: 500,
+                                        color: p.text(0.78),
+                                      ),
+                                    ),
                                     const SizedBox(height: 1),
                                     Text(
                                       data.scheduleMain,
                                       style: manrope(
-                                        data.scheduleMain == 'Programmer' ? 20 : 22,
+                                        data.scheduleMain == 'Programmer'
+                                            ? 20
+                                            : 22,
                                         weight: 700,
                                         letterSpacingEm: -0.01,
                                         height: 1.15,
@@ -360,7 +422,12 @@ class HomeMenu extends StatelessWidget {
 }
 
 class _Tile extends StatelessWidget {
-  const _Tile({required this.label, required this.semanticLabel, required this.onTap, required this.leading});
+  const _Tile({
+    required this.label,
+    required this.semanticLabel,
+    required this.onTap,
+    required this.leading,
+  });
 
   final String label;
   final String semanticLabel;
@@ -426,14 +493,18 @@ class _VoicePill extends StatelessWidget {
             Container(
               width: 46,
               height: 46,
-              decoration: const BoxDecoration(color: VitreColors.white, shape: BoxShape.circle),
+              decoration: const BoxDecoration(
+                color: VitreColors.white,
+                shape: BoxShape.circle,
+              ),
               alignment: Alignment.center,
               child: const VIcon(VIcons.mic, size: 26, color: VitreColors.ink),
             ),
             const SizedBox(width: 10),
             Text(
               'Voix',
-              textScaler: MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.5),
+              textScaler: MediaQuery.textScalerOf(context)
+                  .clamp(maxScaleFactor: 1.5),
               style: manrope(18, weight: 700),
             ),
           ],
@@ -445,7 +516,11 @@ class _VoicePill extends StatelessWidget {
 
 /// Small landscape picture (menu tile, schedule rows, grid).
 class LandscapeThumbnail extends StatelessWidget {
-  const LandscapeThumbnail({super.key, required this.landscapeId, required this.style});
+  const LandscapeThumbnail({
+    super.key,
+    required this.landscapeId,
+    required this.style,
+  });
 
   final String landscapeId;
   final String style;

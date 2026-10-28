@@ -14,7 +14,9 @@ import 'package:eventide/core/settings.dart';
 import 'package:eventide/core/sleep.dart';
 
 Catalog loadTestCatalog() {
-  final json = jsonDecode(File('assets/catalog.json').readAsStringSync()) as Map<String, dynamic>;
+  final json = jsonDecode(
+    File('assets/catalog.json').readAsStringSync(),
+  ) as Map<String, dynamic>;
   return Catalog.fromJson(json);
 }
 
@@ -30,13 +32,13 @@ class FakeAppModel extends AppModel {
     List<Night>? nights,
     DateTime? now,
     Set<PermissionKind>? granted,
-  })  : catalog = catalog ?? loadTestCatalog(),
-        // ignore: prefer_initializing_formals
-        _plan = plan,
-        _now = now ?? DateTime(2026, 10, 28, 20, 30),
-        _schedules = [...?schedules],
-        _nights = [...?nights],
-        _granted = {...?granted} {
+  }) : catalog = catalog ?? loadTestCatalog(),
+       // ignore: prefer_initializing_formals
+       _plan = plan,
+       _now = now ?? DateTime(2026, 10, 28, 20, 30),
+       _schedules = [...?schedules],
+       _nights = [...?nights],
+       _granted = {...?granted} {
     rules = ProductRules(this.catalog);
     _settings = AppSettings(onboarded: onboarded);
     _scene = Scene.fromLandscape(this.catalog.defaultLandscape);
@@ -64,7 +66,8 @@ class FakeAppModel extends AppModel {
   late AppSettings _settings;
   final Set<PermissionKind> _granted;
   VoiceState _voice = const VoiceIdle();
-  final StreamController<AppEvent> _events = StreamController<AppEvent>.broadcast();
+  final StreamController<AppEvent> _events =
+      StreamController<AppEvent>.broadcast();
   int _idCounter = 0;
 
   @override
@@ -102,7 +105,9 @@ class FakeAppModel extends AppModel {
   }
 
   void addFavoriteForTest(Scene scene) {
-    _favorites.add(Favorite(id: 'f${_idCounter++}', scene: scene, createdAt: _now));
+    _favorites.add(
+      Favorite(id: 'f${_idCounter++}', scene: scene, createdAt: _now),
+    );
     notifyListeners();
   }
 
@@ -133,10 +138,14 @@ class FakeAppModel extends AppModel {
 
   @override
   DateTime? get timerEndsAt => switch (_scene.timer) {
-        TimerDuration(:final minutes) when _playing => _now.add(Duration(minutes: minutes)),
-        TimerNight() when _playing => _now.add(Duration(hours: catalog.limits.nightMaxHours)),
-        _ => null,
-      };
+    TimerDuration(:final minutes) when _playing => _now.add(
+      Duration(minutes: minutes),
+    ),
+    TimerNight() when _playing => _now.add(
+      Duration(hours: catalog.limits.nightMaxHours),
+    ),
+    _ => null,
+  };
 
   @override
   List<Schedule> get schedules => List.unmodifiable(_schedules);
@@ -145,7 +154,8 @@ class FakeAppModel extends AppModel {
   @override
   List<Favorite> get favorites => List.unmodifiable(_favorites);
   @override
-  bool get isCurrentSceneFavorite => _favorites.any((f) => f.scene.landscapeId == _browsed);
+  bool get isCurrentSceneFavorite =>
+      _favorites.any((f) => f.scene.landscapeId == _browsed);
   @override
   SleepStats get sleepStats => SleepStats.from(_nights, _now);
   @override
@@ -153,23 +163,38 @@ class FakeAppModel extends AppModel {
 
   @override
   Entitlements get entitlements => Entitlements(
-        plan: _plan,
-        premium: _plan.isPremium,
-        expiresAt: _plan == Plan.annual ? DateTime(2027, 10, 28) : (_plan == Plan.monthly ? DateTime(2026, 11, 28) : null),
-        autoRenewing: _plan == Plan.annual || _plan == Plan.monthly,
-        voice: switch (_plan) {
-          Plan.free => const VoiceQuota(mode: VoiceMode.trial, trialRemaining: 3),
-          Plan.lifetime => const VoiceQuota(mode: VoiceMode.credits),
-          _ => const VoiceQuota(mode: VoiceMode.included),
-        },
-      );
+    plan: _plan,
+    premium: _plan.isPremium,
+    expiresAt: _plan == Plan.annual
+        ? DateTime(2027, 10, 28)
+        : (_plan == Plan.monthly ? DateTime(2026, 11, 28) : null),
+    autoRenewing: _plan == Plan.annual || _plan == Plan.monthly,
+    voice: switch (_plan) {
+      Plan.free => const VoiceQuota(mode: VoiceMode.trial, trialRemaining: 3),
+      Plan.lifetime => const VoiceQuota(mode: VoiceMode.credits),
+      _ => const VoiceQuota(mode: VoiceMode.included),
+    },
+  );
 
   @override
   List<ProductOffer> get offers => const [
-        ProductOffer(choice: PurchaseChoice.annual, price: '59,99 €', available: true, hasFreeTrial: true),
-        ProductOffer(choice: PurchaseChoice.monthly, price: '7,99 €', available: true),
-        ProductOffer(choice: PurchaseChoice.lifetime, price: '79,99 €', available: true),
-      ];
+    ProductOffer(
+      choice: PurchaseChoice.annual,
+      price: '59,99 €',
+      available: true,
+      hasFreeTrial: true,
+    ),
+    ProductOffer(
+      choice: PurchaseChoice.monthly,
+      price: '7,99 €',
+      available: true,
+    ),
+    ProductOffer(
+      choice: PurchaseChoice.lifetime,
+      price: '79,99 €',
+      available: true,
+    ),
+  ];
 
   @override
   VoiceState get voiceState => _voice;
@@ -257,9 +282,16 @@ class FakeAppModel extends AppModel {
       _events.add(const OpenPremiumEvent());
       return;
     }
-    final next = _scene.withLevel(kind, id, level, maxAudioLayers: catalog.limits.layersMax);
+    final next = _scene.withLevel(
+      kind,
+      id,
+      level,
+      maxAudioLayers: catalog.limits.layersMax,
+    );
     if (identical(next, _scene) && level > 0 && !_scene.hasLayer(kind, id)) {
-      _events.add(ToastEvent('${catalog.limits.layersMax} sons au maximum en même temps'));
+      _events.add(
+        ToastEvent('${catalog.limits.layersMax} sons au maximum en même temps'),
+      );
       return;
     }
     _scene = next;
@@ -279,7 +311,9 @@ class FakeAppModel extends AppModel {
       _events.add(const OpenPremiumEvent());
       return;
     }
-    _favorites.add(Favorite(id: 'f${_idCounter++}', scene: _scene, createdAt: _now));
+    _favorites.add(
+      Favorite(id: 'f${_idCounter++}', scene: _scene, createdAt: _now),
+    );
     _events.add(const ToastEvent('Ajouté aux favoris'));
     notifyListeners();
   }
@@ -301,12 +335,12 @@ class FakeAppModel extends AppModel {
 
   @override
   Schedule newScheduleDraft() => Schedule(
-        id: 'draft-${_idCounter++}',
-        hour: 22,
-        minute: 0,
-        days: Schedule.everyDay,
-        landscapeId: _scene.landscapeId,
-      );
+    id: 'draft-${_idCounter++}',
+    hour: 22,
+    minute: 0,
+    days: Schedule.everyDay,
+    landscapeId: _scene.landscapeId,
+  );
 
   @override
   Future<bool> saveSchedule(Schedule schedule) async {
@@ -330,7 +364,9 @@ class FakeAppModel extends AppModel {
   Future<void> setScheduleActive(String scheduleId, bool active) async {
     _log('setScheduleActive:$scheduleId:$active');
     final index = _schedules.indexWhere((s) => s.id == scheduleId);
-    if (index >= 0) _schedules[index] = _schedules[index].copyWith(active: active);
+    if (index >= 0) {
+      _schedules[index] = _schedules[index].copyWith(active: active);
+    }
     notifyListeners();
   }
 
@@ -343,7 +379,9 @@ class FakeAppModel extends AppModel {
 
   @override
   bool permissionGranted(PermissionKind kind) =>
-      kind == PermissionKind.exactAlarm ? exactAlarmAllowed : _granted.contains(kind);
+      kind == PermissionKind.exactAlarm
+      ? exactAlarmAllowed
+      : _granted.contains(kind);
 
   @override
   Future<bool> requestPermission(PermissionKind kind) async {
@@ -385,7 +423,8 @@ class FakeAppModel extends AppModel {
   }
 
   @override
-  Future<Uri> createShareLink() async => Uri.parse('https://example.org/m/abc123');
+  Future<Uri> createShareLink() async =>
+      Uri.parse('https://example.org/m/abc123');
 
   @override
   Future<void> shareMix() async => _log('shareMix');
@@ -396,7 +435,10 @@ class FakeAppModel extends AppModel {
   @override
   Future<void> startVoice() async {
     _log('startVoice');
-    _voice = const VoiceListening(partialText: 'Mets le minuteur sur 1 h', soundLevel: 0.6);
+    _voice = const VoiceListening(
+      partialText: 'Mets le minuteur sur 1 h',
+      soundLevel: 0.6,
+    );
     notifyListeners();
   }
 
@@ -410,7 +452,9 @@ class FakeAppModel extends AppModel {
     _voice = VoiceResult(
       phrase: phrase,
       changes: const [ChangeLine('Minuteur', 'Arrêt après 1 h')],
-      quotaLabel: plan == Plan.free ? 'Essai gratuit · 2 demandes restantes' : null,
+      quotaLabel: plan == Plan.free
+          ? 'Essai gratuit · 2 demandes restantes'
+          : null,
     );
     notifyListeners();
   }

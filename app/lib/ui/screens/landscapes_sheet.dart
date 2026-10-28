@@ -34,7 +34,9 @@ class _LandscapesSheetState extends State<LandscapesSheet> {
     final selectedId = widget.pickFor ?? model.scene.landscapeId;
     final themes = catalog.themes;
     final selectedLandscape = catalog.landscape(selectedId);
-    final initialTab = selectedLandscape == null ? 0 : themes.indexWhere((t) => t.id == selectedLandscape.themeId);
+    final initialTab = selectedLandscape == null
+        ? 0
+        : themes.indexWhere((t) => t.id == selectedLandscape.themeId);
     final tab = _tab ?? (initialTab < 0 ? 0 : initialTab);
     final labels = [for (final t in themes) t.name, if (!_picker) 'Favoris'];
     final favoritesTab = !_picker && tab == themes.length;
@@ -49,7 +51,11 @@ class _LandscapesSheetState extends State<LandscapesSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _TextTabs(labels: labels, selected: tab, onSelected: (i) => setState(() => _tab = i)),
+          _TextTabs(
+            labels: labels,
+            selected: tab,
+            onSelected: (i) => setState(() => _tab = i),
+          ),
           const SizedBox(height: 14),
           if (favoritesTab)
             _FavoritesList(model: model)
@@ -96,7 +102,11 @@ class _LandscapesSheetState extends State<LandscapesSheet> {
 
 /// Text tabs with a dot under the selected one (mockup), scrollable when large.
 class _TextTabs extends StatelessWidget {
-  const _TextTabs({required this.labels, required this.selected, required this.onSelected});
+  const _TextTabs({
+    required this.labels,
+    required this.selected,
+    required this.onSelected,
+  });
 
   final List<String> labels;
   final int selected;
@@ -116,28 +126,43 @@ class _TextTabs extends StatelessWidget {
                 selected: i == selected,
                 button: true,
                 label: labels[i],
+                container: true,
                 excludeSemantics: true,
                 onTap: () => onSelected(i),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(16),
                   onTap: () => onSelected(i),
                   child: ConstrainedBox(
-                    constraints: const BoxConstraints(minHeight: 48, minWidth: 48),
+                    constraints: const BoxConstraints(
+                      minHeight: 48,
+                      minWidth: 48,
+                    ),
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 6,
+                      ),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
                             labels[i],
-                            style: manrope(18, weight: 600, color: i == selected ? VitreColors.white : p.text(0.7)),
+                            style: manrope(
+                              18,
+                              weight: 600,
+                              color: i == selected
+                                  ? VitreColors.white
+                                  : p.text(0.7),
+                            ),
                           ),
                           const SizedBox(height: 6),
                           Container(
                             width: 5,
                             height: 5,
                             decoration: BoxDecoration(
-                              color: i == selected ? VitreColors.white : Colors.transparent,
+                              color: i == selected
+                                  ? VitreColors.white
+                                  : Colors.transparent,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -155,7 +180,12 @@ class _TextTabs extends StatelessWidget {
 }
 
 class _Grid extends StatelessWidget {
-  const _Grid({required this.landscapes, required this.selectedId, required this.canUse, required this.onTap});
+  const _Grid({
+    required this.landscapes,
+    required this.selectedId,
+    required this.canUse,
+    required this.onTap,
+  });
 
   final List<Landscape> landscapes;
   final String selectedId;
@@ -168,16 +198,22 @@ class _Grid extends StatelessWidget {
     final tileHeight = 148.0 + (scale > 1.3 ? (scale - 1.3) * 60 : 0);
     final rows = <Widget>[];
     for (var i = 0; i < landscapes.length; i += 2) {
-      rows.add(Padding(
-        padding: EdgeInsets.only(bottom: i + 2 < landscapes.length ? 12 : 0),
-        child: Row(
-          children: [
-            Expanded(child: _tile(context, landscapes[i], tileHeight)),
-            const SizedBox(width: 12),
-            Expanded(child: i + 1 < landscapes.length ? _tile(context, landscapes[i + 1], tileHeight) : const SizedBox()),
-          ],
+      rows.add(
+        Padding(
+          padding: EdgeInsets.only(bottom: i + 2 < landscapes.length ? 12 : 0),
+          child: Row(
+            children: [
+              Expanded(child: _tile(context, landscapes[i], tileHeight)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: i + 1 < landscapes.length
+                    ? _tile(context, landscapes[i + 1], tileHeight)
+                    : const SizedBox(),
+              ),
+            ],
+          ),
         ),
-      ));
+      );
     }
     return Column(children: rows);
   }
@@ -189,7 +225,9 @@ class _Grid extends StatelessWidget {
     return Semantics(
       button: true,
       selected: selected,
-      label: '${l.name}${selected ? ', sélectionné' : ''}${locked ? ', Premium' : ''}',
+      label:
+          '${l.name}${selected ? ', sélectionné' : ''}${locked ? ', Premium' : ''}',
+      container: true,
       excludeSemantics: true,
       onTap: () => onTap(l),
       child: GestureDetector(
@@ -199,13 +237,17 @@ class _Grid extends StatelessWidget {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(22),
             color: VitreColors.thumbFallback,
-            boxShadow: selected ? const [BoxShadow(color: Colors.white, spreadRadius: 2.5)] : null,
+            boxShadow: selected
+                ? const [BoxShadow(color: Colors.white, spreadRadius: 2.5)]
+                : null,
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(22),
             child: Stack(
               children: [
-                Positioned.fill(child: LandscapeThumbnail(landscapeId: l.id, style: l.style)),
+                Positioned.fill(
+                  child: LandscapeThumbnail(landscapeId: l.id, style: l.style),
+                ),
                 const Positioned.fill(
                   child: DecoratedBox(
                     decoration: BoxDecoration(
@@ -236,9 +278,17 @@ class _Grid extends StatelessWidget {
                     child: Container(
                       width: 28,
                       height: 28,
-                      decoration: const BoxDecoration(color: VitreColors.white, shape: BoxShape.circle),
+                      decoration: const BoxDecoration(
+                        color: VitreColors.white,
+                        shape: BoxShape.circle,
+                      ),
                       alignment: Alignment.center,
-                      child: const VIcon(VIcons.check, size: 16, color: VitreColors.ink, strokeWidth: 3),
+                      child: const VIcon(
+                        VIcons.check,
+                        size: 16,
+                        color: VitreColors.ink,
+                        strokeWidth: 3,
+                      ),
                     ),
                   )
                 else if (locked)
@@ -254,7 +304,12 @@ class _Grid extends StatelessWidget {
                         border: Border.all(color: p.border(0.3)),
                       ),
                       alignment: Alignment.center,
-                      child: const VIcon(VIcons.lock, size: 16, color: VitreColors.white, strokeWidth: 2.2),
+                      child: const VIcon(
+                        VIcons.lock,
+                        size: 16,
+                        color: VitreColors.white,
+                        strokeWidth: 2.2,
+                      ),
                     ),
                   ),
               ],
@@ -279,95 +334,119 @@ class _FavoritesList extends StatelessWidget {
     final max = model.rules.maxFavorites(model.plan);
     final children = <Widget>[];
     if (favorites.isEmpty) {
-      children.add(DashedBorderBox(
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            VIcon(VIcons.heart, size: 28, color: p.text(0.9)),
-            const SizedBox(height: 10),
-            Text('Aucun favori pour l’instant', style: manrope(19, weight: 700)),
-            const SizedBox(height: 6),
-            Text(
-              'Touchez le cœur de l’accueil pour garder un paysage avec ses sons.',
-              style: manrope(17, height: 1.4, color: p.text(0.8)),
-            ),
-          ],
+      children.add(
+        DashedBorderBox(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              VIcon(VIcons.heart, size: 28, color: p.text(0.9)),
+              const SizedBox(height: 10),
+              Text(
+                'Aucun favori pour l’instant',
+                style: manrope(19, weight: 700),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Touchez le cœur de l’accueil pour garder un paysage avec ses sons.',
+                style: manrope(17, height: 1.4, color: p.text(0.8)),
+              ),
+            ],
+          ),
         ),
-      ));
+      );
     }
     for (final f in favorites) {
       final l = model.catalog.landscape(f.landscapeId);
       if (l == null) continue;
       final names = [
         for (final kind in const [LayerKind.son, LayerKind.musique])
-          for (final layer in f.scene.layers(kind)) model.catalog.item(kind, layer.id)?.name ?? '',
+          for (final layer in f.scene.layers(kind))
+            model.catalog.item(kind, layer.id)?.name ?? '',
       ].where((n) => n.isNotEmpty).take(3).join(' · ');
-      children.add(Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Material(
-          color: p.fill(0.07),
-          borderRadius: BorderRadius.circular(22),
-          child: Row(
-            children: [
-              Expanded(
-                child: Semantics(
-                  button: true,
-                  label: 'Écouter ${l.name}${names.isEmpty ? '' : ', $names'}',
-                  excludeSemantics: true,
-                  onTap: () => _apply(context, f),
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(22),
+      children.add(
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Material(
+            color: p.fill(0.07),
+            borderRadius: BorderRadius.circular(22),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Semantics(
+                    button: true,
+                    label:
+                        'Écouter ${l.name}${names.isEmpty ? '' : ', $names'}',
+                    container: true,
+                    excludeSemantics: true,
                     onTap: () => _apply(context, f),
-                    child: Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Row(
-                        children: [
-                          ClipRRect(
-                            borderRadius: BorderRadius.circular(14),
-                            child: SizedBox.square(dimension: 56, child: LandscapeThumbnail(landscapeId: l.id, style: l.style)),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(l.name, style: manrope(18, weight: 700)),
-                                if (names.isNotEmpty)
-                                  Text(names, style: manrope(16, color: p.text(0.72))),
-                              ],
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(22),
+                      onTap: () => _apply(context, f),
+                      child: Padding(
+                        padding: const EdgeInsets.all(10),
+                        child: Row(
+                          children: [
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(14),
+                              child: SizedBox.square(
+                                dimension: 56,
+                                child: LandscapeThumbnail(
+                                  landscapeId: l.id,
+                                  style: l.style,
+                                ),
+                              ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(l.name, style: manrope(18, weight: 700)),
+                                  if (names.isNotEmpty)
+                                    Text(
+                                      names,
+                                      style: manrope(16, color: p.text(0.72)),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              RoundIconButton(
-                icon: VIcons.trash,
-                label: 'Retirer ${l.name} des favoris',
-                onPressed: () => model.removeFavorite(f.id),
-                fillAlpha: 0,
-                borderAlpha: 0,
-              ),
-              const SizedBox(width: 6),
-            ],
+                RoundIconButton(
+                  icon: VIcons.trash,
+                  label: 'Retirer ${l.name} des favoris',
+                  onPressed: () => model.removeFavorite(f.id),
+                  fillAlpha: 0,
+                  borderAlpha: 0,
+                ),
+                const SizedBox(width: 6),
+              ],
+            ),
           ),
         ),
-      ));
+      );
     }
     if (max != null) {
-      children.add(Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: Text(
-          'Version gratuite : $max favoris. Premium n’a pas de limite.',
-          textAlign: TextAlign.center,
-          style: manrope(16, color: p.text(0.72)),
+      children.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: Text(
+            'Version gratuite : $max favoris. Premium n’a pas de limite.',
+            textAlign: TextAlign.center,
+            style: manrope(16, color: p.text(0.72)),
+          ),
         ),
-      ));
+      );
     }
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: children,
+    );
   }
 
   void _apply(BuildContext context, Favorite f) {

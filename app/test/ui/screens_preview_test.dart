@@ -4,6 +4,7 @@ import 'package:eventide/app/app_model.dart';
 import 'package:eventide/core/ops.dart' show ChangeLine;
 import 'package:eventide/core/plan.dart';
 import 'package:eventide/core/schedule.dart';
+import 'package:eventide/core/settings.dart';
 import 'package:eventide/core/sleep.dart';
 import 'package:eventide/ui/navigation.dart';
 import 'package:eventide/ui/screens/credits_screen.dart';
@@ -18,7 +19,6 @@ import 'package:eventide/ui/screens/share_screen.dart';
 import 'package:eventide/ui/screens/sleep_screen.dart';
 import 'package:eventide/ui/screens/standby_screen.dart';
 import 'package:eventide/ui/screens/voice_screen.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'app_harness.dart';
@@ -31,24 +31,31 @@ List<Night> sampleNights(DateTime now) {
     for (var i = 0; i < 7; i++)
       Night(
         start: DateTime(now.year, now.month, now.day - (6 - i) - 1, 23, 5),
-        end: DateTime(now.year, now.month, now.day - (6 - i) - 1, 23, 5).add(Duration(minutes: (hours[i] * 60).round())),
+        end: DateTime(
+          now.year,
+          now.month,
+          now.day - (6 - i) - 1,
+          23,
+          5,
+        ).add(Duration(minutes: (hours[i] * 60).round())),
         listenedMinutes: 95,
       ),
   ];
 }
 
 Schedule sampleSchedule() => Schedule(
-      id: 'a',
-      hour: 22,
-      minute: 0,
-      days: Schedule.everyDay,
-      landscapeId: 'cascade-foret',
-    );
+  id: 'a',
+  hour: 22,
+  minute: 0,
+  days: Schedule.everyDay,
+  landscapeId: 'cascade-foret',
+);
 
 void main() {
   setUpAll(loadAppFonts);
 
-  Future<void> shot(WidgetTester tester, String name) => saveScreenshot(tester, name, finder: find.byKey(kAppBoundary));
+  Future<void> shot(WidgetTester tester, String name) =>
+      saveScreenshot(tester, name, finder: find.byKey(kAppBoundary));
 
   testWidgets('preview: welcome, home states, offline', (tester) async {
     usePhoneView(tester);
@@ -60,7 +67,9 @@ void main() {
     await settle(tester);
     await shot(tester, '02_accueil');
 
-    await tester.tap(find.bySemanticsLabel('Réduire le menu pour voir plus de paysage'));
+    await tester.tap(
+      find.bySemanticsLabel('Réduire le menu pour voir plus de paysage'),
+    );
     await settle(tester);
     await shot(tester, '02b_accueil_replie');
     await tester.tap(find.bySemanticsLabel('Afficher le menu complet'));
@@ -89,7 +98,10 @@ void main() {
 
   testWidgets('preview: sheets', (tester) async {
     usePhoneView(tester);
-    final model = FakeAppModel(schedules: [sampleSchedule()], nights: sampleNights(DateTime(2026, 10, 28, 20, 30)));
+    final model = FakeAppModel(
+      schedules: [sampleSchedule()],
+      nights: sampleNights(DateTime(2026, 10, 28, 20, 30)),
+    );
     model.addFavoriteForTest(model.scene);
     await pumpApp(tester, model);
 
@@ -126,7 +138,11 @@ void main() {
     await shot(tester, '09_programmations');
     navigatorOf(tester).pop();
 
-    await openRoute(tester, Routes.scheduleEditor, (_) => const ScheduleEditorScreen());
+    await openRoute(
+      tester,
+      Routes.scheduleEditor,
+      (_) => const ScheduleEditorScreen(),
+    );
     await shot(tester, '10_nouvelle_programmation');
     navigatorOf(tester).pop();
 
@@ -173,9 +189,54 @@ void main() {
     );
     await settle(tester);
     await shot(tester, '05c_voix_resultat');
-    model.voiceState = const VoiceError(message: 'Sans connexion, je ne peux pas comprendre votre demande.', offline: true);
+    model.voiceState = const VoiceError(
+      message: 'Sans connexion, je ne peux pas comprendre votre demande.',
+      offline: true,
+    );
     await settle(tester);
     await shot(tester, '05d_voix_erreur');
+    await tearDownApp(tester);
+  });
+
+  testWidgets('preview: large text (system 200 %)', (tester) async {
+    usePhoneView(tester, textScale: 2.0);
+    final model = FakeAppModel(schedules: [sampleSchedule()]);
+    await pumpApp(tester, model);
+    await shot(tester, '20_accueil_200');
+    await tester.tap(
+      find.bySemanticsLabel('Réduire le menu pour voir plus de paysage'),
+    );
+    await settle(tester);
+    await shot(tester, '20b_accueil_replie_200');
+    await tester.tap(find.bySemanticsLabel('Afficher le menu complet'));
+    await settle(tester);
+    await openRoute(tester, Routes.mix, (_) => const MixSheet());
+    await shot(tester, '21_mon_mix_200');
+    navigatorOf(tester).pop();
+    await openRoute(tester, Routes.premium, (_) => const PremiumScreen());
+    await shot(tester, '22_premium_200');
+    navigatorOf(tester).pop();
+    await openRoute(
+      tester,
+      Routes.scheduleEditor,
+      (_) => const ScheduleEditorScreen(),
+    );
+    await shot(tester, '23_programmation_200');
+    navigatorOf(tester).pop();
+    await tearDownApp(tester);
+  });
+
+  testWidgets('preview: high contrast', (tester) async {
+    usePhoneView(tester);
+    final model = FakeAppModel();
+    await model.updateSettings(
+      const AppSettings(onboarded: true, highContrast: true),
+    );
+    await pumpApp(tester, model);
+    await shot(tester, '30_accueil_contraste');
+    await openRoute(tester, Routes.settings, (_) => const SettingsScreen());
+    await shot(tester, '31_reglages_contraste');
+    navigatorOf(tester).pop();
     await tearDownApp(tester);
   });
 }

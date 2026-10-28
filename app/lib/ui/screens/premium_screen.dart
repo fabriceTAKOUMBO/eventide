@@ -33,25 +33,40 @@ ProductOffer offerFor(AppModel model, PurchaseChoice choice) {
 /// Button text and note of the Premium screen for a plan (mockup wording).
 ({String cta, String note}) premiumCallToAction(ProductOffer offer) {
   if (!offer.available) {
-    return (cta: _ctaLabel(offer), note: 'Cette formule n’est pas disponible pour le moment. Réessayez plus tard.');
+    return (
+      cta: _ctaLabel(offer),
+      note: 'Cette formule n’est pas disponible pour le moment. Réessayez plus tard.',
+    );
   }
   return switch (offer.choice) {
-    PurchaseChoice.annual => offer.hasFreeTrial
-        ? (
-            cta: 'Essayer 3 jours gratuits',
-            note: 'Rien à payer aujourd’hui. Ensuite ${offer.price} par an, annulable à tout moment.',
-          )
-        : (cta: 'S’abonner', note: '${offer.price} par an, annulable à tout moment.'),
-    PurchaseChoice.monthly => (cta: 'S’abonner', note: '${offer.price} par mois, annulable à tout moment.'),
-    PurchaseChoice.lifetime => (cta: 'Acheter une fois', note: '${offer.price} en une seule fois, sans abonnement.'),
+    PurchaseChoice.annual =>
+      offer.hasFreeTrial
+          ? (
+              cta: 'Essayer 3 jours gratuits',
+              note:
+                  'Rien à payer aujourd’hui. Ensuite ${offer.price} par an, annulable à tout moment.',
+            )
+          : (
+              cta: 'S’abonner',
+              note: '${offer.price} par an, annulable à tout moment.',
+            ),
+    PurchaseChoice.monthly => (
+      cta: 'S’abonner',
+      note: '${offer.price} par mois, annulable à tout moment.',
+    ),
+    PurchaseChoice.lifetime => (
+      cta: 'Acheter une fois',
+      note: '${offer.price} en une seule fois, sans abonnement.',
+    ),
   };
 }
 
 String _ctaLabel(ProductOffer offer) => switch (offer.choice) {
-      PurchaseChoice.annual => offer.hasFreeTrial ? 'Essayer 3 jours gratuits' : 'S’abonner',
-      PurchaseChoice.monthly => 'S’abonner',
-      PurchaseChoice.lifetime => 'Acheter une fois',
-    };
+  PurchaseChoice.annual =>
+    offer.hasFreeTrial ? 'Essayer 3 jours gratuits' : 'S’abonner',
+  PurchaseChoice.monthly => 'S’abonner',
+  PurchaseChoice.lifetime => 'Acheter une fois',
+};
 
 class PremiumScreen extends StatefulWidget {
   const PremiumScreen({super.key});
@@ -66,10 +81,10 @@ class _PremiumScreenState extends State<PremiumScreen> {
   bool _restoring = false;
 
   Plan _planOf(PurchaseChoice c) => switch (c) {
-        PurchaseChoice.annual => Plan.annual,
-        PurchaseChoice.monthly => Plan.monthly,
-        PurchaseChoice.lifetime => Plan.lifetime,
-      };
+    PurchaseChoice.annual => Plan.annual,
+    PurchaseChoice.monthly => Plan.monthly,
+    PurchaseChoice.lifetime => Plan.lifetime,
+  };
 
   Future<void> _buy() async {
     setState(() => _buying = true);
@@ -124,9 +139,17 @@ class _PremiumScreenState extends State<PremiumScreen> {
                   Container(
                     width: 26,
                     height: 26,
-                    decoration: BoxDecoration(color: p.fill(0.14), shape: BoxShape.circle),
+                    decoration: BoxDecoration(
+                      color: p.fill(0.14),
+                      shape: BoxShape.circle,
+                    ),
                     alignment: Alignment.center,
-                    child: const VIcon(VIcons.check, size: 15, color: VitreColors.white, strokeWidth: 3),
+                    child: const VIcon(
+                      VIcons.check,
+                      size: 15,
+                      color: VitreColors.white,
+                      strokeWidth: 3,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(child: Text(text, style: manrope(18, weight: 500))),
@@ -180,7 +203,12 @@ class _PremiumScreenState extends State<PremiumScreen> {
 }
 
 class _PlanCard extends StatelessWidget {
-  const _PlanCard({required this.choice, required this.offer, required this.selected, required this.onTap});
+  const _PlanCard({
+    required this.choice,
+    required this.offer,
+    required this.selected,
+    required this.onTap,
+  });
 
   final PurchaseChoice choice;
   final ProductOffer offer;
@@ -191,23 +219,44 @@ class _PlanCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = Vitre.of(context);
     final (name, sub, unit, badge) = switch (choice) {
-      PurchaseChoice.annual => ('Annuel', offer.hasFreeTrial ? 'Essai gratuit de 3 jours' : 'Le plus avantageux', 'par an', '−37 %'),
-      PurchaseChoice.monthly => ('Mensuel', 'Sans engagement', 'par mois', null),
-      PurchaseChoice.lifetime => ('À vie', 'Paiement unique, sans assistant vocal', 'une seule fois', null),
+      PurchaseChoice.annual => (
+        'Annuel',
+        offer.hasFreeTrial ? 'Essai gratuit de 3 jours' : 'Le plus avantageux',
+        'par an',
+        '−37 %',
+      ),
+      PurchaseChoice.monthly => (
+        'Mensuel',
+        'Sans engagement',
+        'par mois',
+        null,
+      ),
+      PurchaseChoice.lifetime => (
+        'À vie',
+        'Paiement unique, sans assistant vocal',
+        'une seule fois',
+        null,
+      ),
     };
     final radius = BorderRadius.circular(26);
+    final stacked = isLargeText(context);
     return Semantics(
       inMutuallyExclusiveGroup: true,
       checked: selected,
       button: true,
-      label: '$name, ${offer.price} $unit. $sub${badge == null ? '' : ', moins 37 %'}',
+      label:
+          '$name, ${offer.price} $unit. $sub${badge == null ? '' : ', moins 37 %'}',
+      container: true,
       excludeSemantics: true,
       onTap: onTap,
       child: Material(
         color: selected ? p.fill(0.14) : p.fill(0.06),
         shape: RoundedRectangleBorder(
           borderRadius: radius,
-          side: BorderSide(color: selected ? VitreColors.white : p.border(0.2), width: selected ? 2 : 1),
+          side: BorderSide(
+            color: selected ? VitreColors.white : p.border(0.2),
+            width: selected ? 2 : 1,
+          ),
         ),
         child: InkWell(
           borderRadius: radius,
@@ -222,14 +271,20 @@ class _PlanCard extends StatelessWidget {
                   height: 26,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: selected ? VitreColors.white : p.text(0.5), width: 2),
+                    border: Border.all(
+                      color: selected ? VitreColors.white : p.text(0.5),
+                      width: 2,
+                    ),
                   ),
                   alignment: Alignment.center,
                   child: selected
                       ? Container(
                           width: 12,
                           height: 12,
-                          decoration: const BoxDecoration(color: VitreColors.white, shape: BoxShape.circle),
+                          decoration: const BoxDecoration(
+                            color: VitreColors.white,
+                            shape: BoxShape.circle,
+                          ),
                         )
                       : null,
                 ),
@@ -246,25 +301,51 @@ class _PlanCard extends StatelessWidget {
                           Text(name, style: manrope(20, weight: 700)),
                           if (badge != null)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 2),
-                              decoration: BoxDecoration(color: VitreColors.white, borderRadius: BorderRadius.circular(12)),
-                              child: Text(badge, style: manrope(15, weight: 700, color: VitreColors.ink)),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 9,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: VitreColors.white,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                badge,
+                                style: manrope(
+                                  15,
+                                  weight: 700,
+                                  color: VitreColors.ink,
+                                ),
+                              ),
                             ),
                         ],
                       ),
                       const SizedBox(height: 2),
-                      Text(sub, style: manrope(16, height: 1.25, color: p.text(0.76))),
+                      Text(
+                        sub,
+                        style: manrope(16, height: 1.25, color: p.text(0.76)),
+                      ),
+                      // Large text: the price goes under the name.
+                      if (stacked) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          '${offer.price} $unit',
+                          style: manrope(20, weight: 700),
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(offer.price, style: manrope(20, weight: 700)),
-                    Text(unit, style: manrope(16, color: p.text(0.76))),
-                  ],
-                ),
+                if (!stacked) ...[
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(offer.price, style: manrope(20, weight: 700)),
+                      Text(unit, style: manrope(16, color: p.text(0.76))),
+                    ],
+                  ),
+                ],
               ],
             ),
           ),

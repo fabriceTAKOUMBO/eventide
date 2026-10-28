@@ -161,7 +161,7 @@ def test_delete_unlinked_installation(installation):
 @pytest.mark.django_db
 def test_delete_linked_account_removes_every_linked_installation():
     other, _ = make_installation()  # someone else: untouched
-    inst_a, token_a = make_installation()
+    _inst_a, token_a = make_installation()
     inst_b, token_b = make_installation()
     link(client_for(token_a), sub="p")
     link(client_for(token_b), sub="p")

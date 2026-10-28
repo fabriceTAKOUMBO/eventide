@@ -25,7 +25,8 @@ class ToastController extends ChangeNotifier {
   /// Shows [text] for a few seconds. Confirmations get a check mark.
   void show(String text, {bool? check}) {
     _timer?.cancel();
-    final positive = check ??
+    final positive =
+        check ??
         (text.startsWith('Ajouté') ||
             text.startsWith('Enregistr') ||
             text.contains('copié') ||
@@ -59,10 +60,12 @@ class ToastHost extends InheritedWidget {
   static ToastController? maybeOf(BuildContext context) =>
       context.getInheritedWidgetOfExactType<ToastHost>()?.controller;
 
-  static void show(BuildContext context, String text, {bool? check}) => maybeOf(context)?.show(text, check: check);
+  static void show(BuildContext context, String text, {bool? check}) =>
+      maybeOf(context)?.show(text, check: check);
 
   @override
-  bool updateShouldNotify(ToastHost oldWidget) => oldWidget.controller != controller;
+  bool updateShouldNotify(ToastHost oldWidget) =>
+      oldWidget.controller != controller;
 }
 
 /// Overlay that draws the current toast near the top of the screen.
@@ -102,7 +105,11 @@ class _ToastOverlayState extends State<ToastOverlay> {
     if (message != null) {
       final view = View.maybeOf(context);
       if (view != null) {
-        SemanticsService.sendAnnouncement(view, message.text, TextDirection.ltr);
+        SemanticsService.sendAnnouncement(
+          view,
+          message.text,
+          TextDirection.ltr,
+        );
       }
     }
     setState(() {});
@@ -166,7 +173,11 @@ class _ToastPill extends StatelessWidget {
                   const SizedBox(width: 8),
                 ],
                 Flexible(
-                  child: Text(message.text, textAlign: TextAlign.center, style: manrope(17, weight: 600)),
+                  child: Text(
+                    message.text,
+                    textAlign: TextAlign.center,
+                    style: manrope(17, weight: 600),
+                  ),
                 ),
               ],
             ),

@@ -57,6 +57,11 @@ def _check_payload(payload: dict, request_hash: str) -> str | None:
 def verify(integrity_token: str, request_hash: str) -> None:
     if not settings.PLAY_INTEGRITY_ENFORCED:
         return
+    if not integrity_token:
+        logger.info(
+            "Integrity token missing", extra={"event": "integrity_failed", "reason": "missing"}
+        )
+        raise IntegrityFailed("missing")
     try:
         session = authorized_session()
         response = session.post(

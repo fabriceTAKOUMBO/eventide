@@ -30,7 +30,8 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
   bool _expanded = true;
   bool _timerMenu = false;
   bool _hint = false;
@@ -118,7 +119,8 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     return _shownId ?? model.browsedLandscapeId;
   }
 
-  Landscape _landscape(AppModel model, String id) => model.catalog.landscape(id) ?? model.catalog.defaultLandscape;
+  Landscape _landscape(AppModel model, String id) =>
+      model.catalog.landscape(id) ?? model.catalog.defaultLandscape;
 
   ({String? previous, String? next}) _vertical(AppModel model, String id) {
     final l = _landscape(model, id);
@@ -136,7 +138,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final t = themes.indexWhere((x) => x.id == l.themeId);
     return (
       left: t > 0 ? model.lastLandscapeOfTheme(themes[t - 1].id) : null,
-      right: t >= 0 && t < themes.length - 1 ? model.lastLandscapeOfTheme(themes[t + 1].id) : null,
+      right: t >= 0 && t < themes.length - 1
+          ? model.lastLandscapeOfTheme(themes[t + 1].id)
+          : null,
     );
   }
 
@@ -228,8 +232,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       then?.call();
       return;
     }
-    _settleAnimation = Tween(begin: _offset, end: target)
-        .animate(CurvedAnimation(parent: _settle, curve: const Cubic(0.22, 0.8, 0.24, 1)));
+    _settleAnimation = Tween(begin: _offset, end: target).animate(
+      CurvedAnimation(parent: _settle, curve: const Cubic(0.22, 0.8, 0.24, 1)),
+    );
     _settle
       ..duration = const Duration(milliseconds: 420)
       ..forward(from: 0).whenComplete(() => then?.call());
@@ -245,19 +250,22 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         _offset = Offset(exit.dx.sign * 0.01, exit.dy.sign * 0.01);
       }
     });
-    _settleTo(exit, then: () {
-      if (!mounted) return;
-      context.readModel.browseLandscape(targetId);
-      setState(() {
-        _shownId = targetId;
-        _incomingId = null;
-        _offset = Offset.zero;
-      });
-      _shownTimer?.cancel();
-      _shownTimer = Timer(const Duration(milliseconds: 800), () {
-        if (mounted) setState(() => _shownId = null);
-      });
-    });
+    _settleTo(
+      exit,
+      then: () {
+        if (!mounted) return;
+        context.readModel.browseLandscape(targetId);
+        setState(() {
+          _shownId = targetId;
+          _incomingId = null;
+          _offset = Offset.zero;
+        });
+        _shownTimer?.cancel();
+        _shownTimer = Timer(const Duration(milliseconds: 800), () {
+          if (mounted) setState(() => _shownId = null);
+        });
+      },
+    );
   }
 
   void _goVertical(bool next) {
@@ -273,26 +281,43 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final current = _landscape(model, _currentId(model));
     final themes = model.catalog.themes;
     final from = themes.indexWhere((t) => t.id == current.themeId);
-    if (index == from || index < 0 || index >= themes.length || _settle.isAnimating) return;
+    if (index == from ||
+        index < 0 ||
+        index >= themes.length ||
+        _settle.isAnimating) {
+      return;
+    }
     final target = model.lastLandscapeOfTheme(themes[index].id);
     _commit(target, Offset(index > from ? -_size.width : _size.width, 0));
   }
 
   // ---- Build
 
-  Widget _picture(AppModel model, String id, Offset offset, {required bool current}) {
+  Widget _picture(
+    AppModel model,
+    String id,
+    Offset offset, {
+    required bool current,
+  }) {
     final l = _landscape(model, id);
     return Positioned.fill(
       key: ValueKey('picture-$id'),
       child: Transform.translate(
         offset: offset,
-        child: LandscapeImage(landscapeId: l.id, style: l.style, moment: model.scene.moment, kenBurns: true),
+        child: LandscapeImage(
+          landscapeId: l.id,
+          style: l.style,
+          moment: model.scene.moment,
+          kenBurns: true,
+        ),
       ),
     );
   }
 
   Offset _incomingOffset() {
-    if (_offset.dx != 0) return _offset + Offset(_offset.dx < 0 ? _size.width : -_size.width, 0);
+    if (_offset.dx != 0) {
+      return _offset + Offset(_offset.dx < 0 ? _size.width : -_size.width, 0);
+    }
     return _offset + Offset(0, _offset.dy < 0 ? _size.height : -_size.height);
   }
 
@@ -301,7 +326,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     final names = <String>[];
     final fromScene = shown.id == model.scene.landscapeId;
     for (final kind in const [LayerKind.son, LayerKind.musique]) {
-      final layers = fromScene ? model.scene.layers(kind) : (shown.defaultMix[kind] ?? const <Layer>[]);
+      final layers = fromScene
+          ? model.scene.layers(kind)
+          : (shown.defaultMix[kind] ?? const <Layer>[]);
       for (final layer in layers) {
         final name = catalog.item(kind, layer.id)?.name;
         if (name != null) names.add(name);
@@ -313,13 +340,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
   HomeMenuData _menuData(AppModel model, Landscape shown) {
     final next = model.nextScheduledStart;
-    String top = 'Démarrage', main = 'Programmer', label = 'Programmer le démarrage automatique du son';
+    String top = 'Démarrage',
+        main = 'Programmer',
+        label = 'Programmer le démarrage automatique du son';
     if (next != null) {
       final text = nextStartLabel(next, DateTime.now());
       final parts = text.split(' · ');
       top = parts.first;
       main = parts.length > 1 ? parts.sublist(1).join(' · ') : '';
-      label = 'Prochain démarrage du son : $text. Toucher pour voir les programmations';
+      label =
+          'Prochain démarrage du son : $text. Toucher pour voir les programmations';
     }
     final locked = !model.rules.canUseLandscape(model.plan, shown);
     final loading = model.loadingAudio && !locked;
@@ -365,155 +395,225 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         : const <DecorEffect>[];
     final topVisible = _expanded;
     final fade = motion(context, const Duration(milliseconds: 300));
+    _prewarmNeighbors(model, id, media.devicePixelRatio);
 
-    return Scaffold(
-      backgroundColor: VitreColors.page,
-      body: Listener(
-        behavior: HitTestBehavior.opaque,
-        onPointerDown: _onDown,
-        onPointerMove: _onMove,
-        onPointerUp: _onUp,
-        onPointerCancel: _onUp,
-        child: LayoutBuilder(builder: (context, constraints) {
-          _size = constraints.biggest;
-          return Stack(
-            children: [
-              // Landscapes: the current one and, during a gesture, the incoming one.
-              _picture(model, shown.id, _offset, current: true),
-              if (_incomingId != null && dragging)
-                _picture(model, _incomingId!, _incomingOffset(), current: false),
-              Positioned.fill(child: DecorLayer(effects: decor, active: !dragging)),
-              const Positioned.fill(
-                child: IgnorePointer(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Color(0x6B000000), Color(0x00000000), Color(0x00000000), Color(0x66000000)],
-                        stops: [0, 0.18, 0.58, 1],
+    return PopScope(
+      canPop: !_timerMenu,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) setState(() => _timerMenu = false);
+      },
+      child: Scaffold(
+        backgroundColor: VitreColors.page,
+        body: Listener(
+          behavior: HitTestBehavior.opaque,
+          onPointerDown: _onDown,
+          onPointerMove: _onMove,
+          onPointerUp: _onUp,
+          onPointerCancel: _onUp,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              _size = constraints.biggest;
+              return Stack(
+                children: [
+                  // Landscapes: the current one and, during a gesture, the incoming one.
+                  _picture(model, shown.id, _offset, current: true),
+                  if (_incomingId != null && dragging)
+                    _picture(
+                      model,
+                      _incomingId!,
+                      _incomingOffset(),
+                      current: false,
+                    ),
+                  Positioned.fill(
+                    child: DecorLayer(effects: decor, active: !dragging),
+                  ),
+                  const Positioned.fill(
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Color(0x6B000000),
+                              Color(0x00000000),
+                              Color(0x00000000),
+                              Color(0x66000000),
+                            ],
+                            stops: [0, 0.18, 0.58, 1],
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
-              Positioned.fill(
-                child: Padding(
-                  padding: EdgeInsets.only(top: media.padding.top),
-                  child: Column(
-                    children: [
-                      AnimatedOpacity(
-                        opacity: topVisible ? 1 : 0,
-                        duration: fade,
-                        child: IgnorePointer(
-                          ignoring: !topVisible,
-                          child: ExcludeSemantics(
-                            excluding: !topVisible,
-                            child: HomeTopBar(
-                              timer: model.scene.timer,
-                              timerMenuOpen: _timerMenu,
-                              onSleep: () => Nav.sleep(context),
-                              onSettings: () => Nav.settings(context),
-                              onTimer: () => setState(() => _timerMenu = !_timerMenu),
-                              themes: [for (final t in themes) t.name],
-                              themeIndex: themeIndex < 0 ? 0 : themeIndex,
-                              onTheme: _goTheme,
+                  Positioned.fill(
+                    child: Padding(
+                      padding: EdgeInsets.only(top: media.padding.top),
+                      child: Column(
+                        children: [
+                          AnimatedOpacity(
+                            opacity: topVisible ? 1 : 0,
+                            duration: fade,
+                            child: IgnorePointer(
+                              ignoring: !topVisible,
+                              child: ExcludeSemantics(
+                                excluding: !topVisible,
+                                child: HomeTopBar(
+                                  timer: model.scene.timer,
+                                  timerMenuOpen: _timerMenu,
+                                  onSleep: () => Nav.sleep(context),
+                                  onSettings: () => Nav.settings(context),
+                                  onTimer: () =>
+                                      setState(() => _timerMenu = !_timerMenu),
+                                  themes: [for (final t in themes) t.name],
+                                  themeIndex: themeIndex < 0 ? 0 : themeIndex,
+                                  onTheme: _goTheme,
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Align(
-                          alignment: Alignment.topRight,
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(0, 30, 10, 12),
-                            child: HomeRightEdge(
-                              favorite: model.isCurrentSceneFavorite,
-                              onFavorite: model.toggleFavorite,
-                              onPrevious: vertical.previous == null ? null : () => _goVertical(false),
-                              onNext: vertical.next == null ? null : () => _goVertical(true),
-                              dots: [for (final l in ofTheme) model.rules.canUseLandscape(model.plan, l)],
-                              current: index < 0 ? 0 : index,
-                              pagerLabel: '${themeIndex < 0 ? '' : themes[themeIndex].name}, paysage ${index + 1} sur ${ofTheme.length}'
-                                  '${model.rules.canUseLandscape(model.plan, shown) ? '' : ', réservé à Premium'}',
+                          Expanded(
+                            child: Align(
+                              alignment: Alignment.topRight,
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(
+                                  0,
+                                  30,
+                                  10,
+                                  12,
+                                ),
+                                child: HomeRightEdge(
+                                  favorite: model.isCurrentSceneFavorite,
+                                  onFavorite: model.toggleFavorite,
+                                  onPrevious: vertical.previous == null
+                                      ? null
+                                      : () => _goVertical(false),
+                                  onNext: vertical.next == null
+                                      ? null
+                                      : () => _goVertical(true),
+                                  dots: [
+                                    for (final l in ofTheme)
+                                      model.rules.canUseLandscape(
+                                        model.plan,
+                                        l,
+                                      ),
+                                  ],
+                                  current: index < 0 ? 0 : index,
+                                  pagerLabel:
+                                      '${themeIndex < 0 ? '' : themes[themeIndex].name}, paysage ${index + 1} sur ${ofTheme.length}'
+                                      '${model.rules.canUseLandscape(model.plan, shown) ? '' : ', réservé à Premium'}',
+                                ),
+                              ),
                             ),
                           ),
+                          Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              14,
+                              0,
+                              14,
+                              18 + media.padding.bottom,
+                            ),
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxHeight: constraints.maxHeight * 0.62,
+                              ),
+                              child: SingleChildScrollView(
+                                physics: const ClampingScrollPhysics(),
+                                reverse: true,
+                                child: HomeMenu(
+                                  key: _menuKey,
+                                  data: _menuData(model, shown),
+                                  expanded: _expanded,
+                                  onToggleExpanded: () => setState(() {
+                                    _expanded = !_expanded;
+                                    _timerMenu = false;
+                                  }),
+                                  onPlay: model.togglePlay,
+                                  onUnlock: () => Nav.premium(context),
+                                  onLandscapes: () => Nav.landscapes(context),
+                                  onMix: () => Nav.mix(context),
+                                  onVoice: () => Nav.voice(context),
+                                  onSchedule: _openSchedule,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  if (_hint)
+                    Positioned(
+                      left: 40,
+                      right: 40,
+                      top: constraints.maxHeight * 0.36,
+                      child: IgnorePointer(child: Center(child: _SwipeHint())),
+                    ),
+                  if (_timerMenu) ...[
+                    Positioned.fill(
+                      child: Semantics(
+                        label: 'Fermer le choix du minuteur',
+                        button: true,
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => setState(() => _timerMenu = false),
                         ),
                       ),
-                      Padding(
-                        padding: EdgeInsets.fromLTRB(14, 0, 14, 18 + media.padding.bottom),
+                    ),
+                    Positioned(
+                      top: media.padding.top + 64,
+                      left: 0,
+                      right: 0,
+                      child: Center(
                         child: ConstrainedBox(
-                          constraints: BoxConstraints(maxHeight: constraints.maxHeight * 0.62),
-                          child: SingleChildScrollView(
-                            physics: const ClampingScrollPhysics(),
-                            reverse: true,
-                            child: HomeMenu(
-                              key: _menuKey,
-                              data: _menuData(model, shown),
-                              expanded: _expanded,
-                              onToggleExpanded: () => setState(() {
-                                _expanded = !_expanded;
-                                _timerMenu = false;
-                              }),
-                              onPlay: model.togglePlay,
-                              onUnlock: () => Nav.premium(context),
-                              onLandscapes: () => Nav.landscapes(context),
-                              onMix: () => Nav.mix(context),
-                              onVoice: () => Nav.voice(context),
-                              onSchedule: _openSchedule,
+                          constraints: BoxConstraints(
+                            maxWidth: (220 * media.textScaler.scale(1)).clamp(
+                              220,
+                              constraints.maxWidth - 40,
                             ),
+                            minWidth: 220,
+                            maxHeight:
+                                constraints.maxHeight - media.padding.top - 80,
+                          ),
+                          child: TimerMenu(
+                            current: model.scene.timer,
+                            onPick: (t) {
+                              model.setTimer(t);
+                              setState(() => _timerMenu = false);
+                            },
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
-              if (_hint)
-                Positioned(
-                  left: 40,
-                  right: 40,
-                  top: constraints.maxHeight * 0.36,
-                  child: IgnorePointer(child: Center(child: _SwipeHint())),
-                ),
-              if (_timerMenu) ...[
-                Positioned.fill(
-                  child: Semantics(
-                    label: 'Fermer le choix du minuteur',
-                    button: true,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => setState(() => _timerMenu = false),
                     ),
-                  ),
-                ),
-                Positioned(
-                  top: media.padding.top + 64,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                        maxWidth: (200 * media.textScaler.scale(1)).clamp(200, constraints.maxWidth - 40),
-                        minWidth: 200,
-                        maxHeight: constraints.maxHeight - media.padding.top - 80,
-                      ),
-                      child: TimerMenu(
-                        current: model.scene.timer,
-                        onPick: (t) {
-                          model.setTimer(t);
-                          setState(() => _timerMenu = false);
-                        },
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          );
-        }),
+                  ],
+                ],
+              );
+            },
+          ),
+        ),
       ),
     );
+  }
+
+  String? _prewarmedFor;
+
+  /// Rasterises the neighbouring landscapes after the frame, so that a swipe never
+  /// waits for the first paint of the incoming picture.
+  void _prewarmNeighbors(AppModel model, String id, double dpr) {
+    if (_prewarmedFor == id || _size.isEmpty) return;
+    _prewarmedFor = id;
+    final v = _vertical(model, id);
+    final h = _horizontal(model, id);
+    final ids = {v.previous, v.next, h.left, h.right}.whereType<String>();
+    final size = _size;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      for (final other in ids) {
+        final l = model.catalog.landscape(other);
+        if (l == null || LandscapeImages.providerFor(other) != null) continue;
+        LandscapeRasterCache.obtain(l.style, size, dpr.clamp(1.0, 1.75));
+      }
+    });
   }
 }
 

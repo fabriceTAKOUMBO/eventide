@@ -35,7 +35,8 @@ class DecorEffect {
   double get intensity => (level / 100).clamp(0.0, 1.0);
 
   @override
-  bool operator ==(Object other) => other is DecorEffect && other.id == id && other.level == level;
+  bool operator ==(Object other) =>
+      other is DecorEffect && other.id == id && other.level == level;
 
   @override
   int get hashCode => Object.hash(id, level);
@@ -54,7 +55,8 @@ class DecorLayer extends StatefulWidget {
   State<DecorLayer> createState() => _DecorLayerState();
 }
 
-class _DecorLayerState extends State<DecorLayer> with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+class _DecorLayerState extends State<DecorLayer>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   late final Ticker _ticker = createTicker(_onTick);
   final ValueNotifier<double> _time = ValueNotifier<double>(0);
   Duration _last = Duration.zero;
@@ -88,7 +90,8 @@ class _DecorLayerState extends State<DecorLayer> with SingleTickerProviderStateM
   bool get _reduced => Vitre.reduceMotion(context);
 
   void _sync() {
-    final run = widget.active && _foreground && widget.effects.isNotEmpty && !_reduced;
+    final run =
+        widget.active && _foreground && widget.effects.isNotEmpty && !_reduced;
     if (run && !_ticker.isActive) {
       _base = _time.value;
       _last = Duration.zero;
@@ -121,7 +124,11 @@ class _DecorLayerState extends State<DecorLayer> with SingleTickerProviderStateM
         child: RepaintBoundary(
           child: CustomPaint(
             size: Size.infinite,
-            painter: DecorPainter(effects: widget.effects, time: _time, still: _reduced),
+            painter: DecorPainter(
+              effects: widget.effects,
+              time: _time,
+              still: _reduced,
+            ),
           ),
         ),
       ),
@@ -130,9 +137,12 @@ class _DecorLayerState extends State<DecorLayer> with SingleTickerProviderStateM
 }
 
 class DecorPainter extends CustomPainter {
-  DecorPainter({required this.effects, required ValueListenable<double> time, this.still = false})
-      : _time = time,
-        super(repaint: time);
+  DecorPainter({
+    required this.effects,
+    required ValueListenable<double> time,
+    this.still = false,
+  }) : _time = time,
+       super(repaint: time);
 
   final List<DecorEffect> effects;
   final ValueListenable<double> _time;
@@ -168,7 +178,8 @@ class DecorPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(DecorPainter old) => !_listEquals(old.effects, effects) || old.still != still;
+  bool shouldRepaint(DecorPainter old) =>
+      !_listEquals(old.effects, effects) || old.still != still;
 }
 
 bool _listEquals(List<DecorEffect> a, List<DecorEffect> b) {
@@ -219,7 +230,10 @@ void _sunRays(Canvas canvas, Size size, double t, double k) {
     final angle = 1.9 + (i - 2) * 0.13 + _r(i, 2) * 0.05;
     final len = size.height * 1.1;
     final end = origin + Offset(math.cos(angle), math.sin(angle)) * len;
-    final perp = Offset(math.cos(angle + math.pi / 2), math.sin(angle + math.pi / 2));
+    final perp = Offset(
+      math.cos(angle + math.pi / 2),
+      math.sin(angle + math.pi / 2),
+    );
     final width = size.width * (0.05 + _r(i, 3) * 0.06);
     final path = Path()
       ..moveTo(origin.dx, origin.dy)
@@ -249,13 +263,19 @@ void _birds(Canvas canvas, Size size, double t, double k) {
     final period = 26 + _r(i, 1) * 20;
     final phase = _wrap(t / period + _r(i, 2));
     final x = (-0.1 + phase * 1.2) * size.width;
-    final y = (0.12 + _r(i, 3) * 0.25) * size.height + math.sin(phase * 9 + i) * 10;
+    final y =
+        (0.12 + _r(i, 3) * 0.25) * size.height + math.sin(phase * 9 + i) * 10;
     final s = 5 + _r(i, 4) * 5;
     final flap = math.sin(t * 7 + i * 2) * 0.6;
     final path = Path()
       ..moveTo(x - s, y - s * (0.3 + flap * 0.5))
       ..quadraticBezierTo(x - s * 0.4, y - s * 0.1, x, y)
-      ..quadraticBezierTo(x + s * 0.4, y - s * 0.1, x + s, y - s * (0.3 + flap * 0.5));
+      ..quadraticBezierTo(
+        x + s * 0.4,
+        y - s * 0.1,
+        x + s,
+        y - s * (0.3 + flap * 0.5),
+      );
     canvas.drawPath(path, paint);
   }
 }
@@ -264,7 +284,9 @@ void _fireflies(Canvas canvas, Size size, double t, double k) {
   final count = (8 + k * 30).round();
   for (var i = 0; i < count; i++) {
     final x = (_r(i, 1) + math.sin(t * 0.13 + i) * 0.04) * size.width;
-    final y = (0.4 + _r(i, 2) * 0.55 + math.cos(t * 0.11 + i * 1.3) * 0.03) * size.height;
+    final y =
+        (0.4 + _r(i, 2) * 0.55 + math.cos(t * 0.11 + i * 1.3) * 0.03) *
+        size.height;
     final blink = math.max(0.0, math.sin(t * (0.8 + _r(i, 3)) + i * 2.1));
     final a = blink * k;
     if (a < 0.02) continue;
@@ -277,7 +299,11 @@ void _fireflies(Canvas canvas, Size size, double t, double k) {
           Color.fromRGBO(220, 255, 140, 0),
         ]),
     );
-    canvas.drawCircle(Offset(x, y), 1.6, Paint()..color = Color.fromRGBO(250, 255, 210, 0.9 * a));
+    canvas.drawCircle(
+      Offset(x, y),
+      1.6,
+      Paint()..color = Color.fromRGBO(250, 255, 210, 0.9 * a),
+    );
   }
 }
 
@@ -292,7 +318,11 @@ void _drops(Canvas canvas, Size size, double t, double k, bool still) {
     final y = (_r(i, 5) * 0.9 + fall * 0.5) * size.height;
     final c = Offset(x, y);
     final fade = 1 - fall;
-    canvas.drawCircle(c, r, Paint()..color = Color.fromRGBO(200, 220, 230, 0.10 * k * fade));
+    canvas.drawCircle(
+      c,
+      r,
+      Paint()..color = Color.fromRGBO(200, 220, 230, 0.10 * k * fade),
+    );
     canvas.drawCircle(
       c,
       r,
@@ -301,7 +331,11 @@ void _drops(Canvas canvas, Size size, double t, double k, bool still) {
         ..strokeWidth = 0.8
         ..color = Color.fromRGBO(255, 255, 255, 0.22 * k * fade),
     );
-    canvas.drawCircle(c.translate(-r * 0.35, -r * 0.35), r * 0.25, Paint()..color = Color.fromRGBO(255, 255, 255, 0.5 * k * fade));
+    canvas.drawCircle(
+      c.translate(-r * 0.35, -r * 0.35),
+      r * 0.25,
+      Paint()..color = Color.fromRGBO(255, 255, 255, 0.5 * k * fade),
+    );
     if (fall > 0) {
       canvas.drawLine(
         c,
@@ -317,7 +351,12 @@ void _drops(Canvas canvas, Size size, double t, double k, bool still) {
 
 void _leaves(Canvas canvas, Size size, double t, double k) {
   final count = (5 + k * 15).round();
-  const colors = [Color(0xFFB8762E), Color(0xFF9C5A22), Color(0xFFC9A03C), Color(0xFF7E8A2E)];
+  const colors = [
+    Color(0xFFB8762E),
+    Color(0xFF9C5A22),
+    Color(0xFFC9A03C),
+    Color(0xFF7E8A2E),
+  ];
   for (var i = 0; i < count; i++) {
     final period = 16 + _r(i, 1) * 14;
     final phase = _wrap(t / period + _r(i, 2));
@@ -332,7 +371,11 @@ void _leaves(Canvas canvas, Size size, double t, double k) {
       ..moveTo(-s, 0)
       ..quadraticBezierTo(0, -s * 0.6, s, 0)
       ..quadraticBezierTo(0, s * 0.6, -s, 0);
-    canvas.drawPath(leaf, Paint()..color = colors[i % colors.length].withValues(alpha: 0.75 * k + 0.1));
+    canvas.drawPath(
+      leaf,
+      Paint()
+        ..color = colors[i % colors.length].withValues(alpha: 0.75 * k + 0.1),
+    );
     canvas.restore();
   }
 }
@@ -381,9 +424,15 @@ void _twinkle(Canvas canvas, Size size, double t, double k, bool still) {
   for (var i = 0; i < count; i++) {
     final x = _r(i, 1) * size.width;
     final y = math.pow(_r(i, 2), 1.5) * size.height * 0.55;
-    final tw = still ? 0.7 : 0.5 + 0.5 * math.sin(t * (1 + _r(i, 3) * 2) + i * 3.1);
+    final tw = still
+        ? 0.7
+        : 0.5 + 0.5 * math.sin(t * (1 + _r(i, 3) * 2) + i * 3.1);
     final a = (0.25 + 0.6 * tw) * k;
-    canvas.drawCircle(Offset(x, y.toDouble()), 0.6 + _r(i, 4) * 1.1, Paint()..color = Color.fromRGBO(255, 255, 255, a));
+    canvas.drawCircle(
+      Offset(x, y.toDouble()),
+      0.6 + _r(i, 4) * 1.1,
+      Paint()..color = Color.fromRGBO(255, 255, 255, a),
+    );
   }
 }
 
@@ -391,9 +440,16 @@ void _lightning(Canvas canvas, Size size, double t, double k) {
   // A distant flash every ~10–24 s; soft, low alpha (no strobe).
   const period = 17.0;
   final cycle = t % period;
-  final flash = cycle < 0.25 ? math.sin(cycle / 0.25 * math.pi) : (cycle > 0.4 && cycle < 0.55 ? 0.5 * math.sin((cycle - 0.4) / 0.15 * math.pi) : 0.0);
+  final flash = cycle < 0.25
+      ? math.sin(cycle / 0.25 * math.pi)
+      : (cycle > 0.4 && cycle < 0.55
+            ? 0.5 * math.sin((cycle - 0.4) / 0.15 * math.pi)
+            : 0.0);
   if (flash <= 0) return;
-  final center = Offset(size.width * (0.2 + _r((t / period).floor(), 1) * 0.6), size.height * 0.15);
+  final center = Offset(
+    size.width * (0.2 + _r((t / period).floor(), 1) * 0.6),
+    size.height * 0.15,
+  );
   canvas.drawRect(
     Offset.zero & size,
     Paint()

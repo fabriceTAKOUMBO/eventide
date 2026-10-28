@@ -42,12 +42,14 @@ class _EventideAppState extends State<EventideApp> {
     widget.model.addListener(_onModelChanged);
     _listen();
     LandscapeImages.discoverAssets();
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.light,
-      systemNavigationBarColor: Colors.transparent,
-      systemNavigationBarIconBrightness: Brightness.light,
-    ));
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        systemNavigationBarColor: Colors.transparent,
+        systemNavigationBarIconBrightness: Brightness.light,
+      ),
+    );
   }
 
   @override
@@ -87,7 +89,9 @@ class _EventideAppState extends State<EventideApp> {
       nav.popUntil((r) => r.settings.name == name);
       return;
     }
-    nav.push(VitreRoute<void>(builder: builder, name: name, fadeOnly: fadeOnly));
+    nav.push(
+      VitreRoute<void>(builder: builder, name: name, fadeOnly: fadeOnly),
+    );
   }
 
   void _onEvent(AppEvent event) {
@@ -117,8 +121,8 @@ class _EventideAppState extends State<EventideApp> {
           lockedItems == 0
               ? 'Mix reçu, prêt à écouter'
               : lockedItems == 1
-                  ? 'Mix reçu · 1 élément réservé à Premium'
-                  : 'Mix reçu · $lockedItems éléments réservés à Premium',
+              ? 'Mix reçu · 1 élément réservé à Premium'
+              : 'Mix reçu · $lockedItems éléments réservés à Premium',
           check: lockedItems == 0,
         );
     }
@@ -128,35 +132,40 @@ class _EventideAppState extends State<EventideApp> {
   Widget build(BuildContext context) {
     final settings = _settings;
     return MaterialApp(
-          title: 'Eventide',
-          debugShowCheckedModeBanner: false,
-          navigatorKey: _navigator,
-          navigatorObservers: [_routes],
-          theme: vitreMaterialTheme(),
-          color: VitreColors.page,
-          builder: (context, child) {
-            final media = MediaQuery.of(context);
-            return MediaQuery(
-              data: media.copyWith(textScaler: MultipliedTextScaler(media.textScaler, settings.textScale)),
-              child: Vitre(
-                palette: VitrePalette(highContrast: settings.highContrast),
-                child: ModelScope(
-                  model: widget.model,
-                  child: ToastHost(
-                    controller: _toasts,
-                    child: Stack(
-                      children: [
-                        Positioned.fill(child: child ?? const SizedBox.shrink()),
-                        ToastOverlay(controller: _toasts),
-                      ],
-                    ),
-                  ),
+      title: 'Eventide',
+      debugShowCheckedModeBanner: false,
+      navigatorKey: _navigator,
+      navigatorObservers: [_routes],
+      theme: vitreMaterialTheme(),
+      color: VitreColors.page,
+      builder: (context, child) {
+        final media = MediaQuery.of(context);
+        return MediaQuery(
+          data: media.copyWith(
+            textScaler: MultipliedTextScaler(
+              media.textScaler,
+              settings.textScale,
+            ),
+          ),
+          child: Vitre(
+            palette: VitrePalette(highContrast: settings.highContrast),
+            child: ModelScope(
+              model: widget.model,
+              child: ToastHost(
+                controller: _toasts,
+                child: Stack(
+                  children: [
+                    Positioned.fill(child: child ?? const SizedBox.shrink()),
+                    ToastOverlay(controller: _toasts),
+                  ],
                 ),
               ),
-            );
-          },
-          home: const RootGate(),
+            ),
+          ),
         );
+      },
+      home: const RootGate(),
+    );
   }
 }
 
@@ -171,11 +180,16 @@ class RootGate extends StatelessWidget {
     final Widget screen;
     if (!model.onboarded) {
       screen = const WelcomeScreen(key: ValueKey('welcome'));
-    } else if (!model.online && !model.rules.offlineAllowed(model.plan) && !model.playing) {
+    } else if (!model.online &&
+        !model.rules.offlineAllowed(model.plan) &&
+        !model.playing) {
       screen = const OfflineScreen(key: ValueKey('offline'));
     } else {
       screen = const HomeScreen(key: ValueKey('home'));
     }
-    return AnimatedSwitcher(duration: motion(context, const Duration(milliseconds: 400)), child: screen);
+    return AnimatedSwitcher(
+      duration: motion(context, const Duration(milliseconds: 400)),
+      child: screen,
+    );
   }
 }

@@ -46,7 +46,9 @@ def _parse(data: object) -> tuple[str, str, str, str]:
     request_hash = data.get("request_hash")
     device_hash = data.get("device_hash")
     app_version = data.get("app_version")
-    if not isinstance(token, str) or not 1 <= len(token) <= 8192:
+    # Empty token: Play Integrity unavailable on the device (debug or sideloaded build). Accepted
+    # only when PLAY_INTEGRITY_ENFORCED=false; otherwise integrity.verify() refuses it (403).
+    if not isinstance(token, str) or len(token) > 8192:
         raise InvalidRequest()
     if not isinstance(request_hash, str) or not REQUEST_HASH_RE.match(request_hash):
         raise InvalidRequest()

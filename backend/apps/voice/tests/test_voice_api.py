@@ -64,7 +64,7 @@ def post(client, data=None):
 
 @pytest.mark.django_db
 def test_model_answer_is_validated_counted_and_costed(api, installation, gemini):
-    inst, _ = installation
+    _inst, _ = installation
     gemini.post(
         GEMINI_URL,
         json=gemini_answer([{"op": "regler", "cible": "son", "id": "pluie-douce", "niveau": 70}]),
@@ -129,7 +129,7 @@ def test_trial_exhausted_is_402(gemini):
 
 @pytest.mark.django_db
 def test_credits_after_the_trial(gemini):
-    inst, token = make_installation(trial_used=3, credits=2)
+    _inst, token = make_installation(trial_used=3, credits=2)
     gemini.post(GEMINI_URL, json=gemini_answer([{"op": "partager"}]))
     data = post(client_for(token)).json()
     assert data["voice"]["credits_remaining"] == 1

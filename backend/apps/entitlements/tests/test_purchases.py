@@ -389,7 +389,7 @@ def pubsub_token():
         yield verify
 
 
-def rtdn(client, payload, token="signed.jwt.token"):
+def rtdn(client, payload, token="signed.jwt.token"):  # noqa: S107  # test value
     return client.post(
         "/v1/play/rtdn",
         json.dumps(payload),

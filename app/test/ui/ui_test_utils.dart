@@ -22,7 +22,8 @@ Future<void> loadAppFonts() async {
     final file = File(path);
     if (!file.existsSync()) return;
     final bytes = file.readAsBytesSync();
-    final loader = FontLoader(family)..addFont(Future.value(ByteData.view(bytes.buffer)));
+    final loader = FontLoader(family)
+      ..addFont(Future.value(ByteData.view(bytes.buffer)));
     await loader.load();
   }
 
@@ -32,7 +33,11 @@ Future<void> loadAppFonts() async {
 
 /// Phone view of the mockup (390 × 844 logical px, 3× density), status bar 44 px,
 /// gesture bar 20 px, reduced motion so frames settle.
-void usePhoneView(WidgetTester tester, {double textScale = 1.0, bool reduceMotion = true}) {
+void usePhoneView(
+  WidgetTester tester, {
+  double textScale = 1.0,
+  bool reduceMotion = true,
+}) {
   tester.view.physicalSize = const Size(390 * 3, 844 * 3);
   tester.view.devicePixelRatio = 3;
   tester.view.padding = const FakeViewPadding(top: 44 * 3, bottom: 20 * 3);
@@ -47,7 +52,11 @@ void usePhoneView(WidgetTester tester, {double textScale = 1.0, bool reduceMotio
 }
 
 /// Writes the current frame of [finder] (default: the whole app) to [name].png.
-Future<void> saveScreenshot(WidgetTester tester, String name, {Finder? finder}) async {
+Future<void> saveScreenshot(
+  WidgetTester tester,
+  String name, {
+  Finder? finder,
+}) async {
   final target = finder ?? find.byType(MaterialApp).first;
   RenderObject? render = tester.renderObject(target);
   while (render != null && render is! RenderRepaintBoundary) {

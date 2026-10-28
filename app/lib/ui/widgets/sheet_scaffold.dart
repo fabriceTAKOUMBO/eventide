@@ -72,14 +72,17 @@ class _VitreSheetState extends State<VitreSheet> {
   @override
   Widget build(BuildContext context) {
     final model = context.model;
-    final landscape = model.catalog.landscape(model.browsedLandscapeId) ?? model.catalog.defaultLandscape;
+    final landscape =
+        model.catalog.landscape(model.browsedLandscapeId) ??
+        model.catalog.defaultLandscape;
     final media = MediaQuery.of(context);
     final top = math.max(widget.top, media.padding.top + 12);
     final bottomInset = media.padding.bottom;
 
     final header = GestureDetector(
       behavior: HitTestBehavior.translucent,
-      onVerticalDragUpdate: (d) => setState(() => _drag = math.max(0, _drag + d.delta.dy)),
+      onVerticalDragUpdate: (d) =>
+          setState(() => _drag = math.max(0, _drag + d.delta.dy)),
       onVerticalDragEnd: (d) {
         if (_drag > 90 || (d.primaryVelocity ?? 0) > 700) {
           _close();
@@ -95,12 +98,24 @@ class _VitreSheetState extends State<VitreSheet> {
                 header: true,
                 child: Text(
                   widget.title,
-                  style: manrope(widget.titleSize, weight: 600, letterSpacingEm: -0.02, height: 1.15),
+                  // Titles are already large: cap their growth so long words never split.
+                  textScaler: MediaQuery.textScalerOf(context)
+                      .clamp(maxScaleFactor: 1.5),
+                  style: manrope(
+                    widget.titleSize,
+                    weight: 600,
+                    letterSpacingEm: -0.02,
+                    height: 1.15,
+                  ),
                 ),
               ),
             ),
             for (final a in widget.actions) ...[a, const SizedBox(width: 10)],
-            RoundIconButton(icon: VIcons.close, label: 'Fermer', onPressed: _close),
+            RoundIconButton(
+              icon: VIcons.close,
+              label: 'Fermer',
+              onPressed: _close,
+            ),
           ],
         ),
       ),
@@ -110,7 +125,9 @@ class _VitreSheetState extends State<VitreSheet> {
     if (widget.scrollable) {
       content = SingleChildScrollView(
         controller: widget.scrollController,
-        padding: widget.contentPadding.add(EdgeInsets.only(bottom: widget.footer == null ? bottomInset : 0)),
+        padding: widget.contentPadding.add(
+          EdgeInsets.only(bottom: widget.footer == null ? bottomInset : 0),
+        ),
         child: content,
       );
     } else {
@@ -123,7 +140,8 @@ class _VitreSheetState extends State<VitreSheet> {
       body: Stack(
         children: [
           Positioned.fill(
-            child: widget.background ??
+            child:
+                widget.background ??
                 LandscapeImage(
                   landscapeId: landscape.id,
                   style: landscape.style,
@@ -154,12 +172,22 @@ class _VitreSheetState extends State<VitreSheet> {
                       Expanded(child: content),
                       if (widget.footer != null)
                         Padding(
-                          padding: EdgeInsets.fromLTRB(20, 8, 20, 24 + bottomInset),
+                          padding: EdgeInsets.fromLTRB(
+                            20,
+                            8,
+                            20,
+                            24 + bottomInset,
+                          ),
                           child: widget.footer,
                         ),
                     ],
                   ),
-                  const Positioned(top: 10, left: 0, right: 0, child: Center(child: _Grabber())),
+                  const Positioned(
+                    top: 10,
+                    left: 0,
+                    right: 0,
+                    child: Center(child: _Grabber()),
+                  ),
                 ],
               ),
             ),
@@ -190,7 +218,14 @@ class _Grabber extends StatelessWidget {
 
 /// Body text of sheets (18 px, 84 % white).
 class SheetText extends StatelessWidget {
-  const SheetText(this.text, {super.key, this.size = 18, this.alpha = 0.84, this.align, this.weight = 400});
+  const SheetText(
+    this.text, {
+    super.key,
+    this.size = 18,
+    this.alpha = 0.84,
+    this.align,
+    this.weight = 400,
+  });
 
   final String text;
   final double size;
@@ -203,7 +238,12 @@ class SheetText extends StatelessWidget {
     return Text(
       text,
       textAlign: align,
-      style: manrope(size, weight: weight, height: 1.4, color: Vitre.of(context).text(alpha)),
+      style: manrope(
+        size,
+        weight: weight,
+        height: 1.4,
+        color: Vitre.of(context).text(alpha),
+      ),
     );
   }
 }

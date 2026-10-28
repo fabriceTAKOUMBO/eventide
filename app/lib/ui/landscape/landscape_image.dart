@@ -24,20 +24,28 @@ abstract final class LandscapeImages {
   static ImageProvider? providerFor(String landscapeId) {
     final custom = resolver?.call(landscapeId);
     if (custom != null) return custom;
-    if (_bundled.contains(landscapeId)) return AssetImage('assets/landscapes/$landscapeId.jpg');
+    if (_bundled.contains(landscapeId)) {
+      return AssetImage('assets/landscapes/$landscapeId.jpg');
+    }
     return null;
   }
 
   /// Reads the asset manifest once to find bundled photos and the brand logo.
   static Future<void> discoverAssets([AssetBundle? bundle]) async {
     try {
-      final manifest = await AssetManifest.loadFromAssetBundle(bundle ?? rootBundle);
+      final manifest = await AssetManifest.loadFromAssetBundle(
+        bundle ?? rootBundle,
+      );
       final assets = manifest.listAssets();
       for (final a in assets) {
-        final m = RegExp(r'^assets/landscapes/([a-z0-9-]+)\.jpg$').firstMatch(a);
+        final m = RegExp(r'^assets/landscapes/([a-z0-9-]+)\.jpg$')
+            .firstMatch(a);
         if (m != null) _bundled.add(m.group(1)!);
       }
-      for (final candidate in const ['assets/brand/logo.png', 'assets/brand/logo_512.png']) {
+      for (final candidate in const [
+        'assets/brand/logo.png',
+        'assets/brand/logo_512.png',
+      ]) {
         if (assets.contains(candidate)) {
           brandLogo.value = candidate;
           break;
@@ -51,11 +59,14 @@ abstract final class LandscapeImages {
 
 /// Colour matrix giving the light of a moment of the day.
 List<double> momentMatrix(Moment moment) => switch (moment) {
-      Moment.aube => _compose(_gains(1.04, 0.9, 0.95, 12, 2, 10), _saturation(0.92)),
-      Moment.jour => _identity,
-      Moment.soir => _compose(_gains(1.02, 0.8, 0.56, 8, 0, 0), _saturation(1.1)),
-      Moment.nuit => _compose(_gains(0.3, 0.38, 0.6, 0, 3, 12), _saturation(0.45)),
-    };
+  Moment.aube => _compose(
+    _gains(1.04, 0.9, 0.95, 12, 2, 10),
+    _saturation(0.92),
+  ),
+  Moment.jour => _identity,
+  Moment.soir => _compose(_gains(1.02, 0.8, 0.56, 8, 0, 0), _saturation(1.1)),
+  Moment.nuit => _compose(_gains(0.3, 0.38, 0.6, 0, 3, 12), _saturation(0.45)),
+};
 
 const List<double> _identity = [
   1, 0, 0, 0, 0, //
@@ -64,12 +75,19 @@ const List<double> _identity = [
   0, 0, 0, 1, 0,
 ];
 
-List<double> _gains(double r, double g, double b, double ro, double go, double bo) => [
-      r, 0, 0, 0, ro, //
-      0, g, 0, 0, go, //
-      0, 0, b, 0, bo, //
-      0, 0, 0, 1, 0,
-    ];
+List<double> _gains(
+  double r,
+  double g,
+  double b,
+  double ro,
+  double go,
+  double bo,
+) => [
+  r, 0, 0, 0, ro, //
+  0, g, 0, 0, go, //
+  0, 0, b, 0, bo, //
+  0, 0, 0, 1, 0,
+];
 
 List<double> _saturation(double s) {
   const lr = 0.2126, lg = 0.7152, lb = 0.0722;
@@ -98,10 +116,16 @@ List<double> _compose(List<double> a, List<double> b) {
 }
 
 /// Combined filter: moment light, then brightness and saturation adjustments.
-List<double> landscapeMatrix({Moment moment = Moment.jour, double brightness = 1, double saturation = 1}) {
+List<double> landscapeMatrix({
+  Moment moment = Moment.jour,
+  double brightness = 1,
+  double saturation = 1,
+}) {
   var m = momentMatrix(moment);
   if (saturation != 1) m = _compose(_saturation(saturation), m);
-  if (brightness != 1) m = _compose(_gains(brightness, brightness, brightness, 0, 0, 0), m);
+  if (brightness != 1) {
+    m = _compose(_gains(brightness, brightness, brightness, 0, 0, 0), m);
+  }
   return m;
 }
 
@@ -138,21 +162,37 @@ class LandscapeImage extends StatelessWidget {
             alignment: focus,
             gaplessPlayback: true,
             filterQuality: FilterQuality.medium,
-            errorBuilder: (context, error, stack) => ProceduralLandscape(style: style),
+            errorBuilder: (context, error, stack) =>
+                ProceduralLandscape(style: style),
           )
         : ProceduralLandscape(style: style);
-    final matrix = landscapeMatrix(moment: moment, brightness: brightness, saturation: saturation);
+    final matrix = landscapeMatrix(
+      moment: moment,
+      brightness: brightness,
+      saturation: saturation,
+    );
     if (!identical(matrix, _identity)) {
-      picture = ColorFiltered(colorFilter: ColorFilter.matrix(matrix), child: picture);
+      picture = ColorFiltered(
+        colorFilter: ColorFilter.matrix(matrix),
+        child: picture,
+      );
     }
     if (kenBurns && !Vitre.reduceMotion(context)) {
       picture = KenBurns(child: picture);
     } else if (kenBurns) {
-      picture = Transform.scale(scale: 1.04, alignment: const Alignment(0, -0.2), child: picture);
+      picture = Transform.scale(
+        scale: 1.04,
+        alignment: const Alignment(0, -0.2),
+        child: picture,
+      );
     }
     if (blurSigma > 0) {
       picture = ImageFiltered(
-        imageFilter: ui.ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma, tileMode: TileMode.clamp),
+        imageFilter: ui.ImageFilter.blur(
+          sigmaX: blurSigma,
+          sigmaY: blurSigma,
+          tileMode: TileMode.clamp,
+        ),
         child: picture,
       );
     }
@@ -168,16 +208,32 @@ class ProceduralLandscape extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      final size = constraints.biggest;
-      if (!size.isFinite || size.isEmpty) return const SizedBox.shrink();
-      final ratio = (MediaQuery.maybeDevicePixelRatioOf(context) ?? 2).clamp(1.0, 1.75);
-      final image = LandscapeRasterCache.obtain(style, size, ratio);
-      if (image == null) {
-        return RepaintBoundary(child: CustomPaint(size: size, painter: LandscapePainter(style: style)));
-      }
-      return RawImage(image: image, width: size.width, height: size.height, fit: BoxFit.fill, filterQuality: FilterQuality.medium);
-    });
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = constraints.biggest;
+        if (!size.isFinite || size.isEmpty) return const SizedBox.shrink();
+        final ratio = (MediaQuery.maybeDevicePixelRatioOf(context) ?? 2).clamp(
+          1.0,
+          1.75,
+        );
+        final image = LandscapeRasterCache.obtain(style, size, ratio);
+        if (image == null) {
+          return RepaintBoundary(
+            child: CustomPaint(
+              size: size,
+              painter: LandscapePainter(style: style),
+            ),
+          );
+        }
+        return RawImage(
+          image: image,
+          width: size.width,
+          height: size.height,
+          fit: BoxFit.fill,
+          filterQuality: FilterQuality.medium,
+        );
+      },
+    );
   }
 }
 
@@ -232,7 +288,11 @@ abstract final class LandscapeRasterCache {
 /// Very slow zoom and drift (60 s, scale 1.04 → 1.12), updated ~20 times per second
 /// to spare the battery; paused when hidden or when the app is in background.
 class KenBurns extends StatefulWidget {
-  const KenBurns({super.key, required this.child, this.period = const Duration(seconds: 60)});
+  const KenBurns({
+    super.key,
+    required this.child,
+    this.period = const Duration(seconds: 60),
+  });
 
   final Widget child;
   final Duration period;

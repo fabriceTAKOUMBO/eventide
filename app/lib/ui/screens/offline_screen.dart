@@ -41,7 +41,9 @@ class _OfflineScreenState extends State<OfflineScreen> {
   Widget build(BuildContext context) {
     final model = context.model;
     final p = Vitre.of(context);
-    final landscape = model.catalog.landscape(model.browsedLandscapeId) ?? model.catalog.defaultLandscape;
+    final landscape =
+        model.catalog.landscape(model.browsedLandscapeId) ??
+        model.catalog.defaultLandscape;
     final media = MediaQuery.of(context);
     return Scaffold(
       backgroundColor: VitreColors.page,
@@ -73,7 +75,12 @@ class _OfflineScreenState extends State<OfflineScreen> {
           Positioned.fill(
             child: SingleChildScrollView(
               reverse: true,
-              padding: EdgeInsets.fromLTRB(14, media.padding.top + 24, 14, 18 + media.padding.bottom),
+              padding: EdgeInsets.fromLTRB(
+                14,
+                media.padding.top + 24,
+                14,
+                18 + media.padding.bottom,
+              ),
               child: GlassPanel(
                 alpha: 0.6,
                 padding: const EdgeInsets.fromLTRB(22, 30, 22, 18),
@@ -91,13 +98,26 @@ class _OfflineScreenState extends State<OfflineScreen> {
                           border: Border.all(color: p.border(0.24)),
                         ),
                         alignment: Alignment.center,
-                        child: const VIcon(VIcons.wifiOff, size: 34, color: VitreColors.white, strokeWidth: 1.7),
+                        child: const VIcon(
+                          VIcons.wifiOff,
+                          size: 34,
+                          color: VitreColors.white,
+                          strokeWidth: 1.7,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 20),
                     Semantics(
                       header: true,
-                      child: Text('Pas de connexion', style: manrope(30, weight: 600, letterSpacingEm: -0.02, height: 1.15)),
+                      child: Text(
+                        'Pas de connexion',
+                        style: manrope(
+                          30,
+                          weight: 600,
+                          letterSpacingEm: -0.02,
+                          height: 1.15,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 10),
                     Text(
@@ -105,9 +125,16 @@ class _OfflineScreenState extends State<OfflineScreen> {
                       style: manrope(19, height: 1.4, color: p.text(0.84)),
                     ),
                     const SizedBox(height: 26),
-                    PrimaryButton(label: 'Réessayer', busy: _retrying, onPressed: _retry),
+                    PrimaryButton(
+                      label: 'Réessayer',
+                      busy: _retrying,
+                      onPressed: _retry,
+                    ),
                     const SizedBox(height: 10),
-                    SecondaryButton(label: 'Découvrir Premium', onPressed: () => Nav.premium(context)),
+                    SecondaryButton(
+                      label: 'Découvrir Premium',
+                      onPressed: () => Nav.premium(context),
+                    ),
                   ],
                 ),
               ),
