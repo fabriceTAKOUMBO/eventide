@@ -18,8 +18,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
+    <!-- Label: « Eventide », or « Eventide Démo » for the demo build (appLabel placeholder,
+         app/build.gradle.kts). -->
     <application
-        android:label="Eventide"
+        android:label="${appLabel}"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"
@@ -100,6 +102,11 @@
                 <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
             </intent-filter>
         </receiver>
+
+        <!-- True only in the demo build (-Peventide.demo=true); read by BuildFlags.isDemoBuild. -->
+        <meta-data
+            android:name="be.cinaf.eventide.DEMO_BUILD"
+            android:value="${demoBuild}" />
 
         <!-- AdMob application id (placeholder: Google's sample id unless overridden). -->
         <meta-data

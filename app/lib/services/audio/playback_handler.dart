@@ -90,6 +90,10 @@ abstract class PlaybackHost {
   void onPlaybackStopped(StopReason reason, Duration listened);
 }
 
+/// Prefix of the scheduled-start log lines (same tag as the Kotlin receiver; read by the CI
+/// emulator check, .github/workflows/app.yml).
+const String scheduleLogTag = 'EventideSchedule';
+
 class PlaybackHandler extends BaseAudioHandler {
   PlaybackHandler({
     required this._engine,
@@ -300,6 +304,7 @@ class PlaybackHandler extends BaseAudioHandler {
     try {
       await _engine.start(request.layers, rampUp: request.rampUp);
     } catch (e) {
+      // No audio device, broken file…: back to idle, the UI stays usable and says so.
       debugPrint('PlaybackHandler: start failed ($e)');
       await _finish(StopReason.failed);
       return false;
@@ -355,7 +360,10 @@ class PlaybackHandler extends BaseAudioHandler {
     if (_status.playing || _status.loading) {
       // A scheduled start while already listening keeps the current sound.
       final pending = await _native.consumePendingStart();
-      if (pending != null) return;
+      if (pending != null) {
+        debugPrint('$scheduleLogTag: schedule $pending ignored, already listening');
+        return;
+      }
       return pause();
     }
     return play();
@@ -378,6 +386,7 @@ class PlaybackHandler extends BaseAudioHandler {
     // the foreground notification exists within Android's deadline (headless engine start).
     markLoading('Eventide');
     final scheduleId = await _native.consumePendingStart();
+    if (scheduleId != null) debugPrint('$scheduleLogTag: play requested for schedule $scheduleId');
     await _playFromHost(scheduleId);
   }
 
@@ -399,7 +408,12 @@ class PlaybackHandler extends BaseAudioHandler {
     }
     if (generation != _generation) return; // stopped meanwhile
     if (request == null || !await start(request)) {
+      if (scheduleId != null) debugPrint('$scheduleLogTag: nothing played for schedule $scheduleId');
       await _finish(StopReason.failed);
+      return;
+    }
+    if (scheduleId != null) {
+      debugPrint('$scheduleLogTag: playback started for schedule $scheduleId (${request.landscapeId})');
     }
   }
 

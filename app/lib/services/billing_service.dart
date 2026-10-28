@@ -69,6 +69,36 @@ abstract class Billing {
   String? get creditsPrice;
 }
 
+/// Demo build: Premium is already active on the phone, Google Play is never called.
+/// Offers are the display fallback, marked unavailable; buying or restoring does nothing.
+class DemoBilling implements Billing {
+  DemoBilling();
+
+  final _events = StreamController<BillingEvent>.broadcast();
+  final List<String> calls = [];
+
+  @override
+  Stream<BillingEvent> get events => _events.stream;
+
+  @override
+  Future<void> initialize() async {}
+
+  @override
+  Future<List<ProductOffer>> loadOffers() async => fallbackOffers;
+
+  @override
+  Future<void> buy(PurchaseChoice choice) async => calls.add('buy:${choice.name}');
+
+  @override
+  Future<void> buyCredits() async => calls.add('credits');
+
+  @override
+  Future<void> restore() async => calls.add('restore');
+
+  @override
+  String? get creditsPrice => null;
+}
+
 class PlayBilling implements Billing {
   PlayBilling({
     required this._api,

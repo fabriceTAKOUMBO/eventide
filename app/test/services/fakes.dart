@@ -114,6 +114,12 @@ class FakeNativeBridge implements NativeBridge {
 
   @override
   Stream<void> get launchScheduleRequests => _launch.stream;
+
+  /// Native demo build flag (manifest meta-data in the real app).
+  bool demoBuild = false;
+
+  @override
+  Future<bool> isDemoBuild() async => demoBuild;
 }
 
 class FakeConnectivity implements ConnectivityChecker {

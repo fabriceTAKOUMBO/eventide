@@ -62,6 +62,10 @@ abstract class NativeBridge {
 
   /// « Lancer » tapped on the fallback notification while the app was running.
   Stream<void> get launchScheduleRequests;
+
+  /// True only in the Android demo build (`-Peventide.demo=true`, manifest flag). False when
+  /// the native side does not answer.
+  Future<bool> isDemoBuild();
 }
 
 class MethodChannelNativeBridge implements NativeBridge {
@@ -147,4 +151,7 @@ class MethodChannelNativeBridge implements NativeBridge {
 
   @override
   Stream<void> get launchScheduleRequests => _launchRequests.stream;
+
+  @override
+  Future<bool> isDemoBuild() async => await _invoke<bool>('isDemoBuild') ?? false;
 }

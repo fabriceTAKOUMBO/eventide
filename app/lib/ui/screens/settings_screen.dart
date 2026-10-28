@@ -10,7 +10,7 @@ import '../widgets/glass.dart';
 import '../widgets/sheet_scaffold.dart';
 import '../widgets/toast.dart';
 import '../widgets/vicons.dart';
-import 'premium_screen.dart' show offerFor;
+import 'premium_screen.dart' show kDemoPremiumNote, offerFor;
 
 const List<String> _months = [
   'janvier',
@@ -104,7 +104,10 @@ class SettingsScreen extends StatelessWidget {
             onTap: () async {
               final toasts = ToastHost.maybeOf(context);
               await model.restorePurchases();
-              toasts?.show('Vérification de vos achats terminée');
+              // Demo build: the model already said that there is nothing to restore.
+              if (!model.demoMode) {
+                toasts?.show('Vérification de vos achats terminée');
+              }
             },
           ),
           LinkRow(
@@ -117,6 +120,15 @@ class SettingsScreen extends StatelessWidget {
             textAlign: TextAlign.center,
             style: manrope(16, color: p.text(0.6)),
           ),
+          if (model.demoMode)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                'Version démo',
+                textAlign: TextAlign.center,
+                style: manrope(15, color: p.text(0.5)),
+              ),
+            ),
         ],
       ),
     );
@@ -166,14 +178,18 @@ class _SubscriptionCard extends StatelessWidget {
         ),
       ]);
     } else {
-      final planName = switch (plan) {
-        Plan.annual => 'Annuel',
-        Plan.monthly => 'Mensuel',
-        Plan.lifetime => 'À vie',
-        Plan.free => 'Version gratuite',
-      };
+      final planName = model.demoMode
+          ? 'Version démo'
+          : switch (plan) {
+              Plan.annual => 'Annuel',
+              Plan.monthly => 'Mensuel',
+              Plan.lifetime => 'À vie',
+              Plan.free => 'Version gratuite',
+            };
       final String status;
-      if (plan == Plan.lifetime) {
+      if (model.demoMode) {
+        status = kDemoPremiumNote;
+      } else if (plan == Plan.lifetime) {
         status = 'Payé une fois. L’assistant vocal fonctionne avec des crédits, vendus à part.';
       } else if (e.expiresAt == null) {
         status = 'Abonnement actif.';
@@ -195,7 +211,10 @@ class _SubscriptionCard extends StatelessWidget {
         const SizedBox(height: 8),
         Text(status, style: manrope(17, height: 1.38, color: p.text(0.88))),
         const SizedBox(height: 14),
-        if (plan == Plan.lifetime)
+        // Demo build: nothing to manage on Google Play.
+        if (model.demoMode)
+          const SizedBox.shrink()
+        else if (plan == Plan.lifetime)
           PrimaryButton(
             label: 'Crédits d’assistant',
             height: 60,

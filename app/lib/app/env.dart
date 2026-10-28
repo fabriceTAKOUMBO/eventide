@@ -46,6 +46,10 @@ class Env {
   /// Debug only: forces a plan (`free`, `monthly`, `annual`, `lifetime`) to test the offers.
   static const String _debugForcePlan = String.fromEnvironment('DEBUG_FORCE_PLAN');
 
+  /// Demo build requested (`--dart-define=DEMO_MODE=true`). Effective only when the Android
+  /// build is the demo one too (`-Peventide.demo=true`, see DemoMode.resolve).
+  static const bool demoModeRequested = bool.fromEnvironment('DEMO_MODE');
+
   /// Salt appended to ANDROID_ID before hashing (`device_hash`). Not a secret.
   static const String deviceHashSalt = 'eventide-device-v1';
 

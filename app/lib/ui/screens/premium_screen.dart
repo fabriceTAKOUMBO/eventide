@@ -61,6 +61,11 @@ ProductOffer offerFor(AppModel model, PurchaseChoice choice) {
   };
 }
 
+/// Demo build (« Eventide Démo »): what the purchase button and the note say instead.
+const String kDemoPremiumButton = 'Premium est déjà actif';
+const String kDemoPremiumNote =
+    'Version démo : Premium est déjà actif. Aucun achat n’est possible ni nécessaire.';
+
 String _ctaLabel(ProductOffer offer) => switch (offer.choice) {
   PurchaseChoice.annual =>
     offer.hasFreeTrial ? 'Essayer 3 jours gratuits' : 'S’abonner',
@@ -97,10 +102,12 @@ class _PremiumScreenState extends State<PremiumScreen> {
 
   Future<void> _restore() async {
     final toasts = ToastHost.maybeOf(context);
+    final demo = context.readModel.demoMode;
     setState(() => _restoring = true);
     try {
+      // Demo build: the model answers with its own message, nothing is checked.
       await context.readModel.restorePurchases();
-      toasts?.show('Vérification de vos achats terminée');
+      if (!demo) toasts?.show('Vérification de vos achats terminée');
     } finally {
       if (mounted) setState(() => _restoring = false);
     }
@@ -111,6 +118,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
     final model = context.model;
     final p = Vitre.of(context);
     final offer = offerFor(model, _choice);
+    final demo = model.demoMode;
     final current = model.plan == _planOf(_choice);
     final action = premiumCallToAction(offer);
 
@@ -177,15 +185,24 @@ class _PremiumScreenState extends State<PremiumScreen> {
           ),
           const SizedBox(height: 14),
           PrimaryButton(
-            label: current ? 'Votre formule actuelle' : action.cta,
+            label: demo
+                ? kDemoPremiumButton
+                : current
+                ? 'Votre formule actuelle'
+                : action.cta,
+            semanticLabel: demo ? 'Version démo : $kDemoPremiumButton' : null,
             busy: _buying,
-            onPressed: current || !offer.available ? null : _buy,
+            onPressed: demo || current || !offer.available ? null : _buy,
           ),
           const SizedBox(height: 12),
           Semantics(
             liveRegion: true,
             child: Text(
-              current ? 'Vous profitez déjà de cette formule.' : action.note,
+              demo
+                  ? kDemoPremiumNote
+                  : current
+                  ? 'Vous profitez déjà de cette formule.'
+                  : action.note,
               textAlign: TextAlign.center,
               style: manrope(16, height: 1.35, color: p.text(0.76)),
             ),

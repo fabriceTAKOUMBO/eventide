@@ -68,10 +68,15 @@ class SoLoudAudioEngine implements AudioEngine {
   @override
   Set<String> get activeKeys => Set.unmodifiable(_voices.keys);
 
+  /// Opening the audio device normally takes well under a second. A device that never answers
+  /// (some emulators, a broken audio HAL) must not leave the player stuck: start() then fails,
+  /// the handler goes back to idle and the UI says that the sound cannot start.
+  static const Duration initTimeout = Duration(seconds: 15);
+
   Future<void> _ensureInit() async {
     if (_soloud.isInitialized) return;
     // Larger buffer and no low-latency mode: nothing here is interactive, battery matters.
-    await _soloud.init(bufferSize: 4096, lowLatency: false);
+    await _soloud.init(bufferSize: 4096, lowLatency: false).timeout(initTimeout);
   }
 
   // ---- Master volume

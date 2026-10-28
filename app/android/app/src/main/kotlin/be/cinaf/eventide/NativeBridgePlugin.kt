@@ -82,6 +82,7 @@ class NativeBridgePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     Notifications.cancelFallback(ctx)
                     result.success(null)
                 }
+                "isDemoBuild" -> result.success(BuildFlags.isDemoBuild(ctx))
                 else -> result.notImplemented()
             }
         } catch (e: Exception) {

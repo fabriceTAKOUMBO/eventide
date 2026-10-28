@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Build
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.time.Instant
@@ -202,6 +203,7 @@ object ScheduleStore {
             // foreground service start will probably be refused (fallback notification).
             am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
         }
+        Log.i(ScheduleAlarmReceiver.TAG, "armed: mode=$mode schedule=${next.first.id} at_ms=$triggerAt")
         return mapOf("mode" to mode, "next_at" to triggerAt)
     }
 

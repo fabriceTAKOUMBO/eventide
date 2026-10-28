@@ -31,6 +31,7 @@ import '../services/storage.dart';
 import '../services/voice/speech_recognizer.dart';
 import '../services/voice/voice_pipeline.dart';
 import 'app_model.dart';
+import 'demo_mode.dart';
 import 'sleep_tracker.dart';
 
 /// Static choices of the controller (from Env in the app, explicit in tests).
@@ -40,9 +41,14 @@ class AppConfig {
     this.forcedPlan,
     this.browseDebounce = const Duration(milliseconds: 1500),
     this.subscriptionOfflineGrace = const Duration(days: 7),
+    this.demo = false,
   });
 
   final String shareHost;
+
+  /// Demo build (DemoMode.resolve): Premium forced on the phone, no purchase, no ads, no
+  /// entitlement request to the server.
+  final bool demo;
 
   /// DEBUG_FORCE_PLAN (debug builds only).
   final Plan? forcedPlan;
@@ -456,7 +462,11 @@ class RealAppModel extends AppModel implements PlaybackHost {
   ProductRules get rules => _rules;
 
   @override
+  bool get demoMode => _config.demo;
+
+  @override
   Entitlements get entitlements {
+    if (_config.demo) return DemoMode.entitlements;
     final forced = _config.forcedPlan;
     if (forced != null) {
       return Entitlements(
@@ -509,6 +519,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
   }
 
   Future<void> _refreshEntitlements() async {
+    if (_config.demo) return; // Premium is forced locally; the server knows nothing of it.
     try {
       await _setEntitlements(Entitlements.fromJson(await _api.entitlements()));
     } catch (e) {
@@ -1539,13 +1550,29 @@ class RealAppModel extends AppModel implements PlaybackHost {
   }
 
   @override
-  Future<void> buy(PurchaseChoice choice) => _billing.buy(choice);
+  Future<void> buy(PurchaseChoice choice) async {
+    if (_config.demo) {
+      _emit(const ToastEvent(DemoMode.premiumActive));
+      return;
+    }
+    await _billing.buy(choice);
+  }
 
   @override
-  Future<void> buyCredits() => _billing.buyCredits();
+  Future<void> buyCredits() async {
+    if (_config.demo) {
+      _emit(const ToastEvent(DemoMode.premiumActive));
+      return;
+    }
+    await _billing.buyCredits();
+  }
 
   @override
   Future<void> restorePurchases() async {
+    if (_config.demo) {
+      _emit(const ToastEvent(DemoMode.nothingToRestore));
+      return;
+    }
     await _billing.restore();
     if (_api.enabled) await _refreshEntitlements();
     if (!entitlements.plan.isPremium) _emit(const ToastEvent(AppMessages.nothingToRestore));
@@ -1598,6 +1625,10 @@ class RealAppModel extends AppModel implements PlaybackHost {
 
   @override
   Future<void> openManageSubscription() async {
+    if (_config.demo) {
+      _emit(const ToastEvent(DemoMode.premiumActive));
+      return;
+    }
     if (!await _urls.open(manageSubscriptionUri)) _emit(const ToastEvent(AppMessages.openPlayManually));
   }
 

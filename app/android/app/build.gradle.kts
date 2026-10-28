@@ -25,6 +25,13 @@ val shareHost: String = (project.findProperty("eventide.shareHost") as String?) 
 val admobAppId: String =
     (project.findProperty("eventide.admobAppId") as String?) ?: "ca-app-pub-3940256099942544~3347511713"
 
+// Demo build (« Eventide Démo », docs/app/architecture.md): -Peventide.demo=true, i.e.
+//   flutter build apk --release --dart-define=DEMO_MODE=true --android-project-arg=eventide.demo=true
+// Its own package (be.cinaf.eventide.demo) and launcher label, so it can never be uploaded or
+// installed in place of the production app, and a manifest flag that the Dart side requires
+// (together with its DEMO_MODE dart-define) before unlocking Premium locally.
+val demoBuild: Boolean = project.findProperty("eventide.demo")?.toString()?.trim() == "true"
+
 android {
     namespace = "be.cinaf.eventide"
     // 37: required by permission_handler_android. targetSdk stays 36 (Google Play requirement).
@@ -40,6 +47,9 @@ android {
 
     defaultConfig {
         applicationId = "be.cinaf.eventide"
+        if (demoBuild) {
+            applicationIdSuffix = ".demo"
+        }
         minSdk = 24
         // Google Play requires API 36 for new apps and updates since 31 August 2026.
         targetSdk = 36
@@ -47,6 +57,8 @@ android {
         versionName = flutter.versionName
         manifestPlaceholders["shareHost"] = shareHost
         manifestPlaceholders["admobAppId"] = admobAppId
+        manifestPlaceholders["appLabel"] = if (demoBuild) "Eventide D\u00e9mo" else "Eventide"
+        manifestPlaceholders["demoBuild"] = demoBuild.toString()
     }
 
     signingConfigs {
@@ -62,6 +74,8 @@ android {
 
     buildTypes {
         release {
+            // R8 (minify + resource shrinking) is enabled for release by the Flutter Gradle plugin.
+            // Without key.properties (CI, demo builds) the release APK is signed with the debug key.
             signingConfig =
                 if (hasReleaseKeystore) {
                     signingConfigs.getByName("release")

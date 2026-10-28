@@ -8,6 +8,7 @@ import 'dart:io';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleListener, WidgetsBinding, WidgetsFlutterBinding;
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
@@ -27,6 +28,7 @@ import '../services/permissions_service.dart';
 import '../services/storage.dart';
 import '../services/voice/speech_recognizer.dart';
 import 'app_controller.dart';
+import 'demo_mode.dart';
 import 'env.dart';
 
 /// Registers the handler with audio_service (media notification, background playback).
@@ -68,7 +70,28 @@ Future<Set<String>> _bundledAssets() async {
   }
 }
 
+/// Everything main() does before runApp(); the integration test (integration_test/) calls it too,
+/// so that it drives exactly the app the user gets.
+Future<({PlaybackHandler handler, RealAppModel model})> startEventide() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final native = MethodChannelNativeBridge();
+  // First: a scheduled start may have booted this engine without any activity.
+  final handler = await initPlayback(native);
+  final model = await createAppModel(handler: handler, native: native);
+  AppLifecycleListener(onStateChange: model.handleLifecycle);
+  final initial = WidgetsBinding.instance.lifecycleState;
+  if (initial != null) model.handleLifecycle(initial);
+  return (handler: handler, model: model);
+}
+
 Future<RealAppModel> createAppModel({required PlaybackHandler handler, required NativeBridge native}) async {
+  // Demo build only when both the dart-define and the Android demo package say so (the native
+  // flag is asked for only when the define is set).
+  final demo = DemoMode.resolve(
+    requested: Env.demoModeRequested,
+    nativeDemoBuild: Env.demoModeRequested && await native.isDemoBuild(),
+  );
+  if (Env.demoModeRequested) debugPrint('Eventide: demo mode ${demo ? 'on' : 'off (not the demo package)'}');
   final catalog = await loadCatalog();
   final support = await getApplicationSupportDirectory();
   final store = LocalStore(Directory('${support.path}/eventide'));
@@ -92,11 +115,13 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
     devBaseUrl: Env.devContentBaseUrl,
   );
   late final RealAppModel model;
-  final billing = PlayBilling(
-    api: api,
-    localAcknowledgement: Env.localPurchaseAcknowledgement,
-    currentEntitlements: () => model.entitlements,
-  );
+  final Billing billing = demo
+      ? DemoBilling()
+      : PlayBilling(
+          api: api,
+          localAcknowledgement: Env.localPurchaseAcknowledgement,
+          currentEntitlements: () => model.entitlements,
+        );
   model = RealAppModel(
     catalog: catalog,
     store: store,
@@ -107,13 +132,15 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
     connectivity: connectivity,
     speech: SpeechToTextRecognizer(),
     billing: billing,
-    ads: AdMobAdsService(openUnitId: Env.admobInterstitialOpen, exitUnitId: Env.admobInterstitialExit),
+    ads: demo
+        ? const NoAdsService()
+        : AdMobAdsService(openUnitId: Env.admobInterstitialOpen, exitUnitId: Env.admobInterstitialExit),
     account: GoogleAccountAuth(serverClientId: Env.googleServerClientId),
     links: AppLinksSource(),
     share: PlatformShareSheet(),
     permissions: PlatformPermissions(native),
     urls: PlatformUrlOpener(),
-    config: AppConfig(shareHost: Env.shareHost, forcedPlan: Env.debugForcePlan),
+    config: AppConfig(shareHost: Env.shareHost, forcedPlan: Env.debugForcePlan, demo: demo),
   );
   await model.init();
   return model;

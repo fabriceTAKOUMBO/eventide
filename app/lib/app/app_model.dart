@@ -315,4 +315,7 @@ abstract class AppModel extends ChangeNotifier {
 
   /// Price of the assistant credits pack from Google Play (lifetime plan), when known.
   String? get creditsPrice => null;
+
+  /// Demo build (« Eventide Démo »): Premium is forced on the phone, nothing can be bought.
+  bool get demoMode => false;
 }
