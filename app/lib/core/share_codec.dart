@@ -1,7 +1,8 @@
 // Share links (contract §8): a server link `https://<domain>/m/<code>` and a
 // self-contained offline fallback `https://<domain>/s#<base64url(scene)>`.
 // A shared scene carries the landscape, the layers and the moment; never the
-// timer, the sleep tracking, schedules or personal data.
+// timer, the sleep tracking, the mute state (`sourdine`: the recipient gets
+// the mix as heard unmuted), schedules or personal data.
 
 import 'dart:convert';
 
@@ -11,7 +12,7 @@ import 'scene.dart';
 /// Longest accepted link payload, in characters.
 const int maxShareDataLength = 8192;
 
-/// The shareable part of [scene] (no timer, no sleep tracking).
+/// The shareable part of [scene] (no timer, no sleep tracking, no mute).
 Map<String, dynamic> shareableSceneJson(Scene scene) => {
   'version': scene.version,
   'paysage': scene.landscapeId,
@@ -31,7 +32,7 @@ String encodeSceneForLink(Scene scene) {
 /// its landscape is unknown; unknown or duplicate items are dropped, levels
 /// clamped, and audio layers capped at `couches_max`. Never throws.
 ///
-/// The recipient gets the default timer and no sleep tracking.
+/// The recipient gets the default timer, no sleep tracking and nothing muted.
 Scene? decodeSceneFromLink(String data, Catalog catalog) {
   try {
     var s = data.trim();

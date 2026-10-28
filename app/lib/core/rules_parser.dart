@@ -65,6 +65,12 @@ const String _deactivate =
     r'(?:desactive|desactivez|desactiver|arrete|arretez|arreter|coupe|coupez|couper|eteins|eteignez|eteindre|enleve|enlevez|enlever|retire|retirez|retirer|stoppe|stopper|supprime|supprimer)';
 const String _minutes = r'(\d{1,4}) min';
 
+/// « Coupe la musique »: mute (reversible), not remove (contract §3.1).
+const String _mute =
+    r'(?:coupe|coupez|couper|arrete|arretez|arreter|stoppe|stoppez|stopper|eteins|eteignez|eteindre)';
+const String _unmute =
+    r'(?:remets|remet|remettez|remettre|rallume|rallumez|rallumer|reactive|reactivez|reactiver|retablis|retablissez|retablir)';
+
 final RegExp _carriedVerbs = RegExp('^(?:$_add|$_remove|$_raise|$_lower)\$');
 
 /// Purchases, subscriptions, cancellations and account deletion: always
@@ -248,13 +254,18 @@ class _RulesParser {
   }
 
   /// « la musique » → musique, « les sons » → son, « le décor » → decor.
+  /// « les sons de la nature » arrives here as « nature » (see
+  /// [_stripArticles]).
   LayerKind? kindWord(String phrase) {
     switch (_stripArticles(phrase)) {
       case 'musique':
       case 'musiques':
+      case 'melodie':
+      case 'melodies':
         return LayerKind.musique;
       case 'sons':
       case 'bruits':
+      case 'nature':
       case 'sons de la nature':
       case 'bruits de la nature':
         return LayerKind.son;
@@ -281,6 +292,7 @@ class _RulesParser {
       _moment,
       _landscapeChange,
       _schedules,
+      _mutes,
       _layers,
     ]) {
       final ops = rule(text);
@@ -641,6 +653,68 @@ class _RulesParser {
     return null;
   }
 
+  Map<String, dynamic> _categoryOp(String op, LayerKind kind) => {
+    'op': op,
+    'cible': kind.cible,
+  };
+
+  /// Sounds or music named by [phrase] (the decor has no mute).
+  LayerKind? _audioKind(String phrase) {
+    final kind = kindWord(phrase);
+    return kind != null && kind.isAudio ? kind : null;
+  }
+
+  /// Mute and unmute of a whole category (contract §3.1). « Coupe la pluie »
+  /// (one element) and « coupe le décor » are left to [_layers] (removal).
+  List<Map<String, dynamic>>? _mutes(String t) {
+    final scene = snapshot.scene;
+    // « Enlève la sourdine (de la musique) » (before « coupe … »: « coupe la
+    // sourdine » ends the mute).
+    var m = _m(
+      r"(?:enleve|enlevez|enlever|retire|retirez|retirer|supprime|supprimez|supprimer|ote|otez|oter|coupe|coupez|couper|desactive|desactivez|desactiver|arrete|arretez|arreter) (?:la |le mode )?sourdine(?: (?:de|du|des|sur|pour) (.+))?",
+      t,
+    );
+    if (m != null) {
+      final named = m[1];
+      if (named != null) {
+        final kind = _audioKind(named);
+        return kind == null ? null : [_categoryOp('remettre', kind)];
+      }
+      // No category named: whatever is muted.
+      final muted = [
+        for (final kind in const [LayerKind.son, LayerKind.musique])
+          if (scene.isMuted(kind)) _categoryOp('remettre', kind),
+      ];
+      return muted.isEmpty ? null : muted;
+    }
+
+    // « Mets la musique en sourdine », « mets en sourdine les sons ».
+    m = _m(
+      r"(?:(?:mets|met|mettez|mettre|passe|passez|passer) )?(.+?) (?:en|sur) sourdine",
+      t,
+    );
+    m ??= _m(
+      r"(?:(?:mets|met|mettez|mettre|passe|passez|passer) )?(?:en |sur )?sourdine (?:sur |pour |a )?(.+)",
+      t,
+    );
+    // « Coupe la musique », « arrête les sons de la nature ».
+    m ??= _m('$_mute (.+)', t);
+    if (m != null) {
+      final kind = _audioKind(m[1]!);
+      return kind == null ? null : [_categoryOp('couper', kind)];
+    }
+
+    // « Remets la musique », « rallume les bruits de la nature ». With
+    // nothing of that category in the mix, the model decides (it may add).
+    m = _m('$_unmute (.+)', t);
+    if (m != null) {
+      final kind = _audioKind(m[1]!);
+      if (kind == null || scene.layers(kind).isEmpty) return null;
+      return [_categoryOp('remettre', kind)];
+    }
+    return null;
+  }
+
   Map<String, dynamic> _layerOp(
     String op,
     _ItemRef ref, [
@@ -708,7 +782,8 @@ class _RulesParser {
       return [_layerOp('ajuster', ref, 'delta', _gentle(m[2]) ? -10 : -20)];
     }
 
-    // « Enlève le vent », « coupe la musique » (all music).
+    // « Enlève le vent », « enlève la musique » (all music; « coupe la
+    // musique » mutes instead, see [_mutes]).
     m = _m('$_remove (.+)', t);
     if (m != null) {
       final kind = kindWord(m[1]!);

@@ -1878,5 +1878,194 @@
     "valeur": "pause"
    }
   ]
+ },
+ {
+  "name": "couper la musique (sourdine)",
+  "plan": "free",
+  "ops_in": [
+   {
+    "op": "couper",
+    "cible": "musique"
+   }
+  ],
+  "ops_out": [
+   {
+    "op": "couper",
+    "cible": "musique"
+   }
+  ]
+ },
+ {
+  "name": "remettre les sons",
+  "plan": "monthly",
+  "ops_in": [
+   {
+    "op": "remettre",
+    "cible": "son"
+   }
+  ],
+  "ops_out": [
+   {
+    "op": "remettre",
+    "cible": "son"
+   }
+  ]
+ },
+ {
+  "name": "couper, remettre : champs superflus supprimes",
+  "plan": "free",
+  "ops_in": [
+   {
+    "op": "couper",
+    "cible": "son",
+    "id": "vent",
+    "niveau": 0
+   },
+   {
+    "op": "remettre",
+    "cible": "musique",
+    "id": "*",
+    "valeur": true
+   }
+  ],
+  "ops_out": [
+   {
+    "op": "couper",
+    "cible": "son"
+   },
+   {
+    "op": "remettre",
+    "cible": "musique"
+   }
+  ]
+ },
+ {
+  "name": "couper le decor : pas de sourdine pour le decor",
+  "plan": "annual",
+  "ops_in": [
+   {
+    "op": "couper",
+    "cible": "decor"
+   },
+   {
+    "op": "remettre",
+    "cible": "decor",
+    "id": "brume"
+   }
+  ],
+  "ops_out": [
+   {
+    "op": "reformuler",
+    "raison": "incompris"
+   }
+  ]
+ },
+ {
+  "name": "couper, remettre : cible inconnue, absente ou non textuelle",
+  "plan": "free",
+  "ops_in": [
+   {
+    "op": "couper",
+    "cible": "sons"
+   },
+   {
+    "op": "couper",
+    "cible": "tout"
+   },
+   {
+    "op": "remettre"
+   },
+   {
+    "op": "couper",
+    "cible": 1
+   },
+   {
+    "op": "remettre",
+    "cible": "paysage"
+   }
+  ],
+  "ops_out": [
+   {
+    "op": "reformuler",
+    "raison": "incompris"
+   }
+  ]
+ },
+ {
+  "name": "couper permis en gratuit, l'element premium devient ouvrir",
+  "plan": "free",
+  "ops_in": [
+   {
+    "op": "couper",
+    "cible": "musique"
+   },
+   {
+    "op": "ajouter",
+    "cible": "musique",
+    "id": "harpe",
+    "niveau": 20
+   }
+  ],
+  "ops_out": [
+   {
+    "op": "couper",
+    "cible": "musique"
+   },
+   {
+    "op": "ouvrir",
+    "cible": "premium"
+   }
+  ]
+ },
+ {
+  "name": "remettre premium interdit",
+  "plan": "free",
+  "ops_in": [
+   {
+    "op": "remettre",
+    "cible": "musique"
+   },
+   {
+    "op": "remettre",
+    "cible": "premium"
+   }
+  ],
+  "ops_out": [
+   {
+    "op": "refuser",
+    "raison": "interdit"
+   }
+  ]
+ },
+ {
+  "name": "couper la musique en double : un seul garde",
+  "plan": "lifetime",
+  "ops_in": [
+   {
+    "op": "couper",
+    "cible": "musique"
+   },
+   {
+    "op": "couper",
+    "cible": "musique",
+    "id": "piano-doux"
+   },
+   {
+    "op": "retirer",
+    "cible": "musique",
+    "id": "*"
+   }
+  ],
+  "ops_out": [
+   {
+    "op": "couper",
+    "cible": "musique"
+   },
+   {
+    "op": "retirer",
+    "cible": "musique",
+    "id": "*"
+   }
+  ]
  }
 ]

@@ -302,6 +302,13 @@ Map<String, dynamic> _layerOp(
   return out;
 }
 
+/// `couper` / `remettre`: only sounds and music have a mute (`sourdine`).
+Map<String, dynamic> _muteOp(String op, Map<dynamic, dynamic> raw) {
+  final kind = LayerKind.fromCible(raw['cible']);
+  if (kind == null || !kind.isAudio) throw _invalid;
+  return {'op': op, 'cible': kind.cible};
+}
+
 Map<String, dynamic> _definir(
   Map<dynamic, dynamic> raw,
   Catalog catalog,
@@ -384,6 +391,9 @@ Map<String, dynamic> _one(Object? raw, Catalog catalog, bool free) {
     case 'regler':
     case 'ajuster':
       return _layerOp(op, raw, catalog, free);
+    case 'couper':
+    case 'remettre':
+      return _muteOp(op, raw);
     case 'definir':
       return _definir(raw, catalog, free);
     case 'changer':
@@ -633,6 +643,11 @@ const String _outOfMix = 'Hors du mix';
 
 String _onOff(bool v) => v ? 'Activé' : 'Désactivé';
 
+/// Value of the « Sons » / « Musique » line after a mute change.
+String muteSummary(LayerKind kind, bool muted) => muted
+    ? 'En sourdine'
+    : (kind == LayerKind.musique ? 'Rétablie' : 'Rétablis');
+
 /// Applies validated operations to [before] and returns the new snapshot,
 /// the side effects for the caller and the change lines for the result card.
 ///
@@ -643,6 +658,9 @@ String _onOff(bool v) => v ? 'Activé' : 'Désactivé';
 /// - `ajouter` without `niveau` uses 50 and never lowers an element already
 ///   playing; `ajuster` on an absent element adds it at 50 when `delta` > 0.
 ///   Adding beyond `couches_max` emits `RefuseEffect('couches_max')`.
+/// - `couper` / `remettre` mute or unmute sounds or music, keeping every
+///   layer and its level. `ajouter`, `regler` and `ajuster` on a muted
+///   category unmute it when the element stays in the mix (contract §1).
 /// - `creer` without `jours` uses every day, without `paysage` the current
 ///   landscape (validated operations always carry `jours`).
 /// - Schedule selectors: `activer`/`desactiver` apply to every match;
@@ -690,6 +708,16 @@ ApplyResult applyOps(
   bool lockedLandscape(Landscape landscape) =>
       plan != null && !rules.canUseLandscape(plan, landscape);
 
+  void setMuted(LayerKind kind, bool muted) {
+    scene = scene.withMuted(kind, muted);
+    change(kind.label, muteSummary(kind, muted));
+  }
+
+  // Touching the level of an element of a muted category makes it heard.
+  void unmuteFor(LayerKind kind) {
+    if (scene.isMuted(kind)) setMuted(kind, false);
+  }
+
   // Sets a layer level; returns false when refused for lack of room.
   bool setLevel(LayerKind kind, CatalogItem item, int level) {
     final target = level.clamp(0, 100);
@@ -701,6 +729,7 @@ ApplyResult applyOps(
     }
     scene = scene.withLevel(kind, item.id, target, maxAudioLayers: maxLayers);
     change(item.name, target == 0 ? _outOfMix : formatPercent(target));
+    if (target > 0) unmuteFor(kind);
     return true;
   }
 
@@ -786,6 +815,7 @@ ApplyResult applyOps(
         if (current != null && current >= level) {
           // « Ajoute du vent » never lowers what is already playing.
           change(item.name, formatPercent(current));
+          unmuteFor(kind);
           break;
         }
         setLevel(kind, item, level);
@@ -818,6 +848,12 @@ ApplyResult applyOps(
           break;
         }
         setLevel(kind, item, current + delta);
+
+      case 'couper' when kind != null && kind.isAudio:
+        setMuted(kind, true);
+
+      case 'remettre' when kind != null && kind.isAudio:
+        setMuted(kind, false);
 
       case 'lecture':
         if (op['valeur'] == 'pause') {

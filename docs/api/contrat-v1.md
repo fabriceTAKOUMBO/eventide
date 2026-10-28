@@ -18,6 +18,7 @@ Contrat partagé entre l'application Flutter (`app/`) et l'API Django (`backend/
   "sons":    [{"id": "eau-vive", "niveau": 60}, {"id": "oiseaux", "niveau": 40}],
   "musique": [{"id": "piano-doux", "niveau": 25}],
   "decor":   [{"id": "brume", "niveau": 30}],
+  "sourdine": {"sons": false, "musique": false},
   "minuteur": {"mode": "duree", "minutes": 60},
   "sommeil": {"suivi": true}
 }
@@ -29,8 +30,15 @@ Contrat partagé entre l'application Flutter (`app/`) et l'API Django (`backend/
 | `niveau` | entier 0 à 100 (volume pour un son ou une musique, intensité pour un décor). 0 retire l'élément |
 | couches | `sons` + `musique` : 6 au plus (`limites.couches_max`) ; un même `id` une seule fois |
 | `minuteur` | `{"mode":"duree","minutes":1..600}`, `{"mode":"nuit"}` (arrêt après `limites.nuit_max_heures`), `{"mode":"aucun"}` |
+| `sourdine` | `{"sons": booléen, "musique": booléen}` : catégorie coupée **sans perdre ses couches ni leurs niveaux** (remettre le son rend le mix exact d'un seul geste). Facultatif à la lecture : absent, ou une clé absente ou non booléenne, vaut `false`. Le décor n'a pas de sourdine |
 
 Le dossier écrit `intensite` pour un décor : on utilise `niveau` partout pour un schéma unique.
+
+`sourdine` est un ajout facultatif : la `version` reste **1** (un document sans `sourdine` reste valide et se lit « rien en sourdine » ; aucune autre forme ne change). Sens dans l'application :
+- une couche d'une catégorie en sourdine reste dans la scène avec son niveau ; seul ce qu'on entend change (volume 0, fondu d'environ 1 s à la coupure comme au retour) ;
+- la sourdine est un état d'écoute, comme le minuteur : elle est **gardée** quand le mix change (paysage, favori, programmation) et enregistrée avec la scène ; un favori et un partage ne la portent pas, et l'ouverture d'un lien de partage la retire (le destinataire entend le mix partagé, § 8) ;
+- un **démarrage** (lecture depuis l'arrêt, démarrage programmé) où tout ce qui est dans le mix serait en sourdine remet les deux catégories : un démarrage n'est jamais muet. Une **reprise** après une pause garde la sourdine ;
+- toucher au niveau d'un élément d'une catégorie en sourdine (curseur, − / +, ajout ; `ajouter`, `regler`, `ajuster` de l'assistant) la remet, si l'élément reste dans le mix. Retirer un élément ne change pas la sourdine.
 
 ## 2. Programmation (stockée à part, jamais partagée)
 
@@ -51,9 +59,11 @@ Une réponse n'est jamais du texte libre, mais une liste d'opérations. Champs p
 | `changer` | `paysage` | `valeur`: `suivant` \| `precedent` | « Change de paysage » |
 | `definir` | `moment` | `valeur`: `aube`…`nuit` | « Il fait nuit » |
 | `ajouter` | `son` \| `musique` \| `decor` | `id`, `niveau` (facultatif, 50 par défaut) | « Ajoute du piano doux » |
-| `retirer` | `son` \| `musique` \| `decor` | `id` (`*` = tous ceux de la cible) | « Coupe la musique » |
+| `retirer` | `son` \| `musique` \| `decor` | `id` (`*` = tous ceux de la cible) | « Enlève toute la musique » |
 | `regler` | `son` \| `musique` \| `decor` | `id`, `niveau` | « Mets l'eau vive à 70 pour cent » |
 | `ajuster` | `son` \| `musique` \| `decor` | `id`, `delta` (−100 à 100) | « Baisse les oiseaux » (−20) |
+| `couper` | `son` \| `musique` | — | « Coupe la musique », « Mets la musique en sourdine » (sourdine : couches et niveaux gardés) |
+| `remettre` | `son` \| `musique` | — | « Remets la musique », « Remets les bruits de la nature » (fin de la sourdine) |
 | `definir` | `minuteur` | `valeur`: objet minuteur (§ 1) | « Arrête dans une heure » |
 | `lecture` | — | `valeur`: `pause` \| `reprise` | « Pause » |
 | `creer` | `programmation` | `valeur`: programmation sans `id` ni `actif` | « Programme la pluie tous les soirs à 22 h » |
@@ -82,12 +92,15 @@ Les deux validateurs (API, application) appliquent exactement ces règles, dans 
    - `modifier programmation` exige un `selecteur` et au moins un champ valide parmi `heure`, `jours`, `montee_minutes`, `paysage`, `rappel` ; un champ invalide invalide l'opération ;
    - `selecteur` : **une seule** clé parmi `id` (texte de 1 à 64 caractères), `heure`, `rappel`, `moment_journee` ; deux clés ou plus = invalide ;
    - `retirer` accepte `id` = `*` ; `regler` et `ajuster` exigent un `id` précis ;
+   - `couper` et `remettre` : `cible` `son` ou `musique` seulement (le décor n'a pas de sourdine ; toute autre `cible` invalide l'opération) ; `id`, `niveau` et tout autre champ sont supprimés ;
    - `reformuler` : `raison` `incompris` ou `ambigu`, toute autre valeur devient `incompris` ; `refuser` : `raison` `hors_catalogue` ou `interdit`, toute autre valeur devient `hors_catalogue`.
-4. **Formule gratuite** (`free`) : une opération valide qui demande un élément Premium (`gratuit: false` dans le catalogue) est **remplacée à sa place** par `{"op":"ouvrir","cible":"premium"}`. Concernées : `definir paysage`, `ajouter`, `regler`, `ajuster`, et `creer` / `modifier programmation` avec un `paysage` Premium. Non concernées : `retirer` (toujours permis) et `changer paysage` (l'application gère les paysages verrouillés). Une opération à la fois invalide et Premium est **retirée** (l'invalide l'emporte). `monthly`, `annual` et `lifetime` ont accès à tout le catalogue.
+4. **Formule gratuite** (`free`) : une opération valide qui demande un élément Premium (`gratuit: false` dans le catalogue) est **remplacée à sa place** par `{"op":"ouvrir","cible":"premium"}`. Concernées : `definir paysage`, `ajouter`, `regler`, `ajuster`, et `creer` / `modifier programmation` avec un `paysage` Premium. Non concernées : `retirer`, `couper` et `remettre` (toujours permis) et `changer paysage` (l'application gère les paysages verrouillés). Une opération à la fois invalide et Premium est **retirée** (l'invalide l'emporte). `monthly`, `annual` et `lifetime` ont accès à tout le catalogue.
 5. **Doublons** : une opération strictement identique à une précédente (après normalisation) est retirée ; l'ordre est conservé. Il reste donc au plus un `{"op":"ouvrir","cible":"premium"}`.
 6. **Liste vide** : elle devient `[{"op":"reformuler","raison":"incompris"}]` ; la sortie n'est jamais vide.
 
 Limites qui dépendent de l'état du téléphone (6 couches au plus, un même `id` une fois dans une couche, 1 programmation en gratuit, 3 favoris en gratuit) : **appliquées par l'application au moment d'appliquer**, pas par le validateur (l'API ne connaît pas l'état exact).
+
+**Sourdine et phrases** (règles du téléphone et consigne du modèle) : « coupe la musique », « arrête la musique », « éteins la musique », « mets la musique en sourdine » → `couper musique` (réversible : les réglages sont gardés) ; « enlève la musique », « retire toute la musique », « supprime la musique » → `retirer musique *` (les couches sont retirées). De même pour les sons : « coupe les sons de la nature » → `couper son`. « Remets la musique », « rallume la musique », « enlève la sourdine de la musique » → `remettre musique`. « Coupe le son » et « coupe tout » restent `lecture pause`. À l'application, `ajouter`, `regler` et `ajuster` sur une catégorie en sourdine la remettent si l'élément reste dans le mix (§ 1).
 
 ## 4. Installations
 
@@ -175,8 +188,8 @@ Précisions :
 
 ## 8. Partage et contenu
 
-- `POST /shares` `{"scene": { ...§ 1 }}` → `201 {"code": "k7Fq2xPa", "url": "https://<domaine>/m/k7Fq2xPa"}` (8 caractères base62, scène validée, aucune donnée personnelle, 20 partages par jour par installation). `GET /shares/{code}` → `200 {"scene": {...}}` ou `404 not_found`. La scène enregistrée ne garde que le mix : `version`, `paysage`, `moment`, `sons`, `musique`, `decor` (`minuteur`, `sommeil` et tout champ inconnu sont retirés ; un élément à `niveau` 0 est retiré). Scène invalide (§ 1 : version, identifiants, bornes, doublon dans une couche, plus de 6 couches) : `400 invalid_request`. Les éléments Premium sont gardés (le destinataire gratuit les voit verrouillés).
-- L'application sait aussi produire un lien **autonome** sans serveur : `https://<domaine>/s#<base64url(JSON compact de la scène)>` ; il sert de repli hors ligne.
+- `POST /shares` `{"scene": { ...§ 1 }}` → `201 {"code": "k7Fq2xPa", "url": "https://<domaine>/m/k7Fq2xPa"}` (8 caractères base62, scène validée, aucune donnée personnelle, 20 partages par jour par installation). `GET /shares/{code}` → `200 {"scene": {...}}` ou `404 not_found`. La scène enregistrée ne garde que le mix : `version`, `paysage`, `moment`, `sons`, `musique`, `decor` (`minuteur`, `sommeil`, `sourdine` et tout champ inconnu sont retirés, quelle que soit leur forme ; un élément à `niveau` 0 est retiré). **La sourdine n'est jamais partagée** : le destinataire reçoit le mix tel qu'on l'entend sans sourdine, toutes couches audibles. Scène invalide (§ 1 : version, identifiants, bornes, doublon dans une couche, plus de 6 couches) : `400 invalid_request`. Les éléments Premium sont gardés (le destinataire gratuit les voit verrouillés).
+- L'application sait aussi produire un lien **autonome** sans serveur : `https://<domaine>/s#<base64url(JSON compact de la scène)>` ; il sert de repli hors ligne. Il porte les mêmes champs que la scène enregistrée par le serveur (ni `minuteur`, ni `sommeil`, ni `sourdine`).
 - `POST /content/urls` `{"keys": ["audio/sons/vagues.ogg", "images/paysages/aurore-boreale.jpg"]}` → `200 {"urls": {"<clé>": "<URL CloudFront signée>"}, "expires_at": "..."}`. Clés de contenu Premium : formule Premium exigée (`403 premium_required`). Disposition : `audio/sons/<id>.ogg`, `audio/musiques/<id>.ogg`, `images/paysages/<id>.jpg`. De 1 à 30 clés distinctes, toutes du catalogue (sinon `400 invalid_request`) ; une seule clé Premium pour un gratuit refuse toute la demande ; adresses valables 1 heure (`expires_at`, ISO 8601 UTC) ; `503 content_unavailable` si la signature n'est pas configurée ; 120 demandes par heure par installation.
 
 ## 9. Pages web servies par l'API (hôte du domaine)

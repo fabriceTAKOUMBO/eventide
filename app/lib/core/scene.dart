@@ -171,6 +171,8 @@ class Scene {
     List<Layer> decor = const [],
     this.timer = defaultTimer,
     this.sleepTracking = false,
+    this.mutedSounds = false,
+    this.mutedMusic = false,
   }) : sounds = List.unmodifiable(sounds),
        music = List.unmodifiable(music),
        decor = List.unmodifiable(decor);
@@ -197,12 +199,21 @@ class Scene {
   /// `sommeil.suivi`.
   final bool sleepTracking;
 
+  /// `sourdine.sons`: the nature sounds are muted, their layers and levels
+  /// kept (contract §1).
+  final bool mutedSounds;
+
+  /// `sourdine.musique`: the music is muted, its layers and levels kept.
+  final bool mutedMusic;
+
   /// A scene showing [landscape] with its default mix.
   factory Scene.fromLandscape(
     Landscape landscape, {
     Moment moment = Moment.jour,
     TimerSetting timer = defaultTimer,
     bool sleepTracking = false,
+    bool mutedSounds = false,
+    bool mutedMusic = false,
   }) {
     return Scene(
       landscapeId: landscape.id,
@@ -212,17 +223,61 @@ class Scene {
       decor: landscape.defaultMix[LayerKind.decor] ?? const [],
       timer: timer,
       sleepTracking: sleepTracking,
+      mutedSounds: mutedSounds,
+      mutedMusic: mutedMusic,
     );
   }
 
   /// Switches to [landscape] and loads its default mix, keeping the moment,
-  /// the timer and the sleep tracking.
+  /// the timer, the sleep tracking and the mute state (a listening state,
+  /// like the timer).
   Scene withLandscape(Landscape landscape) => Scene.fromLandscape(
     landscape,
     moment: moment,
     timer: timer,
     sleepTracking: sleepTracking,
+    mutedSounds: mutedSounds,
+    mutedMusic: mutedMusic,
   );
+
+  /// Whether [kind] is muted. The decor has no mute.
+  bool isMuted(LayerKind kind) => switch (kind) {
+    LayerKind.son => mutedSounds,
+    LayerKind.musique => mutedMusic,
+    LayerKind.decor => false,
+  };
+
+  /// Mutes or unmutes [kind] (sounds or music), keeping every layer and its
+  /// level. The decor has no mute: the same instance is returned.
+  Scene withMuted(LayerKind kind, bool muted) {
+    if (isMuted(kind) == muted) return this;
+    return switch (kind) {
+      LayerKind.son => copyWith(mutedSounds: muted),
+      LayerKind.musique => copyWith(mutedMusic: muted),
+      LayerKind.decor => this,
+    };
+  }
+
+  /// Both categories audible again.
+  Scene withoutMute() => !mutedSounds && !mutedMusic
+      ? this
+      : copyWith(mutedSounds: false, mutedMusic: false);
+
+  /// Level heard for a layer of [kind] at [level]: 0 while [kind] is muted.
+  int effectiveLevel(LayerKind kind, int level) =>
+      isMuted(kind) ? 0 : level.clamp(0, 100);
+
+  /// Level heard for an element (0 when muted or absent).
+  int effectiveLevelOf(LayerKind kind, String id) =>
+      effectiveLevel(kind, levelOf(kind, id) ?? 0);
+
+  /// Sounds and music that can be heard (not in a muted category).
+  int get audibleLayerCount =>
+      (mutedSounds ? 0 : sounds.length) + (mutedMusic ? 0 : music.length);
+
+  /// The mix has sounds or music, and every one of them is muted: playing
+  /// it would be silent.
+  bool get fullyMuted => audioLayerCount > 0 && audibleLayerCount == 0;
 
   List<Layer> layers(LayerKind kind) => switch (kind) {
     LayerKind.son => sounds,
@@ -295,6 +350,8 @@ class Scene {
     List<Layer>? decor,
     TimerSetting? timer,
     bool? sleepTracking,
+    bool? mutedSounds,
+    bool? mutedMusic,
   }) {
     return Scene(
       version: version ?? this.version,
@@ -305,6 +362,8 @@ class Scene {
       decor: decor ?? this.decor,
       timer: timer ?? this.timer,
       sleepTracking: sleepTracking ?? this.sleepTracking,
+      mutedSounds: mutedSounds ?? this.mutedSounds,
+      mutedMusic: mutedMusic ?? this.mutedMusic,
     );
   }
 
@@ -315,6 +374,7 @@ class Scene {
     'sons': [for (final l in sounds) l.toJson()],
     'musique': [for (final l in music) l.toJson()],
     'decor': [for (final l in decor) l.toJson()],
+    'sourdine': {'sons': mutedSounds, 'musique': mutedMusic},
     'minuteur': timer.toJson(),
     'sommeil': {'suivi': sleepTracking},
   };
@@ -322,6 +382,7 @@ class Scene {
   /// Parses a stored scene document. Throws [FormatException] when
   /// `paysage` is missing; other fields fall back to their defaults, invalid
   /// layers are skipped and duplicate ids keep their first occurrence.
+  /// `sourdine` is optional: a missing or non-boolean flag is false.
   /// Catalog membership is not checked here (see `decodeSceneFromLink`).
   factory Scene.fromJson(Map<String, dynamic> json) {
     final landscapeId = json['paysage'];
@@ -348,6 +409,7 @@ class Scene {
 
     final version = json['version'];
     final sleep = json['sommeil'];
+    final mute = json['sourdine'];
     return Scene(
       version: version is int ? version : currentVersion,
       landscapeId: landscapeId,
@@ -357,6 +419,8 @@ class Scene {
       decor: parseLayers(LayerKind.decor),
       timer: TimerSetting.tryParse(json['minuteur']) ?? defaultTimer,
       sleepTracking: sleep is Map && sleep['suivi'] == true,
+      mutedSounds: mute is Map && mute['sons'] == true,
+      mutedMusic: mute is Map && mute['musique'] == true,
     );
   }
 
@@ -370,7 +434,9 @@ class Scene {
       _listEquals(other.music, music) &&
       _listEquals(other.decor, decor) &&
       other.timer == timer &&
-      other.sleepTracking == sleepTracking;
+      other.sleepTracking == sleepTracking &&
+      other.mutedSounds == mutedSounds &&
+      other.mutedMusic == mutedMusic;
 
   @override
   int get hashCode => Object.hash(
@@ -382,6 +448,8 @@ class Scene {
     Object.hashAll(decor),
     timer,
     sleepTracking,
+    mutedSounds,
+    mutedMusic,
   );
 
   @override
