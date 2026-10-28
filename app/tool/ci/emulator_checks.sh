@@ -17,9 +17,13 @@
 # A and B decide the exit code. C writes « pass » or « fail » to <out-dir>/scheduled-start.status
 # and its findings to <out-dir>/scheduled-start.txt (read by a non-blocking workflow step).
 #
-# The whole guest log is streamed to a host file during each stage, and the host is sampled
-# every few seconds (host-monitor.txt): when the emulator disappears, the job log shows the last
-# guest lines, the emulator's memory and CPU, the host kernel log and any emulator crash report.
+# The whole guest log is streamed to a host file during each stage, and the emulator process is
+# sampled every MONITOR_INTERVAL seconds (host-monitor.txt: memory, threads, CPU used during the
+# interval). An emulator that stops using the CPU while alive has deadlocked: its threads (state,
+# kernel wait channel, gdb backtraces when gdb is installed) are dumped once to
+# emulator-freeze.txt. When the emulator disappears, the job log shows that dump, the host
+# samples and kernel log, any emulator crash report, and a digest of the guest log (our app's
+# lines, crashes, watchdog, audio, media codecs, graphics) followed by its last lines.
 #
 # Optional environment: EMULATOR_WM_SIZE / EMULATOR_WM_DENSITY (display override applied before
 # stage A), A_READY_TIMEOUT (120), A_SETTLE (15), AM_START_TIMEOUT (60), ALLOWED_FLUTTER_ERRORS.
@@ -62,21 +66,59 @@ start_logcat_stream() {
   timeout "${STREAM_TIMEOUT:-2400}" "$ADB_BIN" logcat -v threadtime -b all >"$1" 2>&1 &
   stream_pid=$!
 }
-# Emulator process (memory, CPU, uptime), host load and memory every MONITOR_INTERVAL seconds.
+# Threads of a frozen emulator, once: id, state, kernel wait channel, name, then gdb backtraces
+# (`sudo gdb`, when installed: ptrace of a non-child needs root). Shows where it is stuck.
+freeze_dump() {
+  local pid="$1" file="$out/emulator-freeze.txt" task state
+  {
+    echo "emulator pid $pid used no CPU for three samples in a row ($(date -u +%H:%M:%S)): threads"
+    echo "(tid, state, kernel wait channel, name)"
+    for task in /proc/"$pid"/task/*; do
+      state="$(sed 's/^.*) //' "$task/stat" 2>/dev/null | cut -d' ' -f1)"
+      printf '%s %s %s %s\n' "${task##*/}" "$state" "$(cat "$task/wchan" 2>/dev/null)" "$(cat "$task/comm" 2>/dev/null)"
+    done
+    if command -v gdb >/dev/null; then
+      echo "--- gdb backtraces (12 frames per thread)"
+      timeout 120 sudo -n gdb -batch -nx -p "$pid" -ex 'set pagination off' -ex 'thread apply all bt 12' 2>&1 |
+        grep -vE '^\[New LWP|^warning: |^Downloading|^$'
+    else
+      echo "(gdb not installed: no backtraces)"
+    fi
+    echo "--- end of the freeze dump"
+  } >"$file" 2>&1
+}
+# Emulator process every MONITOR_INTERVAL seconds: memory, threads, CPU used during the interval
+# (not ps's lifetime average), host load and memory; a frozen emulator is dumped once.
 start_host_monitor() {
   (
+    interval="${MONITOR_INTERVAL:-5}"
+    hz="$(getconf CLK_TCK 2>/dev/null || echo 100)"
+    prev_pid="" prev_ticks=0 still=0 dumped=""
     while :; do
-      pids="$(pgrep -f 'qemu-system' 2>/dev/null | head -n 4 | paste -sd, -)"
-      if [[ -n $pids ]]; then
-        emu="$(ps -o pid=,rss=,pcpu=,etimes= -p "$pids" 2>/dev/null |
-          awk '{printf "emulator pid %s rss %d MB cpu %s%% up %s s; ", $1, $2 / 1024, $3, $4}')"
+      pid="$(pgrep -f 'qemu-system' 2>/dev/null | head -n 1)"
+      if [[ -n $pid && -r /proc/$pid/stat ]]; then
+        read -r -a fields < <(sed 's/^.*) //' "/proc/$pid/stat")
+        ticks=$((fields[11] + fields[12]))
+        cpu="?"
+        if [[ $pid == "$prev_pid" ]]; then cpu=$(((ticks - prev_ticks) * 100 / (hz * interval))); fi
+        prev_pid="$pid"
+        prev_ticks="$ticks"
+        emu="$(awk '/^VmRSS/ {r = $2} /^Threads/ {t = $2} END {printf "rss %d MB, %s threads", r / 1024, t}' "/proc/$pid/status")"
+        emu="emulator pid $pid $emu, cpu ${cpu}% over ${interval} s; "
+        # A live guest always uses some CPU; a deadlocked emulator uses none (seen: 0 for 40 s).
+        if [[ $cpu != "?" && $cpu -lt 1 ]]; then still=$((still + 1)); else still=0; fi
+        if [[ $still -ge 3 && -z $dumped ]]; then
+          dumped="yes"
+          emu="${emu}FROZEN, threads dumped to emulator-freeze.txt; "
+          freeze_dump "$pid"
+        fi
       else
         emu="no emulator process; "
       fi
       printf '%s %sload %s; %s\n' "$(date -u +%H:%M:%S)" "$emu" \
         "$(cut -d' ' -f1-3 /proc/loadavg 2>/dev/null)" \
-        "$(free -m 2>/dev/null | awk 'NR == 2 {printf "host memory used %s free %s available %s MB", $3, $4, $7}')"
-      sleep "${MONITOR_INTERVAL:-5}"
+        "$(free -m 2>/dev/null | awk 'NR == 2 {printf "host memory used %s available %s MB", $3, $7}')"
+      sleep "$interval"
     done
   ) >>"$out/host-monitor.txt" 2>&1 &
   monitor_pid=$!
@@ -115,14 +157,30 @@ host_diagnostics() {
       echo "--- $file (last lines)"
       tail -n 15 "$file"
     done
-  if [[ -n ${PULSE_SERVER:-} ]] && command -v pactl >/dev/null; then
-    echo "--- PulseAudio clients ($PULSE_SERVER)"
-    timeout 10 pactl list short clients 2>&1 | tail -n 5
+  if [[ -s $out/emulator-freeze.txt ]]; then
+    # The monitor may still be writing it (gdb): wait for its last line, at most 90 s.
+    for _ in $(seq 45); do
+      grep -q '^--- end of the freeze dump' "$out/emulator-freeze.txt" && break
+      sleep 2
+    done
+    echo "--- frozen emulator: threads and backtraces (emulator-freeze.txt)"
+    head -n "${DIAG_FREEZE_LINES:-700}" "$out/emulator-freeze.txt" | cut -c1-200
   fi
   if [[ -n ${2:-} && -s ${2:-} ]]; then
-    echo "--- guest log, last lines before the loss ($(basename "$2"))"
-    tail -n "${DIAG_LOG_LINES:-80}" "$2" | cut -c1-300
+    guest_log_digest "$2"
   fi
+}
+# The guest log lines that matter before a loss: our app's process (from ActivityManager's
+# « Start proc <pid>:<package> »), crashes, watchdog, audio, media codecs, graphics, low memory;
+# then the last lines whatever they are.
+guest_log_digest() {
+  local file="$1" pids
+  pids="$(grep -oE "Start proc [0-9]+:$pkg" "$file" | grep -oE '[0-9]+' | sort -u | paste -sd'|' -)"
+  echo "--- guest log digest ($(basename "$file")): our app${pids:+ (pid $pids)}, crashes, watchdog, audio, media, graphics"
+  grep -E "${pids:+^[0-9-]+ [0-9:.]+ +($pids) |}$pkg|AndroidRuntime|FATAL|ANR in|[Ww]atchdog|WATCHDOG|am_crash|am_anr|AudioFlinger|AAudio|AudioTrack|audioserver|audio_hw|CCodec|MediaCodec|c2\.goldfish|ExoPlayer|EGL_emulation|gralloc|goldfish|lowmemorykiller|lmkd" "$file" |
+    tail -n "${DIAG_DIGEST_LINES:-90}" | cut -c1-240
+  echo "--- guest log, last lines before the loss"
+  tail -n "${DIAG_LOG_LINES:-25}" "$file" | cut -c1-240
 }
 annotate() { [[ -n "${GITHUB_ACTIONS:-}" ]] && echo "::$1 title=Emulator API ${api:-?}::$2"; return 0; }
 shot() { timeout 30 "$ADB_BIN" exec-out screencap -p >"$out/$1.png" 2>/dev/null || log "screenshot $1 failed"; }
@@ -163,12 +221,6 @@ fi
 size="$(adb shell wm size | tr -d '\r' | sed 's/.*: //' | tail -n 1)"
 density="$(adb shell wm density | tr -d '\r' | sed 's/.*: //' | tail -n 1)"
 log "device $serial: Android $release (API $api), screen $size @ ${density} dpi"
-if [[ -n ${PULSE_SERVER:-} ]] && command -v pactl >/dev/null; then
-  log "host audio: PulseAudio at $PULSE_SERVER, clients:"
-  timeout 10 pactl list short clients 2>&1 | head -n 5
-else
-  log "host audio: no PulseAudio server (the emulator uses its fallback audio backend)"
-fi
 {
   echo "### Emulator: Android $release (API $api), $size, ${density} dpi"
   echo
