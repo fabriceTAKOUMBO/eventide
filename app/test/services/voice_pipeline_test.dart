@@ -88,7 +88,7 @@ void main() {
         phrase: 'raconte-moi une histoire', snapshot: snapshot, entitlements: entitlementsFor(Plan.free));
     expect(sent.single['actions_locales'], isNull);
     final ops = (r as VoiceOpsResolution).ops;
-    expect(ops, contains({'op': 'ouvrir', 'cible': 'premium'}));
+    expect(ops.any((o) => o['op'] == 'ouvrir' && o['cible'] == 'premium'), isTrue);
     expect(ops.any((o) => o['id'] == 'vagues'), isFalse);
     expect(r.source, VoiceSource.model);
   });

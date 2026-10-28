@@ -14,13 +14,14 @@ const String kScreenshotDir =
 bool _fontsLoaded = false;
 
 /// Loads Manrope and Fraunces so layouts are measured with the real fonts.
+/// Call it from `setUpAll` (outside the fake-async zone of `testWidgets`).
 Future<void> loadAppFonts() async {
   if (_fontsLoaded) return;
   _fontsLoaded = true;
   Future<void> load(String family, String path) async {
     final file = File(path);
     if (!file.existsSync()) return;
-    final bytes = await file.readAsBytes();
+    final bytes = file.readAsBytesSync();
     final loader = FontLoader(family)..addFont(Future.value(ByteData.view(bytes.buffer)));
     await loader.load();
   }

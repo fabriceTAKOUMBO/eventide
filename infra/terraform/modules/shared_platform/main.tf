@@ -1,0 +1,437 @@
+# Un environnement Eventide en HÉBERGEMENT MUTUALISÉ, dans le compte AWS principal, à côté de
+# CINAF, JobMinutes et Candidature Express, en réutilisant le VPC, les sous-réseaux privés
+# « application », la NAT, l'ALB et l'instance PostgreSQL de CINAF, sans jamais modifier leurs
+# ressources (docs/infra/hebergement-mutualise.md). Modèle : modules/shared_platform de
+# Candidature Express.
+#
+# Ressources propres (créées ici) : clé KMS alias/ev-<env>, dépôt ECR, cluster ECS (service api),
+# groupe de sécurité, secrets eventide/<env>/*, groupe cible, certificat, enregistrements DNS dans
+# NOTRE zone, base et rôles PostgreSQL (par tâche d'amorçage), sauvegardes logiques, contenu
+# (S3 + CloudFront + clé de signature), alarmes et sujet SNS, tâches planifiées, rôle de
+# déploiement GitHub.
+#
+# Ajouts sur des ressources partagées (points de contact, détaillés et réversibles) :
+#   1. règles d'écouteur sur le 443 de l'ALB partagé (priorités 400-409 ; 420-429 en
+#      préproduction), par nom d'hôte ;
+#   2. certificat ACM ajouté à la liste de l'écouteur (aws_lb_listener_certificate) ;
+#   3. une règle d'entrée 5432 sur le groupe de sécurité de la base, depuis NOTRE groupe ;
+#   4. une base, trois rôles et une base de test de restauration sur l'instance (amorçage).
+# Rien d'autre : ni action par défaut de l'écouteur, ni attributs de l'ALB, ni paramètres RDS,
+# ni NAT, ni tables de routage, ni fournisseur OIDC (seulement référencé).
+#
+# Sans domaine (domain = "", marque à vérifier), l'entrée publique n'existe pas : ni certificat,
+# ni règles d'écouteur, ni DNS, ni groupe cible, ni service api ; tout le reste est créé
+# (base, contenu, image, tâches), ce qui ne pose QUE les points de contact 3 et 4.
+
+data "aws_region" "current" {}
+data "aws_caller_identity" "current" {}
+
+locals {
+  name          = "ev-${var.environment}"
+  secret_prefix = "eventide/${var.environment}"
+  ssm_prefix    = "/eventide/${var.environment}"
+  region        = data.aws_region.current.region
+  account_id    = data.aws_caller_identity.current.account_id
+
+  ingress_enabled = var.domain != ""
+  api_hostname    = local.ingress_enabled ? "api.${var.hostname_suffix}" : ""
+  web_hostnames   = local.ingress_enabled ? var.web_hostnames : []
+  public_web_url  = local.ingress_enabled ? "https://${var.web_hostnames[0]}" : "https://eventide.invalid"
+  api_url         = local.ingress_enabled ? "https://${local.api_hostname}" : ""
+
+  # Budget de connexions PostgreSQL : le pool de chaque worker gunicorn borne les connexions
+  # d'une tâche ; un déploiement peut doubler les tâches (deployment_maximum_percent).
+  connections_per_api_task = var.api.workers * var.api.db_pool_max
+  deployment_surge         = ceil(var.deployment_maximum_percent / 100)
+  app_connections_needed   = var.api.max * local.connections_per_api_task * local.deployment_surge + var.app_connection_reserve
+  total_connection_limit   = var.db_role_connection_limits.app + var.db_role_connection_limits.migrator + var.db_role_connection_limits.backup
+
+  # Keep-alive de gunicorn au-delà du délai d'inactivité de l'ALB partagé (502 sinon).
+  keep_alive_seconds = local.ingress_enabled ? max(75, module.alb[0].idle_timeout + 5) : 75
+}
+
+# Le plan échoue si l'autoscaling (et le chevauchement d'un déploiement) peut ouvrir plus de
+# connexions que la limite du rôle applicatif, ou si les limites des rôles dépassent le budget
+# accordé sur l'instance partagée.
+resource "terraform_data" "connection_budget" {
+  input = local.total_connection_limit
+
+  lifecycle {
+    precondition {
+      condition     = local.app_connections_needed <= var.db_role_connection_limits.app
+      error_message = "Connexions possibles du rôle applicatif (${local.app_connections_needed} = ${var.api.max} tâches api x ${var.api.workers} worker(s) x pool ${var.api.db_pool_max} x ${local.deployment_surge} (déploiement) + ${var.app_connection_reserve} (tâches planifiées)) au-delà de sa limite ${var.db_role_connection_limits.app} : réduire api.max, workers ou db_pool_max."
+    }
+    precondition {
+      condition     = local.total_connection_limit <= var.db_connection_budget
+      error_message = "Somme des limites des rôles (${local.total_connection_limit}) au-delà du budget ${var.db_connection_budget} accordé sur l'instance partagée."
+    }
+  }
+}
+
+# --- Socle ---------------------------------------------------------------------------------------
+
+module "kms" {
+  source                         = "../kms"
+  name                           = local.name
+  decrypt_allowed_principal_arns = var.kms_decrypt_allowed_principal_arns
+}
+
+module "ecr" {
+  source       = "../ecr"
+  name         = local.name
+  force_delete = var.force_destroy
+}
+
+resource "aws_ssm_parameter" "image_tag" {
+  name        = "${local.ssm_prefix}/deploy/image-tag"
+  description = "SHA du commit deploye (ecrit par .github/workflows/deploy.yml)"
+  type        = "String"
+  value       = "bootstrap"
+
+  lifecycle {
+    ignore_changes = [value]
+  }
+}
+
+module "secrets" {
+  source = "../secrets"
+
+  secret_prefix        = local.secret_prefix
+  kms_key_arn          = module.kms.key_arn
+  recovery_window_days = var.secret_recovery_window_days
+  db_host              = var.rds.address
+  db_port              = var.rds.port
+  db_name              = var.db_name
+  db_roles             = var.db_roles
+  manual_secrets = {
+    "gemini-api-key"              = "GEMINI_API_KEY : cle de l'API Gemini (offre payante), deposee par le product owner"
+    "google-play-service-account" = "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON : cle JSON du compte de service lie a la Play Console (API Play Developer et Play Integrity), deposee par le product owner"
+  }
+}
+
+# --- Entrée publique : ajouts sur l'ALB partagé (seulement avec un domaine) ------------------------
+
+module "dns" {
+  count  = local.ingress_enabled ? 1 : 0
+  source = "../dns_certs"
+
+  zone_id             = var.zone_id
+  zone_name           = var.domain
+  certificate_domains = concat([local.api_hostname], local.web_hostnames)
+  caa_issuers         = var.manage_caa ? ["amazon.com", "amazontrust.com", "awstrust.com", "amazonaws.com"] : []
+}
+
+module "alb" {
+  count  = local.ingress_enabled ? 1 : 0
+  source = "../alb"
+
+  name                     = local.name
+  vpc_id                   = var.vpc_id
+  https_listener_arn       = var.https_listener_arn
+  listener_rule_priorities = var.listener_rule_priorities
+  api_hostname             = local.api_hostname
+  web_hostnames            = local.web_hostnames
+  certificate_arn          = module.dns[0].certificate_arn
+  zone_id                  = var.zone_id
+}
+
+# Point de contact n° 3 : entrée PostgreSQL sur le groupe de sécurité de l'instance partagée,
+# depuis le seul groupe de NOS tâches. Règle autonome : les règles de CINAF, JobMinutes et
+# Candidature Express ne sont pas touchées. Retrait : terraform destroy -target de cette ressource.
+resource "aws_vpc_security_group_ingress_rule" "shared_postgres" {
+  security_group_id            = var.rds.security_group_id
+  description                  = "Eventide ${var.environment} - taches api, migrations, sauvegardes"
+  ip_protocol                  = "tcp"
+  from_port                    = var.rds.port
+  to_port                      = var.rds.port
+  referenced_security_group_id = module.ecs.api_security_group_id
+
+  tags = { Name = "${local.name}-postgres" }
+}
+
+# --- Contenu (S3 privé + CloudFront + adresses signées) -----------------------------------------
+
+module "content" {
+  source = "../content_cdn"
+
+  name                        = local.name
+  account_id                  = local.account_id
+  secret_prefix               = local.secret_prefix
+  kms_key_arn                 = module.kms.key_arn
+  secret_recovery_window_days = var.secret_recovery_window_days
+  domain_name                 = local.ingress_enabled && var.content_custom_domain ? "cdn.${var.hostname_suffix}" : ""
+  zone_id                     = var.zone_id
+  force_destroy               = var.force_destroy
+  alarm_topic_arn             = module.observability.alerts_topic_arn
+  budget_enabled              = var.content_budget_enabled
+  budget_limit_usd            = var.content_budget_usd
+  budget_emails               = var.budget_emails
+}
+
+# --- Application ---------------------------------------------------------------------------------
+
+locals {
+  api_environment = { for k, v in merge(
+    {
+      DJANGO_SETTINGS_MODULE     = "config.settings.prod"
+      DJANGO_READ_DOT_ENV        = "false"
+      ALLOWED_HOSTS              = local.ingress_enabled ? join(",", concat([local.api_hostname], local.web_hostnames)) : "localhost"
+      PUBLIC_WEB_BASE_URL        = local.public_web_url
+      NUM_PROXIES                = "1"
+      DB_POOL_MAX_SIZE           = tostring(var.api.db_pool_max)
+      PLAY_PACKAGE_NAME          = var.play_package_name
+      ANDROID_CERT_FINGERPRINTS  = join(",", var.android_cert_fingerprints)
+      PLAY_INTEGRITY_ENFORCED    = "true"
+      GOOGLE_OAUTH_CLIENT_IDS    = join(",", var.google_oauth_client_ids)
+      RTDN_AUDIENCE              = var.rtdn_audience != "" ? var.rtdn_audience : (local.ingress_enabled ? "${local.api_url}/v1/play/rtdn" : "")
+      RTDN_SERVICE_ACCOUNT_EMAIL = var.rtdn_service_account_email
+      VOICE_ROUTER               = var.voice.router
+      GEMINI_MODEL               = var.voice.model
+      VOICE_MONTHLY_CAP_EUR      = var.voice.monthly_cap_eur
+      USD_EUR_RATE               = var.voice.usd_eur_rate
+      VOICE_GLOBAL_DAILY_CAP_EUR = var.voice.global_daily_cap_eur
+      CONTENT_BASE_URL           = module.content.content_base_url
+      CLOUDFRONT_KEY_PAIR_ID     = module.content.key_pair_id
+      LEGAL_PUBLISHER_NAME       = var.legal_publisher_name
+      LEGAL_CONTACT_EMAIL        = var.legal_contact_email
+      LOG_LEVEL                  = "INFO"
+      # Connexions PostgreSQL par tâche = workers x pool : liées au budget (connection_budget).
+      WEB_CONCURRENCY   = tostring(var.api.workers)
+      GUNICORN_CMD_ARGS = "--worker-class gthread --threads ${var.api.threads} --timeout 30 --graceful-timeout 25 --keep-alive ${local.keep_alive_seconds} --max-requests 2000 --max-requests-jitter 200 --worker-tmp-dir /tmp --no-control-socket --access-logfile - --access-logformat '%(h)s %(t)s \"%(m)s %(U)s %(H)s\" %(s)s %(b)s %(L)s' --error-logfile - --log-level info"
+    },
+    var.api_extra_environment,
+  ) : k => v if v != "" }
+
+  api_secrets = {
+    DJANGO_SECRET_KEY                = module.secrets.django_secret_key_arn
+    DATABASE_URL                     = "${module.secrets.db_secret_arns["app"]}:url::"
+    GEMINI_API_KEY                   = module.secrets.manual_secret_arns["gemini-api-key"]
+    GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = module.secrets.manual_secret_arns["google-play-service-account"]
+    CLOUDFRONT_PRIVATE_KEY           = module.content.private_key_secret_arn
+  }
+
+  # Migrations : rôle propriétaire, sans aucun secret Google ni CloudFront ; pas de pool.
+  migrate_environment = merge(local.api_environment, { VOICE_ROUTER = "rules-only", DB_POOL_MAX_SIZE = "0" })
+  migrate_secrets = {
+    DJANGO_SECRET_KEY = module.secrets.django_secret_key_arn
+    DATABASE_URL      = "${module.secrets.db_secret_arns["migrator"]}:url::"
+  }
+
+  # Tâches planifiées (purge, finalisation des achats) : rôle applicatif, compte de service Google.
+  jobs_environment = merge(local.api_environment, { VOICE_ROUTER = "rules-only", DB_POOL_MAX_SIZE = "0" })
+  jobs_secrets = {
+    DJANGO_SECRET_KEY                = module.secrets.django_secret_key_arn
+    DATABASE_URL                     = "${module.secrets.db_secret_arns["app"]}:url::"
+    GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = module.secrets.manual_secret_arns["google-play-service-account"]
+  }
+}
+
+module "ecs" {
+  source = "../ecs"
+
+  name                         = local.name
+  vpc_id                       = var.vpc_id
+  private_subnet_ids           = var.app_subnet_ids
+  alb_security_group_id        = var.alb_security_group_id
+  postgres_security_group_id   = var.rds.security_group_id
+  postgres_port                = var.rds.port
+  api_service_enabled          = local.ingress_enabled
+  target_group_arn             = local.ingress_enabled ? module.alb[0].target_group_arn : null
+  request_count_resource_label = local.ingress_enabled ? "${module.alb[0].arn_suffix}/${module.alb[0].target_group_arn_suffix}" : null
+  ecr_repository_url           = module.ecr.repository_urls["api"]
+  ecr_repository_arn           = module.ecr.repository_arns["api"]
+  image_tag                    = nonsensitive(aws_ssm_parameter.image_tag.value)
+  cpu_architecture             = var.cpu_architecture
+  use_fargate_spot             = var.use_fargate_spot
+  scheduled_scaling            = var.scheduled_stop.enabled
+  deployment_maximum_percent   = var.deployment_maximum_percent
+
+  api = {
+    cpu      = var.api.cpu
+    memory   = var.api.memory
+    min      = var.api.min
+    max      = var.api.max
+    requests = var.api.requests
+  }
+
+  api_environment     = local.api_environment
+  api_secrets         = local.api_secrets
+  migrate_environment = local.migrate_environment
+  migrate_secrets     = local.migrate_secrets
+  jobs_environment    = local.jobs_environment
+  jobs_secrets        = local.jobs_secrets
+
+  log_retention_days = var.log_retention_days
+  kms_key_arn        = module.kms.key_arn
+
+  depends_on = [terraform_data.connection_budget]
+}
+
+# Arrêt planifié (préproduction) : min = max = 0 le soir et le week-end, réveil le matin.
+resource "aws_appautoscaling_scheduled_action" "start" {
+  count              = var.scheduled_stop.enabled && local.ingress_enabled ? 1 : 0
+  name               = "${local.name}-api-start"
+  service_namespace  = "ecs"
+  scalable_dimension = "ecs:service:DesiredCount"
+  resource_id        = module.ecs.autoscaling_resource_id
+  schedule           = var.scheduled_stop.start
+  timezone           = var.scheduled_stop.timezone
+
+  scalable_target_action {
+    min_capacity = 1
+    max_capacity = var.api.max
+  }
+}
+
+resource "aws_appautoscaling_scheduled_action" "stop" {
+  count              = var.scheduled_stop.enabled && local.ingress_enabled ? 1 : 0
+  name               = "${local.name}-api-stop"
+  service_namespace  = "ecs"
+  scalable_dimension = "ecs:service:DesiredCount"
+  resource_id        = module.ecs.autoscaling_resource_id
+  schedule           = var.scheduled_stop.stop
+  timezone           = var.scheduled_stop.timezone
+
+  scalable_target_action {
+    min_capacity = 0
+    max_capacity = 0
+  }
+
+  depends_on = [aws_appautoscaling_scheduled_action.start]
+}
+
+# --- Base de données : amorçage, sauvegardes, restauration ---------------------------------------
+
+module "db_tools" {
+  source = "../db_tools"
+
+  name                        = local.name
+  db_host                     = var.rds.address
+  db_port                     = var.rds.port
+  db_engine_version           = var.rds.engine_version
+  master_username             = var.rds.master_username
+  master_password_secret_name = "${local.secret_prefix}/bootstrap/rds-master-password"
+
+  db_name                   = var.db_name
+  restore_db_name           = "${var.db_name}_restore"
+  app_role                  = var.db_roles.app
+  migrator_role             = var.db_roles.migrator
+  backup_role               = var.db_roles.backup
+  db_secret_arns            = module.secrets.db_secret_arns
+  app_connection_limit      = var.db_role_connection_limits.app
+  migrator_connection_limit = var.db_role_connection_limits.migrator
+  backup_connection_limit   = var.db_role_connection_limits.backup
+
+  cpu_architecture      = var.cpu_architecture
+  jobs_log_group_name   = module.ecs.log_group_names["jobs"]
+  kms_key_arn           = module.kms.key_arn
+  backup_retention_days = var.backup_retention_days
+  force_destroy         = var.force_destroy
+  metric_namespace      = module.observability.metric_namespace
+  alarm_topic_arn       = module.observability.alerts_topic_arn
+}
+
+module "scheduler" {
+  source = "../scheduler"
+
+  name               = local.name
+  cluster_arn        = module.ecs.cluster_arn
+  cluster_name       = module.ecs.cluster_name
+  task_family        = module.ecs.task_families["jobs"]
+  container_name     = module.ecs.container_names["jobs"]
+  subnet_ids         = var.app_subnet_ids
+  security_group_ids = [module.ecs.api_security_group_id]
+  capacity_provider  = "FARGATE_SPOT"
+  timezone           = "Europe/Brussels"
+  pass_role_arns     = concat([module.ecs.execution_role_arns["jobs"]], module.db_tools.pass_role_arns)
+
+  # Les planifications visent la FAMILLE jobs : ECS lance sa dernière révision active, que le
+  # workflow Deploy enregistre après le service api stable.
+  jobs = {
+    "purge-expired" = {
+      description = "Compteurs expires, reservations vocales oubliees, details vocaux de plus de 90 jours"
+      schedule    = "cron(10 3 * * ? *)"
+      command     = ["python", "manage.py", "purge_expired"]
+    }
+    "finalize-purchases" = {
+      description = "Acquittement ou consommation des achats Google Play pas encore finalises"
+      schedule    = "cron(20 * * * ? *)"
+      command     = ["python", "manage.py", "finalize_purchases"]
+    }
+    "db-backup" = {
+      description = "Sauvegarde logique quotidienne (pg_dump vers S3)"
+      schedule    = "cron(40 3 * * ? *)"
+      task_family = module.db_tools.task_families["backup"]
+    }
+  }
+}
+
+# --- Exploitation ------------------------------------------------------------------------------
+
+module "observability" {
+  source = "../observability"
+
+  name                    = local.name
+  kms_key_arn             = module.kms.key_arn
+  alert_emails            = var.alert_emails
+  alb_arn_suffix          = local.ingress_enabled ? module.alb[0].arn_suffix : ""
+  target_alarms_enabled   = local.ingress_enabled
+  target_group_arn_suffix = local.ingress_enabled ? module.alb[0].target_group_arn_suffix : null
+  ecs_cluster_name        = module.ecs.cluster_name
+  ecs_cluster_arn         = module.ecs.cluster_arn
+  ecs_service_names       = module.ecs.service_names
+  app_log_group_names     = module.ecs.log_group_names
+  rds_alarms_enabled      = var.rds_alarms_enabled
+  rds_instance_id         = var.rds.identifier
+}
+
+# --- Déploiement continu -------------------------------------------------------------------------
+
+resource "aws_ssm_parameter" "deploy_config" {
+  name        = "${local.ssm_prefix}/deploy/config"
+  description = "Configuration lue par .github/workflows/deploy.yml (aucun secret)"
+  type        = "String"
+  tier        = "Standard"
+  value = jsonencode({
+    environment               = var.environment
+    hosting                   = "shared"
+    region                    = local.region
+    cpu_architecture          = var.cpu_architecture
+    cluster                   = module.ecs.cluster_name
+    services                  = module.ecs.service_names
+    task_families             = module.ecs.task_families
+    task_definition_templates = module.ecs.task_definition_arns
+    containers                = module.ecs.container_names
+    ecr                       = { api = module.ecr.repository_urls["api"] }
+    network = {
+      subnets         = var.app_subnet_ids
+      security_groups = [module.ecs.api_security_group_id]
+    }
+    jobs_log_group      = module.ecs.log_group_names["jobs"]
+    image_tag_parameter = aws_ssm_parameter.image_tag.name
+    urls = local.ingress_enabled ? {
+      api = local.api_url
+      web = local.public_web_url
+    } : {}
+  })
+}
+
+module "github_oidc" {
+  source = "../github_oidc"
+
+  name                        = local.name
+  oidc_provider_arn           = var.github_oidc_provider_arn
+  github_repository           = var.github_repository
+  github_subject_repository   = var.github_subject_repository
+  github_environment          = var.environment
+  allowed_git_refs            = var.github_allowed_git_refs
+  ecr_repository_arns         = values(module.ecr.repository_arns)
+  ecs_cluster_arn             = module.ecs.cluster_arn
+  ecs_cluster_name            = module.ecs.cluster_name
+  ecs_service_arns            = module.ecs.service_arns
+  migrate_task_family         = module.ecs.task_families["migrate"]
+  pass_role_arns              = values(module.ecs.execution_role_arns)
+  deploy_config_parameter_arn = aws_ssm_parameter.deploy_config.arn
+  image_tag_parameter_arn     = aws_ssm_parameter.image_tag.arn
+  jobs_log_group_arn          = module.ecs.log_group_arns["jobs"]
+}

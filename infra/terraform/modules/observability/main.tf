@@ -73,22 +73,23 @@ resource "aws_sns_topic_subscription" "email" {
 # Pas d'alarme sur les 5xx de tout l'ALB : il est partagé (ses chiffres comptent CINAF).
 
 locals {
-  target_alarms = var.target_group_arn_suffix == null ? {} : {
+  # Clés connues au plan (booléen), valeurs connues après l'apply (suffixe du groupe cible).
+  target_alarms = !var.target_alarms_enabled ? {} : {
     "api-5xx" = {
-      metric = "HTTPCode_Target_5XX_Count", statistic = "Sum", extended = null, period = 300,
-      periods = 1, datapoints = 1, threshold = var.target_5xx_threshold,
-      operator = "GreaterThanOrEqualToThreshold",
+      metric      = "HTTPCode_Target_5XX_Count", statistic = "Sum", extended = null, period = 300,
+      periods     = 1, datapoints = 1, threshold = var.target_5xx_threshold,
+      operator    = "GreaterThanOrEqualToThreshold",
       description = "Erreurs 5xx renvoyees par l API Eventide"
     }
     "api-latency-p95" = {
-      metric = "TargetResponseTime", statistic = null, extended = "p95", period = 300,
-      periods = 3, datapoints = 2, threshold = var.latency_p95_threshold_seconds,
-      operator = "GreaterThanThreshold",
+      metric      = "TargetResponseTime", statistic = null, extended = "p95", period = 300,
+      periods     = 3, datapoints = 2, threshold = var.latency_p95_threshold_seconds,
+      operator    = "GreaterThanThreshold",
       description = "Temps de reponse p95 de l API superieur a ${var.latency_p95_threshold_seconds} s (l assistant vocal attend le modele)"
     }
     "api-unhealthy" = {
-      metric = "UnHealthyHostCount", statistic = "Maximum", extended = null, period = 60,
-      periods = 5, datapoints = 5, threshold = 0, operator = "GreaterThanThreshold",
+      metric      = "UnHealthyHostCount", statistic = "Maximum", extended = null, period = 60,
+      periods     = 5, datapoints = 5, threshold = 0, operator = "GreaterThanThreshold",
       description = "Au moins une tache api echoue au controle de sante de l ALB (/v1/health)"
     }
   }
@@ -139,7 +140,7 @@ resource "aws_cloudwatch_metric_alarm" "ecs" {
 
 resource "aws_cloudwatch_metric_alarm" "rds" {
   for_each = var.rds_alarms_enabled ? {
-    cpu = { metric = "CPUUtilization", statistic = "Average", threshold = var.rds_cpu_threshold, operator = "GreaterThanThreshold", description = "CPU de l instance partagee superieur a ${var.rds_cpu_threshold} %" }
+    cpu         = { metric = "CPUUtilization", statistic = "Average", threshold = var.rds_cpu_threshold, operator = "GreaterThanThreshold", description = "CPU de l instance partagee superieur a ${var.rds_cpu_threshold} %" }
     connections = { metric = "DatabaseConnections", statistic = "Maximum", threshold = var.rds_connections_threshold, operator = "GreaterThanThreshold", description = "Connexions de l instance partagee (toutes applications) superieures a ${var.rds_connections_threshold}" }
   } : {}
   alarm_name          = "${var.name}-rds-${each.key}"

@@ -33,6 +33,8 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // java.time (scheduled starts, ScheduleStore.kt) on Android 7.x (API 24-25).
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -80,6 +82,7 @@ flutter {
 }
 
 dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
     // Play Integrity, classic requests (installation bootstrap, POST /installations).
     implementation("com.google.android.play:integrity:1.4.0")
     // Task API used by the integrity request (normally transitive; declared to be explicit).

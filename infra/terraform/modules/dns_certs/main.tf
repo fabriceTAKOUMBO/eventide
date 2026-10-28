@@ -28,21 +28,21 @@ resource "aws_acm_certificate" "this" {
   }
 }
 
+# Clés connues au plan (les noms demandés) ; les valeurs des enregistrements viennent du
+# certificat. Deux noms qui partagent le même enregistrement de validation : allow_overwrite.
+locals {
+  validation_options = { for dvo in aws_acm_certificate.this.domain_validation_options : dvo.domain_name => dvo }
+}
+
 resource "aws_route53_record" "validation" {
-  for_each = {
-    for dvo in aws_acm_certificate.this.domain_validation_options : dvo.domain_name => {
-      name   = dvo.resource_record_name
-      record = dvo.resource_record_value
-      type   = dvo.resource_record_type
-    }
-  }
+  for_each = toset(var.certificate_domains)
 
   allow_overwrite = true
   zone_id         = var.zone_id
-  name            = each.value.name
-  type            = each.value.type
+  name            = local.validation_options[each.key].resource_record_name
+  type            = local.validation_options[each.key].resource_record_type
   ttl             = 300
-  records         = [each.value.record]
+  records         = [local.validation_options[each.key].resource_record_value]
 }
 
 resource "aws_acm_certificate_validation" "this" {

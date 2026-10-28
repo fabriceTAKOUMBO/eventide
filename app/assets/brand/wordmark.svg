@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-12.8 -168.8 566.8 222.6">
+<!-- Font: Fraunces (SIL OFL), app/assets/fonts/Fraunces-Variable.ttf, weight 500. Text is not converted to paths. -->
+<defs>
+<style>@font-face{font-family:"Fraunces";src:url("../fonts/Fraunces-Variable.ttf") format("truetype");font-weight:100 900;}
+.wm{font-family:"Fraunces",Georgia,serif;font-weight:500;font-size:160px;letter-spacing:0}</style>
+<linearGradient id="wmg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eafcf3"/><stop offset="1" stop-color="#74c4ab"/></linearGradient>
+</defs>
+<text class="wm" x="0" y="0" fill="#f4f1ea">Eventıde</text>
+<g transform="translate(351.60 -132.80) scale(1.6800 1.6571)">
+<path d="M10 1 C10 1 2 11 2 18 a8 8 0 0 0 16 0 C18 11 10 1 10 1 Z" fill="url(#wmg)"/>
+<ellipse cx="7" cy="17" rx="1.6" ry="3.2" fill="#fff" fill-opacity=".85" transform="rotate(12 7 17)"/>
+</g>
+<title>Eventide</title>
+</svg>

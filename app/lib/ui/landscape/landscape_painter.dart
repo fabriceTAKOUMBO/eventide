@@ -333,14 +333,21 @@ class _K {
       canvas.drawCircle(o, r.range(0.05, 0.22) * rx, fill(_a(r.chance(0.5) ? hi : lo, 0.18), blur: 2));
     }
     if (moss != null) {
-      canvas.drawOval(
-        Rect.fromCenter(center: c.translate(-rx * 0.1, -ry * (1.05 - mossAmount)), width: rx * 2.4, height: ry * 1.2 * mossAmount * 2),
-        fill(_a(moss, 0.92), blur: 3),
+      // Moss grows on the lit top and fades downwards, with a soft irregular edge.
+      final top = c.dy - ry * 1.1;
+      final depth = ry * 2 * mossAmount;
+      canvas.drawRect(
+        Rect.fromLTRB(c.dx - rx * 1.2, top, c.dx + rx * 1.2, top + depth * 1.3),
+        Paint()
+          ..shader = _linear(Offset(c.dx, top), Offset(c.dx, top + depth * 1.3),
+              [_a(moss, 0.85), _a(moss, 0.55), _a(moss, 0)], const [0, 0.55, 1]),
       );
-      for (var i = 0; i < 26; i++) {
-        final o = c.translate(r.range(-rx, rx), -ry + r.range(0, ry * mossAmount * 1.4));
-        canvas.drawCircle(o, r.range(0.6, 2.2) * s, fill(_a(_mix(moss, const Color(0xFFE6F2A0), r.range(0, 0.5)), 0.5)));
+      for (var i = 0; i < 40; i++) {
+        final o = Offset(c.dx + r.range(-rx, rx), top + r.range(0, depth * 1.2));
+        canvas.drawCircle(o, r.range(0.8, 3.2) * s,
+            fill(_a(_mix(moss, r.chance(0.5) ? const Color(0xFFE6F2A0) : const Color(0xFF0E1A0A), r.range(0.1, 0.5)), 0.45)));
       }
+      canvas.drawPath(path, stroke(_a(const Color(0xFF000000), 0.25), 2, blur: 2));
     }
     canvas.restore();
   }
@@ -530,24 +537,44 @@ void _cascade(_K k) {
   k.haze(0.3, 0.12, _a(_c(0xFFBFD8CB), 0.35));
   c.drawPath(k.canopy(0.38, 0.1, 0.06, 0.12, k.seed + 2), k.fill(_a(_c(0xFF3F5E50), 0.92), blur: 4));
   // Cliff behind the fall.
-  final cliff = Path()
-    ..moveTo(0.18 * k.w, 0.62 * k.h)
-    ..cubicTo(0.2 * k.w, 0.42 * k.h, 0.3 * k.w, 0.26 * k.h, 0.42 * k.w, 0.22 * k.h)
-    ..lineTo(0.6 * k.w, 0.21 * k.h)
-    ..cubicTo(0.72 * k.w, 0.25 * k.h, 0.82 * k.w, 0.42 * k.h, 0.84 * k.w, 0.62 * k.h)
+  // Rock walls on both sides of the fall, rising out of the mist, with soft edges.
+  final cliff = Path()..moveTo(0.05 * k.w, 0.66 * k.h);
+  for (var y = 0.66; y >= -0.02; y -= 0.01) {
+    final n = _fbm(y * 9, k.seed + 31, 4);
+    cliff.lineTo((0.1 + (0.66 - y) * 0.26 + (n - 0.5) * 0.1) * k.w, y * k.h);
+  }
+  for (var y = -0.02; y <= 0.66; y += 0.01) {
+    final n = _fbm(y * 9, k.seed + 37, 4);
+    cliff.lineTo((0.9 - (0.66 - y) * 0.26 + (n - 0.5) * 0.1) * k.w, y * k.h);
+  }
+  cliff
+    ..lineTo(0.95 * k.w, 0.66 * k.h)
     ..close();
   c.drawPath(
     cliff,
     Paint()
-      ..shader = _linear(k.p(0.3, 0.22), k.p(0.7, 0.62), [_c(0xFF2E3A33), _c(0xFF1A231F), _c(0xFF0E1512)]),
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3 * k.s)
+      ..shader = _linear(k.p(0.3, 0.12), k.p(0.6, 0.66), [_c(0xFF34433A), _c(0xFF1E2923), _c(0xFF111A15)]),
   );
   final r = _Rng(k.seed + 5);
-  for (var i = 0; i < 14; i++) {
-    k.rock(k.p(r.range(0.22, 0.8), r.range(0.26, 0.6)), r.range(0.04, 0.09) * k.w, r.range(0.012, 0.03) * k.h,
-        _c(0xFF27322C), moss: _c(0xFF4F7A3E), mossAmount: 0.4, sd: 40 + i, light: 0.6);
+  c.save();
+  c.clipPath(cliff);
+  // Ledges and cracks.
+  for (var i = 0; i < 70; i++) {
+    final y = r.range(0.14, 0.66);
+    final x = r.range(0.15, 0.85);
+    final len = r.range(0.02, 0.08);
+    c.drawLine(k.p(x, y), k.p(x + len, y + r.range(-0.006, 0.01)),
+        k.stroke(_a(r.chance(0.6) ? _c(0xFF070C09) : _c(0xFF6F8A6A), r.range(0.15, 0.45)), r.range(1, 3), blur: 0.8));
   }
+  for (var i = 0; i < 90; i++) {
+    final o = k.p(r.range(0.12, 0.88), r.range(0.14, 0.66));
+    c.drawCircle(o, r.range(2, 7) * k.s, k.fill(_a(_c(0xFF4C7A3A), r.range(0.15, 0.45)), blur: 2));
+  }
+  c.restore();
+  k.haze(0.2, 0.12, _a(_c(0xFFCFE3D8), 0.25));
   // Waterfall: soft core then streaks.
-  final fallTop = 0.21 * k.h, fallBottom = 0.665 * k.h;
+  final fallTop = 0.15 * k.h, fallBottom = 0.665 * k.h;
   final core = Path()
     ..moveTo(0.44 * k.w, fallTop)
     ..lineTo(0.565 * k.w, fallTop)
@@ -609,8 +636,7 @@ void _cascade(_K k) {
       ..close(),
     k.fill(_c(0xFF0B1410)),
   );
-  c.drawPath(k.canopy(0.05, 0.03, 0.06, 0.12, k.seed + 9, bottom: 0)..fillType = PathFillType.nonZero,
-      k.fill(_a(_c(0xFF0F1D16), 0.85), blur: 2));
+  c.drawPath(k.canopy(0.04, 0.03, 0.05, 0.1, k.seed + 9, bottom: 0), k.fill(_a(_c(0xFF0F1D16), 0.8), blur: 10));
   k.haze(0.5, 0.25, _a(_c(0xFFCFE3D8), 0.08));
 }
 
@@ -735,15 +761,26 @@ void _berge(_K k) {
     c.drawPath(
       bank,
       Paint()
-        ..shader = _linear(b.topCenter, b.bottomCenter, [_c(0xFF8DB052), _c(0xFF4C7A2E), _c(0xFF1D3517)]),
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 2.5 * k.s)
+        ..shader = _linear(b.topCenter, b.bottomCenter, [_c(0xFF6E8F44), _c(0xFF3C6326), _c(0xFF15270F)]),
     );
     c.save();
     c.clipPath(bank);
-    for (var i = 0; i < 260; i++) {
+    // Moss cushions: many overlapping soft mounds with light tops.
+    for (var i = 0; i < 70; i++) {
       final o = Offset(b.left + r.next() * b.width, b.top + r.next() * b.height);
-      c.drawCircle(o, r.range(0.8, 3.2) * k.s, k.fill(_a(r.chance(0.5) ? _c(0xFFC9E07A) : _c(0xFF1F3A14), r.range(0.15, 0.5))));
+      final rad = r.range(6, 22) * k.s;
+      c.drawCircle(o, rad, Paint()
+        ..shader = ui.Gradient.radial(o.translate(-rad * 0.3, -rad * 0.45), rad * 1.3,
+            [_a(_c(0xFFA6C76A), 0.55), _a(_c(0xFF3E6A27), 0.35), _a(_c(0xFF14260D), 0)], const [0, 0.5, 1]));
+    }
+    for (var i = 0; i < 320; i++) {
+      final o = Offset(b.left + r.next() * b.width, b.top + r.next() * b.height);
+      c.drawCircle(o, r.range(0.6, 2.2) * k.s, k.fill(_a(r.chance(0.5) ? _c(0xFFC9E07A) : _c(0xFF0F1F0A), r.range(0.15, 0.45))));
     }
     c.restore();
+    // Shade where the bank meets the water.
+    c.drawPath(bank, k.stroke(_a(_c(0xFF050B05), 0.5), 6, blur: 5));
   }
   for (var i = 0; i < 6; i++) {
     final onLeft = i < 3;
@@ -765,8 +802,8 @@ void _torrent(_K k) {
   for (var i = 0; i < 60; i++) {
     final x = r.next();
     final top = 0.3 - _fbm(x * 2.2, k.seed + 1, 5) * 0.14;
-    c.drawLine(k.p(x, top + 0.003), k.p(x + r.range(-0.02, 0.02), top + r.range(0.01, 0.05)),
-        k.stroke(_a(_c(0xFFF1F5F8), r.range(0.3, 0.8)), r.range(1, 3)));
+    c.drawLine(k.p(x, top + 0.003), k.p(x + r.range(-0.02, 0.02), top + r.range(0.008, 0.035)),
+        k.stroke(_a(_c(0xFFF1F5F8), r.range(0.25, 0.6)), r.range(1, 3), blur: 1.2));
   }
   c.restore();
   k.haze(0.36, 0.08, _a(_c(0xFFDCE4E6), 0.55));
@@ -836,8 +873,8 @@ void _pierres(_K k) {
   final r = _Rng(k.seed + 1);
   const palette = [0xFF7A6F5B, 0xFF5B5547, 0xFF8E8269, 0xFF46433A, 0xFF6C665A, 0xFF9C8F74, 0xFF55524A];
   // Riverbed pebbles, larger towards the viewer.
-  for (var i = 0; i < 120; i++) {
-    final y = r.range(0.0, 1.05);
+  for (var i = 0; i < 260; i++) {
+    final y = r.range(-0.02, 1.05);
     final size = (0.025 + y * 0.075) * r.range(0.6, 1.3);
     final x = r.range(-0.05, 1.05);
     k.rock(k.p(x, y), size * k.w, size * k.w * r.range(0.55, 0.8), _c(palette[r.next() * palette.length ~/ 1]),
@@ -848,7 +885,7 @@ void _pierres(_K k) {
     k.full,
     Paint()
       ..shader = _linear(k.p(0, 0), k.p(0, 1),
-          [_a(_c(0xFF2E5A55), 0.75), _a(_c(0xFF2C5550), 0.45), _a(_c(0xFF1F403A), 0.3)]),
+          [_a(_c(0xFF2E5A55), 0.6), _a(_c(0xFF2C5550), 0.32), _a(_c(0xFF1F403A), 0.2)]),
   );
   for (var i = 0; i < 220; i++) {
     final o = k.p(r.next(), r.next());
@@ -899,11 +936,15 @@ void _lisiere(_K k) {
   for (var i = 0; i < 26; i++) {
     crown.addOval(Rect.fromCircle(center: k.p(r.range(-0.12, 0.34), r.range(0.1, 0.34)), radius: r.range(0.06, 0.12) * k.w));
   }
-  c.drawPath(crown, k.fill(_c(0xFF1E3220)));
-  for (var i = 0; i < 40; i++) {
-    c.drawCircle(k.p(r.range(-0.05, 0.32), r.range(0.1, 0.3)), r.range(4, 12) * k.s,
-        k.fill(_a(_c(0xFF6E8F4E), 0.35), blur: 3));
+  c.drawPath(crown, k.fill(_c(0xFF1E3220), blur: 2));
+  c.save();
+  c.clipPath(crown);
+  for (var i = 0; i < 260; i++) {
+    final o = k.p(r.range(-0.12, 0.36), r.range(0.04, 0.36));
+    c.drawCircle(o, r.range(1.5, 5) * k.s,
+        k.fill(_a(r.chance(0.55) ? _c(0xFF6E8F4E) : _c(0xFF0C170C), r.range(0.2, 0.55)), blur: 0.8));
   }
+  c.restore();
   // Meadow.
   final meadow = k.ridge(0.5, 0.01, 1.5, k.seed + 4);
   c.drawPath(
@@ -1174,8 +1215,8 @@ void _etoiles(_K k) {
     ..strokeCap = StrokeCap.round);
   for (var i = 0; i < 12; i++) {
     final o = Offset((r.next() - 0.5) * band.width * 0.9, (r.next() - 0.5) * band.height * 0.25);
-    k.ellipseGlow(Rect.fromCenter(center: o, width: r.range(0.1, 0.3) * k.h, height: r.range(0.01, 0.03) * k.h),
-        _a(_c(0xFF050814), 0.55));
+    k.ellipseGlow(Rect.fromCenter(center: o, width: r.range(0.15, 0.4) * k.h, height: r.range(0.04, 0.08) * k.h),
+        _a(_c(0xFF050814), 0.45));
   }
   c.restore();
   k.stars(Rect.fromLTWH(0, 0, k.w, k.h * 0.8), 700, maxR: 1.6);
@@ -1224,8 +1265,8 @@ void _aurore(_K k) {
   for (var i = 0; i < 80; i++) {
     final x = r.next();
     final top = 0.58 - _fbm(x * 2.4, k.seed + 2, 5) * 0.12;
-    c.drawLine(k.p(x, top + 0.004), k.p(x + r.range(-0.03, 0.03), top + r.range(0.01, 0.05)),
-        k.stroke(_a(_c(0xFFBFE6E0), r.range(0.1, 0.35)), r.range(1, 3)));
+    c.drawLine(k.p(x, top + 0.004), k.p(x + r.range(-0.02, 0.02), top + r.range(0.006, 0.02)),
+        k.stroke(_a(_c(0xFFBFE6E0), r.range(0.06, 0.2)), r.range(1, 3), blur: 1.5));
   }
   c.restore();
   // Lake with the aurora reflected.

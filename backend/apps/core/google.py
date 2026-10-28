@@ -38,10 +38,14 @@ def authorized_session() -> requests.Session:
             from google.auth.transport.requests import AuthorizedSession
             from google.oauth2 import service_account
 
-            info = json.loads(raw)
-            credentials = service_account.Credentials.from_service_account_info(
-                info, scopes=list(SCOPES)
-            )
+            try:
+                info = json.loads(raw)
+                credentials = service_account.Credentials.from_service_account_info(
+                    info, scopes=list(SCOPES)
+                )
+            except (ValueError, KeyError, TypeError) as exc:
+                # Placeholder « A_REMPLACER » or a malformed key: the feature answers 503.
+                raise GoogleNotConfigured("invalid GOOGLE_PLAY_SERVICE_ACCOUNT_JSON") from exc
             _session = AuthorizedSession(credentials)
     return _session
 

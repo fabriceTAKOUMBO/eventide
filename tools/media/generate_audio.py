@@ -28,9 +28,11 @@ circular signal. Each item is peak-normalised to -1 dBFS, then gained to
 -23 LUFS; if the 4x-oversampled true peak exceeds -1 dBTP a gentle circular
 look-ahead limiter is applied.
 
-Encoding: Ogg Opus through ffmpeg/libopus, 64 kbit/s stereo, -application audio.
-The script then decodes each file back, concatenates two copies and measures the
-discontinuity at the join against the rest of the file.
+Encoding: Ogg Opus through ffmpeg/libopus, 64 kbit/s stereo, -application audio,
+20 ms frames, then re-muxed so that the file decodes to exactly N samples with a
+seamless join (see encode_opus). The script then decodes each file back,
+concatenates two copies and measures the discontinuity at the join against the
+rest of the file.
 
 Usage (from the repository root):
   python3 tools/media/generate_audio.py               # everything

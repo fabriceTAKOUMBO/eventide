@@ -19,7 +19,7 @@ typedef LandscapeImageResolver = ImageProvider? Function(String landscapeId);
 abstract final class LandscapeImages {
   static LandscapeImageResolver? resolver;
   static final Set<String> _bundled = {};
-  static String? brandLogoAsset;
+  static final ValueNotifier<String?> brandLogo = ValueNotifier<String?>(null);
 
   static ImageProvider? providerFor(String landscapeId) {
     final custom = resolver?.call(landscapeId);
@@ -39,7 +39,7 @@ abstract final class LandscapeImages {
       }
       for (final candidate in const ['assets/brand/logo.png', 'assets/brand/logo_512.png']) {
         if (assets.contains(candidate)) {
-          brandLogoAsset = candidate;
+          brandLogo.value = candidate;
           break;
         }
       }

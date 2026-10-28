@@ -23,6 +23,8 @@ const _styles = [
 ];
 
 void main() {
+  setUpAll(loadAppFonts);
+
   testWidgets('every landscape style paints without error, at full size and as thumbnail', (tester) async {
     usePhoneView(tester);
     for (final style in _styles) {
@@ -60,7 +62,6 @@ void main() {
   });
 
   testWidgets('renders a contact sheet of all landscapes', (tester) async {
-    await loadAppFonts();
     usePhoneView(tester);
     tester.view.physicalSize = const Size(4 * 200 * 3, 3 * 433 * 3);
     await tester.pumpWidget(

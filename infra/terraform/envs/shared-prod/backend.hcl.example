@@ -1,0 +1,5 @@
+# Copier en backend.hcl (ignoré par git) puis : terraform init -backend-config=backend.hcl
+# Valeurs données par la sortie "backend_hcl" de la pile bootstrap appliquée dans le compte
+# principal, région us-east-1 (docs/runbooks/premier-deploiement.md, étape 2).
+bucket     = "eventide-tfstate-466494951409"
+kms_key_id = "arn:aws:kms:us-east-1:466494951409:key/00000000-0000-0000-0000-000000000000"

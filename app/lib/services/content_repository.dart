@@ -76,7 +76,10 @@ class ContentRepository {
   }
 
   Future<File> _download(String key) {
-    return _downloads[key] ??= _doDownload(key).whenComplete(() => _downloads.remove(key));
+    // The callback must not return the removed future: whenComplete would wait for itself.
+    return _downloads[key] ??= _doDownload(key).whenComplete(() {
+      _downloads.remove(key);
+    });
   }
 
   Future<Uri> _urlFor(String key) async {

@@ -19,6 +19,12 @@ variable "alb_arn_suffix" {
   type        = string
 }
 
+variable "target_alarms_enabled" {
+  description = "Alarmes de NOTRE groupe cible (true quand l'entrée publique existe, c'est-à-dire avec un domaine). Booléen connu au plan."
+  type        = bool
+  default     = false
+}
+
 variable "target_group_arn_suffix" {
   description = "Suffixe d'ARN de NOTRE groupe cible (null sans domaine : pas d'alarme de groupe cible)."
   type        = string

@@ -1,0 +1,71 @@
+# Hébergement mutualisé d'Eventide (compte principal 466494951409, us-east-1) — copier en
+# terraform.tfvars (ignoré par git). Aucun secret ici : les secrets sont générés par Terraform
+# ou déposés dans Secrets Manager par le product owner.
+#
+# Identifiants de l'infrastructure partagée de CINAF : ceux relevés par Candidature Express le
+# 9 octobre 2026 (docs/infra/hebergement-mutualise.md de Candidature Express), À RECONFIRMER
+# avant le premier plan (lecture seule) ; le plan les vérifie (préconditions) et échoue s'ils ne
+# correspondent plus.
+
+aws_account_id = "466494951409"
+region         = "us-east-1"
+
+# Domaine : vide tant qu'il n'est pas acheté (vérification de la marque « Eventide » en cours).
+# Vide = pas d'entrée publique : ni certificat, ni règle d'écouteur, ni DNS, ni service api.
+domain_name = "" # ex. "eventide.app" (zone Route 53 publique créée à l'achat, cherchée par son nom)
+manage_caa  = true
+
+# Réseau partagé de CINAF : VPC 10.20.0.0/16, NAT unique (us-east-1a).
+vpc_id = "vpc-0fbfe87b34e2b3903"
+app_subnet_ids = [
+  "subnet-03bb1c6197c29a369", # private-app-1, us-east-1a
+  "subnet-0fcd9f10a65ed1a16", # private-app-2, us-east-1b
+]
+
+# ALB public partagé : règles existantes 100 (CINAF), 200/210 (JobMinutes), 300-329
+# (Candidature Express). Celles d'Eventide : 400-409 (prod), 420-429 (préproduction).
+alb_name               = "cinaf-streaming-prod-alb"
+listener_priority_base = 400
+
+# Instance PostgreSQL partagée (16.x, mono-AZ) et son groupe de sécurité.
+rds_instance_identifier = "cinaf-streaming-prod-postgres"
+rds_security_group_id   = "sg-070b4372d5a95ad2d"
+
+preprod_enabled = false
+
+kms_restrict_decrypt             = true
+kms_admin_principal_arns         = []
+kms_extra_decrypt_principal_arns = []
+
+app_subnet_min_free_ips = 30
+
+# Sujet OIDC immuable du dépôt : `gh api repos/fabriceTAKOUMBO/eventide/actions/oidc/customization/sub`
+# donne sub_claim_prefix « repo:fabriceTAKOUMBO@<id>/eventide@<id> » ; reporter la partie après « repo: ».
+github_repository         = "fabriceTAKOUMBO/eventide"
+github_subject_repository = "fabriceTAKOUMBO@75751595/eventide@0000000000" # placeholder : id du dépôt à relever
+
+# Application (valeurs publiques).
+play_package_name          = ""   # ex. "app.eventide" (Play Console)
+android_cert_fingerprints  = []   # ["AB:CD:…"] empreinte SHA-256 de Play App Signing
+google_oauth_client_ids    = []   # ["<id>.apps.googleusercontent.com"]
+rtdn_service_account_email = ""   # compte de service de l'abonnement Pub/Sub push
+legal_publisher_name       = ""
+legal_contact_email        = ""
+
+voice = {
+  router               = "gemini"
+  model                = "gemini-2.5-flash-lite"
+  monthly_cap_eur      = "2.00"
+  usd_eur_rate         = "0.93"
+  global_daily_cap_eur = "20.00"
+}
+
+content_custom_domain = false # true : cdn.<domaine> (exige domain_name)
+
+alert_emails  = ["alertes@example.com"]
+budget_emails = ["alertes@example.com"]
+
+cost_guardrails_enabled = true
+monthly_budget_usd      = 60
+content_budget_usd      = 30
+anomaly_threshold_usd   = 10
