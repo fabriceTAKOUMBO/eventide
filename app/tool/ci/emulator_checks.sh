@@ -27,8 +27,10 @@ summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
 log() { echo "[emulator-checks $(date -u +%H:%M:%S)] $*"; }
 # Every adb call is bounded: an emulator that dies must fail the job, not leave
 # `adb` waiting for the device until the workflow timeout (seen on 28 Oct 2026: 60 min hang).
-adb() { timeout "${ADB_TIMEOUT:-120}" command adb "$@"; }
-device_alive() { [[ "$(timeout 20 command adb get-state 2>/dev/null | tr -d '\r')" == "device" ]]; }
+# (`timeout` runs a program: it needs adb's path, not the `command` shell builtin.)
+ADB_BIN="$(command -v adb || echo adb)"
+adb() { timeout "${ADB_TIMEOUT:-120}" "$ADB_BIN" "$@"; }
+device_alive() { [[ "$(timeout 20 "$ADB_BIN" get-state 2>/dev/null | tr -d '\r')" == "device" ]]; }
 # Host-side clues when the emulator disappears (memory pressure, emulator crash).
 host_diagnostics() {
   log "host diagnostics ($1)"
