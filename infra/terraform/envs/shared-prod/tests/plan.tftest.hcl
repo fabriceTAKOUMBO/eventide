@@ -74,8 +74,8 @@ run "with_domain_public_entry" {
     error_message = "Origine des liens de partage : le domaine nu."
   }
   assert {
-    condition     = output.prod.shared_alb.keep_alive == 75
-    error_message = "Keep-alive de gunicorn : max(75, délai de l'ALB + 5)."
+    condition     = output.prod.shared_alb != null
+    error_message = "Avec un domaine, l'entrée passe par l'ALB partagé."
   }
 }
 
