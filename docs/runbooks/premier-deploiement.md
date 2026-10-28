@@ -6,7 +6,7 @@
 | **Qui** | Le product owner (administrateur du compte AWS, du dépôt GitHub, de la Play Console et du projet Google Cloud). |
 | **Durée** | Phase 1 (sans domaine) : 2 à 3 heures. Phase 2 (domaine) : 1 heure, plus la propagation DNS et la validation du certificat. |
 | **Résultat** | Phase 1 : base `eventide` et rôles sur l'instance partagée, image dans ECR, migrations passées, contenu déposé, sauvegarde quotidienne et restauration testée, alertes et budgets actifs, **sans entrée publique**. Phase 2 : `https://api.<domaine>` et `https://<domaine>` servis par ECS Fargate, notifications Google Play reçues. |
-| **Règle d'or** | **Aucun `apply` sans relecture du plan par le product owner** : seulement des ajouts, **0 modification et 0 suppression**. Un plan qui modifie ou supprime une ressource de CINAF, JobMinutes ou Candidature Express est une anomalie : ne pas appliquer, signaler. |
+| **Règle d'or** | **Aucun `apply` sans (a) le contrôle `check-plan-additions-only.sh` vert sur le plan et (b) la relecture du plan par le product owner** ([encadré](#avant-chaque-apply--contrôle-et-relecture-obligatoires)) : aucune ressource de CINAF, JobMinutes ou Candidature Express modifiée, remplacée, supprimée ni importée ; seuls nos ajouts permis. Un plan qui touche une de leurs ressources est une anomalie : ne pas appliquer, signaler. |
 | **Exécution** | **Pas encore exécuté** (28 octobre 2026). Les identifiants de l'infrastructure partagée viennent de Candidature Express (relevés le 9 octobre 2026) : à reconfirmer (§ 4). |
 
 ## Sommaire
@@ -30,6 +30,23 @@
 17. [Tout retirer](#17-tout-retirer)
 
 ---
+
+## Avant chaque `apply` : contrôle et relecture obligatoires
+
+À faire pour **chaque** `apply` de ce runbook (bootstrap, phases 1 et 2, sujet OIDC, préproduction, retrait), sans exception ([règle absolue d'`AGENTS.md`](../../AGENTS.md), [ADR § 11](../infra/hebergement-mutualise.md#11-non-influence-sur-cinaf-jobminutes-et-candidature-express)) :
+
+```bash
+terraform plan -out=tfplan                     # retrait : terraform plan -destroy -out=tfplan
+terraform show -json tfplan > tfplan.json
+bash "$(git rev-parse --show-toplevel)/.github/scripts/check-plan-additions-only.sh" tfplan.json
+#   retrait : … check-plan-additions-only.sh --destroy tfplan.json
+```
+
+1. **(a) Le contrôle doit finir par `OK`** (code de sortie 0). Il refuse : toute action autre qu'un ajout sur une ressource qui n'est pas à Eventide ; tout type de ressource partagée (ALB, écouteur, RDS, VPC, sous-réseaux, NAT, routes, points de terminaison VPC, DNS privé, WAF…) ou de réglage du compte ; tout objet posé sur une ressource partagée hors des quatre points de contact de l'ADR (règles d'écouteur 400-409 / 420-429 limitées à nos noms d'hôte, certificat, règle 5432 depuis notre seul groupe) ; tout import d'un tel objet ; une étiquette `Project` autre que `eventide`, un nom sans nos préfixes, un filtre de métrique sur un groupe de journaux qui n'est pas à nous, une action d'alarme autre que SNS. `ÉCHEC` : **ne pas appliquer**, garder la sortie et la transmettre.
+2. **(b) Le product owner relit** la sortie du contrôle (points de contact créés, ressources d'Eventide modifiées ou remplacées) et le plan lui-même, puis donne son accord pour **cet** `apply`. Le contrôle ne remplace pas la relecture.
+3. `terraform apply tfplan`, puis `rm tfplan tfplan.json`.
+
+> ⚠ `tfplan` et `tfplan.json` contiennent des secrets en clair (mots de passe des rôles, clé Django, clé privée de signature : `terraform show -json` ne les masque pas). Ne jamais les partager ni les déposer dans le dépôt ; les supprimer après l'`apply`.
 
 ## 1. Prérequis
 
@@ -62,10 +79,10 @@ terraform init
 terraform plan -out=tfplan
 ```
 
-Relecture par le product owner : uniquement des **ajouts** (bucket et ses réglages, clé KMS et son alias), **aucun avertissement** `check "terraform_session_can_use_state"` (sinon la session ne pourrait pas utiliser l'état : ne pas appliquer, se reconnecter avec AdministratorAccess). Puis, avec son accord :
+Contrôle obligatoire ([encadré](#avant-chaque-apply--contrôle-et-relecture-obligatoires)) : `terraform show -json tfplan > tfplan.json && bash ../../../.github/scripts/check-plan-additions-only.sh tfplan.json` → `OK`. Relecture par le product owner : uniquement des **ajouts** (bucket et ses réglages, clé KMS et son alias), **aucun avertissement** `check "terraform_session_can_use_state"` (sinon la session ne pourrait pas utiliser l'état : ne pas appliquer, se reconnecter avec AdministratorAccess). Puis, avec son accord :
 
 ```bash
-terraform apply tfplan && rm tfplan
+terraform apply tfplan && rm tfplan tfplan.json
 terraform output -raw backend_hcl > ../envs/shared-prod/backend.hcl
 ```
 
@@ -81,7 +98,7 @@ terraform providers lock -platform=linux_amd64 -platform=linux_arm64 -platform=d
 
 ## 3. Étiquette de coûts
 
-1. Console **Billing and Cost Management → Cost allocation tags** : la clé **`Project`** est déjà active (utilisée par les autres produits) ; vérifier, et activer aussi `Environment`.
+1. Console **Billing and Cost Management → Cost allocation tags** : la clé **`Project`** est déjà active (utilisée par les autres produits) ; **vérifier seulement**. Activer une autre clé (par exemple `Environment`) est un réglage de tout le compte (règle 3 d'`AGENTS.md`) : ne le faire que sur décision explicite du product owner, après accord des autres produits. Sans elle, la production et la préproduction se distinguent par leurs budgets (`ev-prod-content-mensuel`) et par les noms de ressources.
 2. Le budget `eventide-mensuel` (`monthly_budget_usd`, 60 USD par défaut : alertes à 50, 80 et 100 % du réel et 100 % de la prévision), le budget du contenu `ev-prod-content-mensuel` (`content_budget_usd`, 30 USD) et le moniteur d'anomalies (`anomaly_threshold_usd`, 10 USD) sont créés par Terraform et filtrés sur `Project = eventide`. Ils ne voient rien tant que les premières ressources ne sont pas étiquetées : vérifier une semaine après.
 3. Si la création du moniteur d'anomalies est refusée, mettre `cost_guardrails_enabled = false`, appliquer, puis le repasser à `true`.
 
@@ -119,19 +136,37 @@ aws cloudwatch get-metric-statistics --namespace AWS/RDS --metric-name DatabaseC
   --start-time "$(date -u -d '-14 days' +%FT%TZ)" --end-time "$(date -u +%FT%TZ)" \
   --period 86400 --statistics Maximum --query 'sort_by(Datapoints,&Timestamp)[].Maximum' --output text
 #   → marge : pic observé + 14 (Eventide) bien en dessous de max_connections de l'instance
+
+# Quota Fargate commun à tout le compte (pic d'Eventide : 1,75 vCPU en production, plafonné à 2
+# par Terraform ; préproduction en Spot : 1,25) : valeur du quota et marge restante.
+aws service-quotas get-service-quota --service-code fargate --quota-code L-3032A538 \
+  --query 'Quota.[QuotaName,Value]' --output text     # Fargate On-Demand vCPU resource count
+aws service-quotas get-service-quota --service-code fargate --quota-code L-36FBB829 \
+  --query 'Quota.[QuotaName,Value]' --output text     # Fargate Spot vCPU resource count
+# Les images de nos tâches passent-elles par un point de terminaison S3 de CINAF (gratuit) ou par
+# la NAT (0,045 USD/Go facturés sur la NAT de CINAF) ? Métadonnées seulement.
+aws ec2 describe-vpc-endpoints --filters Name=vpc-id,Values=vpc-0fbfe87b34e2b3903 \
+  --query 'VpcEndpoints[].[ServiceName,VpcEndpointType]' --output table
 ```
+
+(Si un code de quota ne répond pas, chercher « Fargate » dans la console Service Quotas : lecture seule.)
 
 À voir **avec l'équipe CINAF** (aucune modification de notre part) :
 
 - [ ] Le Terraform de CINAF décrit-il le groupe de sécurité de la base et l'écouteur 443 avec des règles **autonomes** ? Sinon son prochain `apply` supprimerait nos ajouts (et ceux des autres invités).
 - [ ] Mot de passe maître disponible pour l'étape 7 : seul le product owner le lit (secret de CINAF), pour le copier dans le secret temporaire ; ni Terraform, ni nos tâches, ni les agents ne le lisent.
 - [ ] Marge de connexions confirmée (budget d'Eventide : 14).
+- [ ] Coûts portés par les ressources de CINAF signalés à l'équipe CINAF : données traitées par la NAT (images de nos tâches : ≈ 0,5 à 4 USD/mois selon la présence d'un point de terminaison S3) et unités de capacité de l'ALB (< 1 USD/mois au lancement) ([ADR § 11](../infra/hebergement-mutualise.md#11-non-influence-sur-cinaf-jobminutes-et-candidature-express)).
 
 ## 5. Phase 1 : plan, relecture, apply (sans domaine)
 
 ```bash
 terraform plan -out=tfplan
+terraform show -json tfplan > tfplan.json
+bash ../../../.github/scripts/check-plan-additions-only.sh tfplan.json
 ```
+
+Contrôle obligatoire : la sortie finit par `OK` et la section « Ajouts sur des ressources de CINAF » ne contient **qu'une** ligne, `module.prod.aws_vpc_security_group_ingress_rule.shared_postgres : create (tcp 5432 depuis notre groupe)`. Sinon : ne pas appliquer.
 
 Relecture obligatoire par le product owner :
 
@@ -160,7 +195,7 @@ Relecture obligatoire par le product owner :
 Avec l'accord du product owner :
 
 ```bash
-terraform apply tfplan && rm tfplan
+terraform apply tfplan && rm tfplan tfplan.json
 terraform output -json prod > /tmp/ev-prod.json   # aucun secret ; à supprimer à la fin
 ```
 
@@ -202,8 +237,11 @@ SG=$(aws ec2 describe-security-groups --filters Name=group-name,Values=ev-prod-a
 
 # 1. Secret temporaire : mot de passe saisi sans écho, passé par l'entrée standard.
 read -rs -p "Mot de passe maître de cinaf-streaming-prod-postgres : " PGMASTER; echo
+# Chiffré par NOTRE clé (alias/ev-prod) : elle refuse le déchiffrement aux rôles des autres
+# produits du compte ; la clé par défaut aws/secretsmanager le laisserait lisible par tout rôle
+# du compte ayant secretsmanager:GetSecretValue pendant sa courte vie.
 printf '%s' "$PGMASTER" | aws secretsmanager create-secret --name "$SECRET_NAME" \
-  --description "TEMPORAIRE - amorcage Eventide - a supprimer" \
+  --description "TEMPORAIRE - amorcage Eventide - a supprimer" --kms-key-id alias/ev-prod \
   --secret-string file:///dev/stdin --query Name --output text
 unset PGMASTER
 
@@ -223,10 +261,13 @@ aws secretsmanager delete-secret --secret-id "$SECRET_NAME" --force-delete-witho
 aws logs tail /ecs/ev-prod/jobs --log-stream-name-prefix db-bootstrap --since 30m --format short
 ```
 
-Attendu : conteneurs `init`, `scram` et `bootstrap` en code `0` ; dans les journaux `db_scram_verifiers_ready`, `db_bootstrap_started` puis `db_bootstrap_done`, les trois rôles avec `connexion = t` et `superutilisateur = f`, les limites `10 / 2 / 2`, la base `eventide` avec la limite `14` et des droits sans entrée pour PUBLIC.
+Attendu : conteneurs `init`, `scram` et `bootstrap` en code `0` ; dans les journaux `db_scram_verifiers_ready`, `db_bootstrap_started` puis `db_bootstrap_done`, les trois rôles avec `connexion = t` et `superutilisateur = f`, les limites `10 / 2 / 2`, leurs réglages (`statement_timeout`, `lock_timeout`, `idle_in_transaction_session_timeout`, `work_mem`, `maintenance_work_mem`, `idle_session_timeout`, `max_parallel_workers_per_gather=0`, `max_parallel_maintenance_workers=0`, et `temp_file_limit` si le compte maître a le droit de le poser), la base `eventide` avec la limite `14` et des droits sans entrée pour PUBLIC.
+
+- `db_bootstrap_temp_file_limit_skipped` : le compte maître de l'instance n'a pas le droit `SET` sur `temp_file_limit` (paramètre réservé au superutilisateur) ; tous les autres plafonds sont posés. Rien à faire de notre côté (ne pas demander de droit supplémentaire sans décision du product owner) ; noter le constat dans le journal.
 
 - En cas d'échec après l'appartenance temporaire du compte maître à `ev_migrator`, la tâche la retire elle-même (`db_bootstrap_cleanup_done`). Si le journal montre `db_bootstrap_cleanup_failed`, lancer la commande `REVOKE` indiquée, connecté avec le compte maître, avant toute autre action.
 - `role existant sans le marqueur eventide` : un rôle `ev_*` du même nom existe et n'est pas à nous ; rien n'a été modifié. Ne pas le « récupérer » : changer `db_roles` ou voir avec CINAF.
+- `base existante dont le proprietaire n est pas notre role de migration` : une base `eventide*` existe et n'est pas à nous ; rien n'a été modifié. Même conduite.
 - Le script est idempotent : le relancer de la même façon après une rotation des mots de passe des rôles.
 - **Variante console** pour le secret temporaire : Secrets Manager, *Stocker un nouveau secret*, *Autre type de secret*, *Texte brut* : le mot de passe seul ; nom `eventide/prod/bootstrap/rds-master-password` ; puis lancer la tâche et supprimer le secret par la commande du point 3 (la console impose 7 jours d'attente).
 
@@ -240,7 +281,7 @@ Attendu : conteneurs `init`, `scram` et `bootstrap` en code `0` ; dans les journ
    gh api repos/fabriceTAKOUMBO/eventide/actions/oidc/customization/sub
    ```
 
-   Garder le format **immuable**. Le préfixe `sub_claim_prefix` vaut `repo:fabriceTAKOUMBO@<id du propriétaire>/eventide@<id du dépôt>` : reporter la partie après `repo:` dans `github_subject_repository` (`terraform.tfvars`), puis plan (seule la politique d'approbation du rôle `ev-prod-github-deploy` change), relecture et `apply`. Tant que la valeur provisoire de l'exemple est en place, GitHub ne peut pas prendre le rôle (`Not authorized to perform sts:AssumeRoleWithWebIdentity`).
+   Garder le format **immuable**. Le préfixe `sub_claim_prefix` vaut `repo:fabriceTAKOUMBO@<id du propriétaire>/eventide@<id du dépôt>` : reporter la partie après `repo:` dans `github_subject_repository` (`terraform.tfvars`), puis plan (seule la politique d'approbation du rôle `ev-prod-github-deploy` change), contrôle `check-plan-additions-only.sh` (une ligne « à relire » : `update` du rôle), relecture et `apply`. Tant que la valeur provisoire de l'exemple est en place, GitHub ne peut pas prendre le rôle (`Not authorized to perform sts:AssumeRoleWithWebIdentity`).
 2. **Environnement GitHub `prod`** (branche `main` seulement, relecteur si le plan GitHub le permet), puis ses variables :
 
    ```bash
@@ -259,7 +300,7 @@ Attendu : conteneurs `init`, `scram` et `bootstrap` en code `0` ; dans les journ
 
 GitHub → *Actions* → **Deploy** → *Run workflow* : branche `main`, environnement `prod`, `image_tag` vide, migrations cochées.
 
-Le workflow lit sa configuration dans SSM (`/eventide/prod/deploy/config`), construit l'image `linux/arm64`, la pousse dans `ev-prod-api`, vérifie le scan ECR (toute vulnérabilité `CRITICAL` absente de `.github/accepted-cves.txt` bloque la production), enregistre les révisions `api`, `migrate` et `jobs`, lance les migrations en tâche ponctuelle (rôle `ev_migrator`), met à jour le service `api` **s'il existe** (phase 2 seulement ; en phase 1 un avis « Service api absent » est normal), enregistre le tag dans SSM et lance les tests de fumée (phase 2).
+Le workflow lit sa configuration dans SSM (`/eventide/prod/deploy/config`), construit l'image `linux/arm64`, la pousse dans `ev-prod-api`, vérifie le scan ECR (toute vulnérabilité `CRITICAL` absente de `.github/accepted-cves.txt` bloque la production), fait enregistrer les révisions `api`, `migrate` et `jobs` par **notre registraire** (fonction Lambda `ev-prod-task-registrar` : modèle écrit par Terraform, seule l'image change ; le rôle de déploiement ne lit ni n'écrit aucune définition de tâche lui-même), lance les migrations en tâche ponctuelle (rôle `ev_migrator`), met à jour le service `api` **s'il existe** (phase 2 seulement ; en phase 1 un avis « Service api absent » est normal), enregistre le tag dans SSM et lance les tests de fumée (phase 2).
 
 Après ce premier déploiement, un `terraform plan` complet propose de **remplacer** nos définitions de tâches (`api`, `migrate`, `jobs` : Terraform suit le tag déployé, lu dans SSM ; chaque remplacement compte un `destroy`) : attendu, sans effet sur les autres produits. Pour un changement limité, cibler (`-target`) les ressources concernées.
 
@@ -287,8 +328,18 @@ Un fichier remplacé garde le même nom : invalider le cache (`aws cloudfront cr
 
 Quand le nom est validé et le domaine acheté (la zone Route 53 publique est créée à l'achat, dans ce compte) :
 
-1. `terraform.tfvars` : `domain_name = "<domaine>"` (et `content_custom_domain = true` pour `cdn.<domaine>`, facultatif). Renseigner aussi `play_package_name`, `android_cert_fingerprints`, `google_oauth_client_ids`, `rtdn_service_account_email`, `legal_publisher_name` et `legal_contact_email` s'ils ne le sont pas.
-2. `terraform plan -out=tfplan`, relecture par le product owner :
+1. **Étiqueter NOTRE zone** Route 53 (créée à l'achat, dans ce compte où vivent aussi les zones des autres produits) : le plan échoue tant que la zone de `domain_name` ne porte pas `Project = eventide`, pour ne jamais écrire dans la zone d'un autre produit.
+
+   ```bash
+   ZONE=$(aws route53 list-hosted-zones-by-name --dns-name "<domaine>." --max-items 1 \
+     --query 'HostedZones[0].[Id,Name]' --output text); echo "$ZONE"   # vérifier le nom !
+   aws route53 change-tags-for-resource --resource-type hostedzone \
+     --resource-id "$(cut -f1 <<< "$ZONE" | sed 's#/hostedzone/##')" --add-tags Key=Project,Value=eventide
+   ```
+
+   `domain_name` ne peut pas être un domaine (ni un sous-domaine) de CINAF, JobMinutes ou Candidature Express (`cinaf.tv`, `jobminutes.com`, `candidatureexpress.com` : refus de Terraform).
+2. `terraform.tfvars` : `domain_name = "<domaine>"` (et `content_custom_domain = true` pour `cdn.<domaine>`, facultatif). Renseigner aussi `play_package_name`, `android_cert_fingerprints`, `google_oauth_client_ids`, `rtdn_service_account_email`, `legal_publisher_name` et `legal_contact_email` s'ils ne le sont pas.
+3. `terraform plan -out=tfplan`, puis le contrôle obligatoire (`terraform show -json tfplan > tfplan.json && bash ../../../.github/scripts/check-plan-additions-only.sh tfplan.json`) : `OK`, avec dans « Ajouts sur des ressources de CINAF » exactement les règles **400** (`api.<domaine>`) et **401** (`<domaine>`, `www.<domaine>`) et le certificat ; dans « à relire », nos définitions de tâches remplacées et notre paramètre SSM. Puis relecture par le product owner :
    - [ ] les seules modifications et suppressions portent sur **nos** ressources : définitions de tâches `ev-prod-*` **remplacées** (nouvelles variables d'environnement : hôtes, URL publiques, audience RTDN ; chaque remplacement compte un `destroy`, qui désenregistre l'ancienne révision), paramètre SSM `/eventide/prod/deploy/config`, éventuellement la distribution de contenu (alias `cdn.`) ; **aucune** sur une ressource partagée :
 
      ```bash
@@ -299,10 +350,10 @@ Quand le nom est validé et le domaine acheté (la zone Route 53 publique est cr
 
    - [ ] le filtre du § 5 affiche maintenant `no-op` pour `shared_postgres` (créée en phase 1) et **3 `create`** : règles **400** (`api`) et **401** (`web`), **1** `aws_lb_listener_certificate` ; rien d'autre ;
    - [ ] sortie `shared_infrastructure.route53_zone` = `<domaine>.`.
-3. Avec l'accord du product owner : `terraform apply tfplan && rm tfplan`. Le certificat est validé automatiquement par DNS (zone dans ce compte) ; le service `api` démarre avec la dernière image déployée.
-4. Relancer **Deploy** (`prod`, migrations cochées) : cette fois le service est mis à jour et les tests de fumée tournent.
-5. **Notifications Google Play (RTDN)** : dans Google Cloud, sujet Pub/Sub (par ex. `eventide-play`) ; donner le rôle *Pub/Sub Publisher* sur ce sujet à `google-play-developer-notifications@system.gserviceaccount.com` ; abonnement **push** vers `https://api.<domaine>/v1/play/rtdn`, **authentification activée** avec le compte de service `rtdn_service_account_email` et l'audience `https://api.<domaine>/v1/play/rtdn` (valeur de `RTDN_AUDIENCE`). Play Console → *Monétisation* → *Notifications en temps réel pour les développeurs* : nom complet du sujet, puis *Envoyer une notification de test* : l'API répond `204` (journal `/ecs/ev-prod/api`). Étapes à vérifier dans la documentation Google au moment de le faire (non testées).
-6. Associer le site à l'application (liens `https://<domaine>/m/<code>`) : `https://<domaine>/.well-known/assetlinks.json` répond dès que `play_package_name` et `android_cert_fingerprints` sont renseignés (sinon `404`).
+4. Avec l'accord du product owner : `terraform apply tfplan && rm tfplan tfplan.json`. Le certificat est validé automatiquement par DNS (zone dans ce compte) ; le service `api` démarre avec la dernière image déployée.
+5. Relancer **Deploy** (`prod`, migrations cochées) : cette fois le service est mis à jour et les tests de fumée tournent.
+6. **Notifications Google Play (RTDN)** : dans Google Cloud, sujet Pub/Sub (par ex. `eventide-play`) ; donner le rôle *Pub/Sub Publisher* sur ce sujet à `google-play-developer-notifications@system.gserviceaccount.com` ; abonnement **push** vers `https://api.<domaine>/v1/play/rtdn`, **authentification activée** avec le compte de service `rtdn_service_account_email` et l'audience `https://api.<domaine>/v1/play/rtdn` (valeur de `RTDN_AUDIENCE`). Play Console → *Monétisation* → *Notifications en temps réel pour les développeurs* : nom complet du sujet, puis *Envoyer une notification de test* : l'API répond `204` (journal `/ecs/ev-prod/api`). Étapes à vérifier dans la documentation Google au moment de le faire (non testées).
+7. Associer le site à l'application (liens `https://<domaine>/m/<code>`) : `https://<domaine>/.well-known/assetlinks.json` répond dès que `play_package_name` et `android_cert_fingerprints` sont renseignés (sinon `404`).
 
 ## 12. Sauvegarde et test de restauration
 
@@ -345,8 +396,8 @@ Manuels :
 
 Désactivée par défaut ([coûts](couts-estimes.md)). Pour l'activer :
 
-1. `preprod_enabled = true`, `terraform plan` (ajouts seulement, 0 modification ; règles 420 et 421 avec un domaine), relecture, `apply` avec l'accord du product owner.
-2. Amorçage de sa base : § 7 avec `CLUSTER=ev-preprod`, `FAMILY=ev-preprod-db-bootstrap`, `SECRET_NAME=eventide/preprod/bootstrap/rds-master-password`, groupe `ev-preprod-api`.
+1. `preprod_enabled = true`, `terraform plan -out=tfplan`, contrôle `check-plan-additions-only.sh` (`OK` ; ajouts sur les ressources de CINAF : règle 5432 de `module.preprod[0]` et, avec un domaine, règles 420 et 421 et le certificat), relecture, `apply` avec l'accord du product owner.
+2. Amorçage de sa base : § 7 avec `CLUSTER=ev-preprod`, `FAMILY=ev-preprod-db-bootstrap`, `SECRET_NAME=eventide/preprod/bootstrap/rds-master-password`, groupe `ev-preprod-api`, clé `--kms-key-id alias/ev-preprod`.
 3. Secrets : § 6 avec `eventide/preprod/*`.
 4. GitHub : environnement `preprod`, variables `AWS_REGION=us-east-1`, `AWS_DEPLOY_ROLE_ARN` et `DEPLOY_CONFIG_PARAMETER` (sortie `preprod`).
 
@@ -370,6 +421,11 @@ Le service `api` de préproduction tourne de 8 h à 20 h les jours ouvrés (heur
 | Plan : moins de 30 adresses IP libres | Sous-réseau « application » presque plein : voir avec CINAF |
 | Plan : précondition « plus en PostgreSQL 16 » | Mettre à jour l'image et la version de `db_tools` avant tout `apply` |
 | Plan : avertissement `check "terraform_session_can_decrypt"` ou `"terraform_session_can_use_state"` | Session qui n'est pas AdministratorAccess : `aws sso login --profile principal`, vérifier `AWS_PROFILE`, relancer |
+| `check-plan-additions-only.sh` : `ÉCHEC` | Ne pas appliquer. Chaque ligne nomme la ressource et la règle enfreinte ; transmettre la sortie. Une ressource partagée dans le plan (type interdit, adresse hors liste) est un bogue bloquant (règle 1) |
+| Plan : « La zone Route 53 de domain_name ne porte pas l'étiquette Project = eventide » | Zone pas encore étiquetée (§ 11, étape 1), ou `domain_name` désigne la zone d'un autre produit : vérifier le nom avant d'étiqueter quoi que ce soit |
+| Plan : « Pic de vCPU Fargate de l'environnement … au-delà du budget » | `api.max`, `api.cpu` ou `deployment_maximum_percent` relevés : le quota Fargate est commun au compte ; réduire, ou relever `fargate_vcpu_budget` après lecture du quota (§ 4) et accord du product owner |
+| Plan : « Règle d'écouteur partagé : un nom d'hôte … n'est ni … ni l'un de ses sous-domaines » | Un nom d'hôte de nos règles sort de notre domaine : corriger ; jamais de joker ni de nom d'un autre produit |
+| Deploy : `Le registraire a refusé …` ou `Révision inattendue` | Famille ou tag invalides, ou configuration SSM incohérente : relancer après un `apply` de la pile ; ne jamais redonner `ecs:RegisterTaskDefinition` ou `ecs:DescribeTaskDefinition` au rôle de déploiement |
 | Apply : `PriorityInUse` sur une règle d'écouteur | Une autre application a pris une priorité de notre plage : choisir un autre `listener_priority_base` (validation Terraform à adapter) |
 | Amorçage : `password authentication failed` pour le compte maître | Mauvais mot de passe : supprimer le secret temporaire, le recréer, relancer |
 | Amorçage : `rds_ca_checksum` | Nouveau bundle d'autorités RDS : vérifier le fichier, mettre à jour l'empreinte (`db_tools` et `backend/Dockerfile`) |
@@ -389,4 +445,4 @@ Le service `api` de préproduction tourne de 8 h à 20 h les jours ouvrés (heur
 
 ## 17. Tout retirer
 
-`terraform destroy` dans `envs/shared-prod` (après relecture du plan et accord du product owner) retire toutes nos ressources et les points de contact 1 à 3 (règles, certificat, règle du groupe de sécurité). Le dépôt ECR, le bucket de contenu et celui des sauvegardes de production sont protégés (`force_destroy = false`) : les vider d'abord (sauvegardes : après leur durée de conservation). Puis, avec le compte maître, supprimer nos bases et nos rôles (requêtes de l'[ADR § 5](../infra/hebergement-mutualise.md#5-points-de-contact-sur-les-ressources-de-cinaf-et-leur-retour-arrière)). Enfin, dans Google Cloud, supprimer l'abonnement push RTDN.
+`terraform plan -destroy -out=tfplan` dans `envs/shared-prod`, contrôle `check-plan-additions-only.sh --destroy tfplan.json` (`OK (destruction)` : seulement nos ressources et nos ajouts), relecture et accord du product owner, puis `terraform apply tfplan` : retire toutes nos ressources et les points de contact 1 à 3 (règles, certificat, règle du groupe de sécurité). Le dépôt ECR, le bucket de contenu et celui des sauvegardes de production sont protégés (`force_destroy = false`) : les vider d'abord (sauvegardes : après leur durée de conservation). Puis, avec le compte maître, supprimer nos bases et nos rôles (requêtes de l'[ADR § 5](../infra/hebergement-mutualise.md#5-points-de-contact-sur-les-ressources-de-cinaf-et-leur-retour-arrière)). Enfin, dans Google Cloud, supprimer l'abonnement push RTDN.

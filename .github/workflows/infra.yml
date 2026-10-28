@@ -109,7 +109,7 @@ jobs:
 
       - name: Task registrar (Lambda code) and the deploy script that calls it
         run: |
-          python3 -I -m unittest discover -s infra/terraform/modules/task_registrar/tests -v
+          python3 -I -B -m unittest discover -s infra/terraform/modules/task_registrar/tests -v
           bash .github/scripts/tests/register-task-revision.test.sh
 
   db-tools:

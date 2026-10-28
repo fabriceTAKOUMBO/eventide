@@ -1,6 +1,6 @@
 """Unit tests of the task registrar (no AWS: the ECS client is a fake).
 
-    python3 -I -m unittest discover -s infra/terraform/modules/task_registrar/tests -v
+python3 -I -m unittest discover -s infra/terraform/modules/task_registrar/tests -v
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ spec.loader.exec_module(registrar)
 
 REPO = "466494951409.dkr.ecr.us-east-1.amazonaws.com/ev-prod-api"
 SHA = "0123456789abcdef0123456789abcdef01234567"
+TASK_DEFINITION_ARN_PREFIX = "arn:aws:ecs:us-east-1:466494951409:task-definition/"
 
 
 def template(key: str) -> dict:
@@ -55,7 +56,7 @@ class FakeEcs:
         family = self.family_override or request["family"]
         return {
             "taskDefinition": {
-                "taskDefinitionArn": f"arn:aws:ecs:us-east-1:466494951409:task-definition/{family}:7",
+                "taskDefinitionArn": f"{TASK_DEFINITION_ARN_PREFIX}{family}:7",
                 "family": family,
                 "revision": 7,
             }
@@ -80,7 +81,9 @@ class RegistrarTest(unittest.TestCase):
     def test_templates_are_not_mutated(self):
         cfg = config()
         registrar.register({"family": "jobs", "image_tag": SHA}, FakeEcs(), cfg)
-        self.assertEqual(cfg["templates"]["jobs"]["containerDefinitions"][0]["image"], f"{REPO}:bootstrap")
+        self.assertEqual(
+            cfg["templates"]["jobs"]["containerDefinitions"][0]["image"], f"{REPO}:bootstrap"
+        )
 
     def test_refuses_a_family_outside_its_configuration(self):
         for family in ("cinaf-api", "ce-prod-api", "ev-prod-api", "", None, 3):
@@ -97,9 +100,14 @@ class RegistrarTest(unittest.TestCase):
             self.assertEqual(ecs.calls, [])
 
     def test_refuses_extra_fields_so_the_caller_cannot_override_the_template(self):
-        for extra in ({"executionRoleArn": "arn:aws:iam::466494951409:role/cinaf"}, {"family_name": "x"}):
+        for extra in (
+            {"executionRoleArn": "arn:aws:iam::466494951409:role/cinaf"},
+            {"family_name": "x"},
+        ):
             with self.assertRaises(registrar.RegistrationRefused):
-                registrar.register({"family": "api", "image_tag": SHA, **extra}, FakeEcs(), config())
+                registrar.register(
+                    {"family": "api", "image_tag": SHA, **extra}, FakeEcs(), config()
+                )
         with self.assertRaises(registrar.RegistrationRefused):
             registrar.register(["api", SHA], FakeEcs(), config())
 

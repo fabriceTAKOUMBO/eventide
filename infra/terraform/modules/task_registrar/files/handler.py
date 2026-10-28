@@ -77,7 +77,7 @@ def register(event: Any, ecs: Any, config: dict[str, Any]) -> dict[str, Any]:
         "family": definition["family"],
         "revision": definition["revision"],
     }
-    print(json.dumps({"event": "task_definition_registered", **result}))
+    print(json.dumps({"event": "task_definition_registered", **result}))  # noqa: T201 - Lambda log line
     return result
 
 

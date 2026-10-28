@@ -29,22 +29,23 @@ Prix d'une tâche `api` : 0,25 × 0,03238 + 0,5 × 0,00356 = **0,009875 USD/h**,
 | Tâches planifiées et ponctuelles (Spot) | ≈ 13 h de tâche par mois (24 exécutions par jour d'environ 1 minute, plus purge et sauvegarde), migrations | Spot ≈ -65 % (non vérifié) [CE-COUTS] | < 0,1 | < 0,1 | 0,2 |
 | Secrets Manager | 7 secrets : `django-secret-key`, `db-app`, `db-migrator`, `db-backup`, `gemini-api-key`, `google-play-service-account`, `cloudfront-private-key` (le secret temporaire d'amorçage vit quelques minutes) | 0,40 /secret [CE-COUTS] | 2,8 | 2,8 | 2,8 |
 | KMS | `alias/ev-prod` + `alias/eventide-tfstate`, requêtes | 1 /clé [CE-COUTS] | 2,0 | 2,1 | 2,2 |
-| CloudWatch — alarmes | Phase 1 : 13 (6 événements applicatifs, 2 volumes de journaux, sauvegarde manquante, 4 contenu) ; phase 2 : 18 (+ 5xx, latence p95, cibles en échec, CPU et mémoire du service) ; la franchise de 10 alarmes du compte est supposée consommée par les autres produits | 0,10 /alarme [CE-COUTS] | 1,3 | 1,8 | 1,8 |
+| CloudWatch — alarmes | Phase 1 : 18 (6 événements applicatifs, 2 volumes de journaux, sauvegarde manquante, 4 contenu, 5 sur la charge de l'instance partagée : CPU, connexions, mémoire, disque, crédits) ; phase 2 : 23 (+ 5xx, latence p95, cibles en échec, CPU et mémoire du service) ; la franchise de 10 alarmes du compte est supposée consommée par les autres produits | 0,10 /alarme [CE-COUTS] | 1,8 | 2,3 | 2,3 |
 | CloudWatch — métriques issues des journaux | 7 métriques (6 événements applicatifs, sauvegarde envoyée) | 0,30 /métrique [CE-COUTS] | 2,1 | 2,1 | 2,1 |
 | CloudWatch — journaux | 0,1 / 1 / 3 Go ingérés, 30 jours (JSON sans phrase ni corps de requête) | 0,50 /Go [CE-COUTS] | 0,1 | 0,5 | 1,5 |
 | ALB partagé — part marginale | LCU de nos requêtes ; 2 règles de plus à évaluer | 0,008 /LCU-h [CE-COUTS] | 0 | 0,5 | 2 |
-| NAT partagée — données traitées | Appels à Google (Gemini, Play, Play Integrity), journaux, API AWS, images ECR (couches par le point de terminaison S3 gratuit de CINAF, à confirmer) | 0,045 /Go [CE-COUTS] | < 0,1 | 0,3 | 1 |
+| NAT partagée — données traitées | Appels à Google (Gemini, Play, Play Integrity), journaux, API AWS ; **images de nos tâches** : chaque tâche Fargate retélécharge son image (≈ 0,1 Go), soit ≈ 26 tâches par jour (24 `finalize-purchases`, `purge-expired`, `db-backup` ≈ 0,25 Go) ≈ 80 Go/mois. Sans point de terminaison S3 dans le VPC de CINAF (à vérifier, § 4 du runbook), elles passent par la NAT : ≈ 3,5 à 4 USD/mois. **Facturé sur la NAT de CINAF** : invisible dans nos budgets ([ADR § 11](../infra/hebergement-mutualise.md#11-non-influence-sur-cinaf-jobminutes-et-candidature-express)) | 0,045 /Go [CE-COUTS] | 0,1 à 4 | 0,3 à 4,5 | 1 à 5 |
 | Transfert sortant de l'API vers Internet | Réponses JSON et pages web : 1 à 10 Go (franchise de 100 Go supposée consommée par les autres produits) | 0,09 /Go [CE-COUTS] | 0 | 0,2 | 0,9 |
 | ECR, S3 (sauvegardes, contenu stocké, état Terraform) | Images ≈ 0,1 Go chacune, 10 gardées ; contenu < 0,2 Go ; sauvegardes de quelques Mo | 0,10 /Go ECR [CE-COUTS] ; S3 ≈ 0,023 /Go (non vérifié) | 0,2 | 0,2 | 0,3 |
 | Route 53 | Notre zone (créée à l'achat du domaine) ; requêtes vers les alias | 0,50 /zone [CE-COUTS] | 0 | 0,5 | 0,6 |
 | Budgets, détection d'anomalies, EventBridge Scheduler, ACM, OAC et adresses signées CloudFront | — | gratuits [CE-COUTS], [DOSSIER] | 0 | 0 | 0 |
-| **Total AWS hors contenu diffusé** | | | **≈ 8,7** | **≈ 18,6** | **≈ 29,8** |
+| Registraire des définitions de tâche (Lambda `ev-prod-task-registrar`, ARM64, 128 Mo) | Quelques appels par déploiement, hors VPC (aucun trafic par la NAT) | ≈ 0 (non vérifié) | 0 | 0 | 0 |
+| **Total AWS hors contenu diffusé** | Fourchette basse de la NAT (point de terminaison S3 présent) ; jusqu'à ≈ +4 USD sinon, payés par CINAF | | **≈ 9,2** | **≈ 19,1** | **≈ 30,3** |
 
 « Plafond » est aussi le **plafond de dépense fixe** en cas d'attaque ou de boucle : l'autoscaling ne dépasse pas 2 tâches (le plan Terraform échoue si le budget de connexions pouvait être dépassé). Les postes variables restent bornés par les plafonds du § 4 et du § 5.
 
 **Budgets posés par Terraform** (filtrés sur `Project = eventide`, alertes seulement, AWS ne coupe rien) : `eventide-mensuel` **60 USD** (50, 80 et 100 % du réel, 100 % de la prévision), `ev-prod-content-mensuel` **30 USD** (CloudFront et S3), moniteur d'anomalies (seuil 10 USD). Ils ne voient rien tant que l'étiquette `Project` n'est pas active dans Billing (déjà active pour les autres produits, à vérifier).
 
-**Coûts cachés sur l'infrastructure partagée**, non facturés à part mais réels : stockage de notre base sur l'instance (quelques centaines de Mo la première année), crédits CPU de l'instance de CINAF si nos requêtes la font dépasser sa ligne de base.
+**Coûts cachés sur l'infrastructure partagée**, non facturés à part mais réels, **portés par les ressources de CINAF** (donc invisibles dans `eventide-mensuel`) : données traitées par la NAT (ci-dessus, jusqu'à ≈ 4 USD/mois), unités de capacité de l'ALB (< 1 USD/mois au lancement), stockage de notre base sur l'instance et dans ses instantanés (quelques centaines de Mo la première année), crédits CPU de l'instance si nos requêtes la font dépasser sa ligne de base. Détail et parades : [ADR § 11](../infra/hebergement-mutualise.md#11-non-influence-sur-cinaf-jobminutes-et-candidature-express).
 
 ## 3. Préproduction (facultative, `preprod_enabled`)
 
