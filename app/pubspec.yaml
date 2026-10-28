@@ -50,6 +50,8 @@ dependencies:
   crypto: ^3.0.8
   audio_session: ^0.2.4
   url_launcher: ^6.3.2
+  # Living landscapes: looping muted video backgrounds (ExoPlayer on Android).
+  video_player: ^2.14.1
 
 dev_dependencies:
   flutter_test:
