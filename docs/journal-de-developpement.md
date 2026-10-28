@@ -1,5 +1,25 @@
 # Journal de développement — Eventide
 
+## 28 octobre 2026 (soir) — règle de non-influence et audit de l'infrastructure
+
+**Règle absolue du product owner**, inscrite dans [`AGENTS.md`](../AGENTS.md) et à recopier dans toute consigne d'agent touchant l'infra, la CI, le déploiement ou la base : CINAF, JobMinutes et Candidature Express restent intouchées et ne doivent être influencées en aucun cas par Eventide.
+
+Audit indépendant de l'infrastructure (aucun appel AWS, fournisseurs simulés, sans identifiants) : sur les plans simulés, **0 modification, remplacement, suppression ou import** d'une ressource d'une autre plateforme ; objets posés sur des ressources de CINAF limités aux quatre points de contact de l'ADR. Corrections apportées :
+- le rôle de déploiement GitHub ne lit plus ni n'enregistre de définitions de tâches hors d'Eventide (fonction Lambda `ev-<env>-task-registrar` dédiée) ;
+- règles d'écoute limitées à nos noms d'hôte exacts et à nos priorités ; domaines des autres plateformes refusés ; la zone DNS doit porter notre étiquette ;
+- amorçage de la base : refuse toute base ou tout rôle qui n'est pas à Eventide ; plafonds par rôle (mémoire, fichiers temporaires, sessions inactives, pas de parallélisme) ; secret temporaire du mot de passe maître chiffré par **notre** clé ;
+- garde-fou `check-plan-additions-only.sh`, **obligatoire avant chaque `apply`** avec la relecture du plan par le product owner ; garde des ressources à l'échelle du compte étendue ;
+- alarmes de charge sur l'instance PostgreSQL partagée actives par défaut ; pic Fargate plafonné par environnement.
+Détail : [ADR § 11](infra/hebergement-mutualise.md).
+
+**Risques résiduels à trancher par le product owner** (ADR § 11.4) :
+1. Coûts facturés sur des ressources de CINAF : ≈ 3,5 à 4 USD/mois de NAT (téléchargement des images de conteneur) et < 1 USD/mois d'ALB. Prévenir CINAF, ou espacer la tâche horaire de finalisation des achats (÷ 4).
+2. Le mot de passe maître de CINAF est lu une fois par le product owner pour l'amorçage ; alternative : CINAF exécute l'amorçage ou nous crée un rôle délégué.
+3. Le rôle de la fonction d'enregistrement garde `RegisterTaskDefinition` sur `*` (restriction par famille non vérifiable ici).
+4. Nos rôles peuvent se connecter aux bases qui laissent `CONNECT` à `PUBLIC` : seule CINAF peut le retirer chez elle.
+5. Effets d'instance non plafonnables (autovacuum, journaux et statistiques de l'instance, nos données dans leurs instantanés) ; `temp_file_limit` peut ne pas être réglable sur RDS.
+6. Toujours à confirmer : les règles de groupe de sécurité et d'écoute de CINAF sont-elles déclarées en ressources autonomes dans son Terraform ?
+
 ## 28 octobre 2026 — première construction
 
 ### Décisions du product owner
