@@ -28,6 +28,21 @@ class _Host implements PlaybackHost {
   void onPlaybackStopped(StopReason reason, Duration listened) => stops.add((reason, listened));
 }
 
+/// No audio device (headless emulator, broken audio HAL): the engine cannot start.
+class _NoDeviceEngine extends FakeAudioEngine {
+  int attempts = 0;
+
+  @override
+  Future<void> start(
+    List<EngineLayer> layers, {
+    Duration fadeIn = const Duration(seconds: 2),
+    Duration rampUp = Duration.zero,
+  }) async {
+    attempts++;
+    throw StateError('audio device unavailable');
+  }
+}
+
 PlayRequest _request({
   TimerSetting timer = const TimerDuration(60),
   Duration rampUp = Duration.zero,
@@ -296,6 +311,32 @@ void main() {
       async.flushMicrotasks();
       expect(handler.status.value.paused, isFalse);
       expect(host.stops.single.$1, StopReason.user);
+    });
+  });
+  test('no audio device: start fails cleanly, back to idle, a retry is possible', () {
+    fakeAsync((async) {
+      final failing = _NoDeviceEngine();
+      final focus = FakeFocus();
+      final host = _Host();
+      final handler = PlaybackHandler(engine: failing, focus: focus, native: FakeNativeBridge(), now: () => t0)
+        ..attachHost(host);
+      bool? started;
+      handler.start(_request()).then((v) => started = v);
+      async.flushMicrotasks();
+      expect(started, isFalse);
+      expect(handler.status.value.playing, isFalse);
+      expect(handler.status.value.paused, isFalse);
+      expect(handler.status.value.loading, isFalse);
+      expect(handler.playbackState.value.processingState, AudioProcessingState.idle);
+      expect(host.stops.single.$1, StopReason.failed);
+      expect(focus.deactivations, 1);
+      // A scheduled start through the media button fails the same way, without hanging.
+      host.next = _request(scheduleId: 's1');
+      handler.play();
+      async.flushMicrotasks();
+      expect(failing.attempts, 2);
+      expect(handler.status.value.loading, isFalse);
+      expect(handler.status.value.playing, isFalse);
     });
   });
 }

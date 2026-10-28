@@ -23,12 +23,10 @@ abstract final class DemoMode {
     voice: VoiceQuota(mode: VoiceMode.included),
   );
 
-  /// Shown on purchase buttons and the Premium screen.
+  /// Message when a purchase or Google Play's subscription page is asked for in demo mode
+  /// (the Premium screen itself disables its button and says the same).
   static const String premiumActive = 'Version démo : Premium est déjà actif.';
 
   /// « Restaurer mes achats » in demo mode.
   static const String nothingToRestore = 'Version démo : Premium est déjà actif, il n’y a rien à restaurer.';
-
-  /// Discreet mention at the bottom of Réglages.
-  static const String settingsMention = 'Version démo';
 }

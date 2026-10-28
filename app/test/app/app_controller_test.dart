@@ -4,6 +4,7 @@ import 'dart:math';
 
 import 'package:eventide/app/app_controller.dart';
 import 'package:eventide/app/app_model.dart';
+import 'package:eventide/app/demo_mode.dart';
 import 'package:eventide/core/catalog.dart';
 import 'package:eventide/core/plan.dart';
 import 'package:eventide/core/scene.dart';
@@ -24,6 +25,17 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import '../services/fakes.dart';
+
+/// No audio device (headless emulator, broken audio HAL): the engine cannot start.
+class _NoDeviceEngine extends FakeAudioEngine {
+  @override
+  Future<void> start(
+    List<EngineLayer> layers, {
+    Duration fadeIn = const Duration(seconds: 2),
+    Duration rampUp = Duration.zero,
+  }) async =>
+      throw StateError('audio device unavailable');
+}
 
 class Harness {
   final Catalog catalog = loadTestCatalog();
@@ -49,8 +61,10 @@ class Harness {
     Plan? plan,
     Future<http.Response> Function(http.Request)? backend,
     String shareHost = 'eventide.app',
+    bool demo = false,
+    AudioEngine? engineOverride,
   }) async {
-    handler = PlaybackHandler(engine: engine, focus: focus, native: native, now: () => now);
+    handler = PlaybackHandler(engine: engineOverride ?? engine, focus: focus, native: native, now: () => now);
     final client = MockClient(backend ?? (request) async => http.Response('', 500));
     final api = ApiClient(
       baseUrl: backend == null ? '' : 'https://api.test/v1',
@@ -83,7 +97,12 @@ class Harness {
       share: share,
       permissions: permissions,
       urls: urls,
-      config: AppConfig(shareHost: shareHost, forcedPlan: plan, browseDebounce: const Duration(milliseconds: 60)),
+      config: AppConfig(
+        shareHost: shareHost,
+        forcedPlan: plan,
+        browseDebounce: const Duration(milliseconds: 60),
+        demo: demo,
+      ),
       now: () => now,
       random: Random(7),
     );
@@ -726,6 +745,122 @@ void main() {
       expect(h.native.batteryGuides, 1);
       expect(h.ads.privacyForms, 1);
       expect(model.creditsPrice, '2,99 €');
+    });
+  });
+  group('audio output unavailable', () {
+    test('play: the sound cannot start, the model says so and stays usable', () async {
+      final model = await h.start(engineOverride: _NoDeviceEngine());
+      await model.play();
+      expect(model.playing, isFalse);
+      expect(model.loadingAudio, isFalse);
+      expect((await h.got<ToastEvent>()).single.message, AppMessages.cannotStart);
+      model.setLayerLevel(LayerKind.son, 'pluie-douce', 40);
+      expect(model.scene.hasLayer(LayerKind.son, 'pluie-douce'), isTrue);
+    });
+  });
+
+  group('demo build (Premium unlocked on the phone)', () {
+    test('entitlements are forced to annual, whatever is cached; the server is never asked', () async {
+      h.store.files[StoreKeys.entitlements] = jsonEncode({'version': 1, 'data': Entitlements.free(trialRemaining: 0).toJson()});
+      final asked = <String>[];
+      final model = await h.start(
+        demo: true,
+        backend: (request) async {
+          asked.add(request.url.path);
+          if (request.url.path == '/v1/entitlements') {
+            return http.Response(jsonEncode(Entitlements.free().toJson()), 200);
+          }
+          return http.Response(jsonEncode({'error': 'not_found'}), 404);
+        },
+      );
+      model.handleLifecycle(AppLifecycleState.resumed);
+      await settle();
+      expect(model.demoMode, isTrue);
+      expect(model.plan, Plan.annual);
+      expect(model.entitlements.premium, isTrue);
+      expect(model.entitlements.voice.mode, VoiceMode.included);
+      expect(asked, isNot(contains('/v1/entitlements')));
+      await model.retryConnection();
+      await model.restorePurchases();
+      await settle();
+      expect(asked, isNot(contains('/v1/entitlements')));
+      expect(model.plan, Plan.annual);
+    });
+
+    test('no purchase, no restore, no Google Play page: the demo explains itself', () async {
+      final model = await h.start(demo: true);
+      await model.buy(PurchaseChoice.monthly);
+      await model.buyCredits();
+      await model.restorePurchases();
+      await model.openManageSubscription();
+      expect(h.billing.calls.where((c) => c != 'initialize'), isEmpty);
+      expect(h.urls.opened, isEmpty);
+      final toasts = [for (final t in await h.got<ToastEvent>()) t.message];
+      expect(toasts, [
+        DemoMode.premiumActive,
+        DemoMode.premiumActive,
+        DemoMode.nothingToRestore,
+        DemoMode.premiumActive,
+      ]);
+      expect(await h.got<OpenPremiumEvent>(), isEmpty);
+    });
+
+    test('no ads, even onboarded and online', () async {
+      h.store.files[StoreKeys.settings] = jsonEncode({'version': 1, 'data': const AppSettings(onboarded: true).toJson()});
+      final model = await h.start(demo: true);
+      model.handleLifecycle(AppLifecycleState.resumed);
+      await settle();
+      await model.beforeExit();
+      expect(h.ads.shown, isEmpty);
+    });
+
+    test('Premium landscapes and sounds play offline from bundled audio', () async {
+      h.connectivity.online = false;
+      final model = await h.start(demo: true);
+      model.selectLandscape('torrent-montagne');
+      expect(model.scene.landscapeId, 'torrent-montagne');
+      model.setLayerLevel(LayerKind.son, 'vagues', 40);
+      expect(model.scene.hasLayer(LayerKind.son, 'vagues'), isTrue);
+      await model.play();
+      expect(model.playing, isTrue);
+      expect(h.engine.activeKeys, contains('son:vagues'));
+      expect(await h.got<OpenPremiumEvent>(), isEmpty);
+      expect(await h.got<OfflineEvent>(), isEmpty);
+    });
+
+    test('schedules: unlimited, armed without the network requirement', () async {
+      final model = await h.start(demo: true);
+      expect(await model.saveSchedule(model.newScheduleDraft()), isTrue);
+      expect(await model.saveSchedule(model.newScheduleDraft()), isTrue);
+      expect(model.schedules, hasLength(2));
+      expect(h.native.lastPayload['requires_network'], isFalse);
+      expect((h.native.lastPayload['schedules'] as List), hasLength(2));
+    });
+
+    test('voice without backend: on-device rules, never a quota error', () async {
+      final model = await h.start(demo: true);
+      for (var i = 0; i < 5; i++) {
+        await model.startVoice();
+        h.speech.finalResult('mets le texte plus grand');
+        await settle();
+        expect(model.voiceState, isA<VoiceResult>());
+        expect((model.voiceState as VoiceResult).quotaLabel, isNull);
+        model.keepVoice();
+      }
+      await model.startVoice();
+      h.speech.finalResult('raconte-moi une histoire');
+      await settle();
+      expect(model.voiceState, isA<VoiceRephrase>());
+      expect(await h.got<OpenPremiumEvent>(), isEmpty);
+      expect(await h.got<OpenCreditsEvent>(), isEmpty);
+    });
+
+    test('a production build (demo off) keeps the normal plan and purchases', () async {
+      final model = await h.start();
+      expect(model.demoMode, isFalse);
+      expect(model.plan, Plan.free);
+      await model.buy(PurchaseChoice.annual);
+      expect(h.billing.calls, ['initialize', 'buy:annual']);
     });
   });
 }

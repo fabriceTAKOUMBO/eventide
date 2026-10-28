@@ -75,6 +75,10 @@ class FakeAppModel extends AppModel {
       StreamController<AppEvent>.broadcast();
   int _idCounter = 0;
 
+  /// Demo build (« Eventide Démo »): set to true to preview the demo texts.
+  @override
+  bool demoMode = false;
+
   @override
   bool online;
   @override

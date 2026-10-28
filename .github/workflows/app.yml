@@ -1,13 +1,19 @@
 name: app
 
+# Flutter app only: analysis, unit tests, debug/release/demo APKs, 16 KB page alignment and
+# Android emulator checks. No cloud credential, no secret, no deployment: nothing here talks to
+# AWS (CINAF, JobMinutes and Candidature Express are never touched).
+
 on:
   push:
     paths:
       - "app/**"
+      - "content/audio/**"
       - ".github/workflows/app.yml"
   pull_request:
     paths:
       - "app/**"
+      - "content/audio/**"
       - ".github/workflows/app.yml"
   workflow_dispatch:
 
@@ -17,6 +23,10 @@ concurrency:
 
 permissions:
   contents: read
+
+env:
+  FLUTTER_VERSION: 3.47.8
+  DEMO_PACKAGE: be.cinaf.eventide.demo
 
 jobs:
   build:
@@ -58,4 +68,251 @@ jobs:
           name: eventide-debug-apk
           path: app/build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
+          retention-days: 14
+
+  # Release builds (R8 shrinking, like production). Without android/key.properties they are
+  # signed with the debug key: fine for a phone or an emulator, refused by Google Play.
+  release-apks:
+    name: Release APKs (production and demo)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      # Same debug key from one run to the next, so that a new demo APK installs over the
+      # previous one on the phone (otherwise Android asks to uninstall it first). Not a release
+      # key: production signing only ever comes from android/key.properties, never from CI.
+      - name: Debug signing key (stable across runs)
+        uses: actions/cache@v4
+        with:
+          path: ~/.android/debug.keystore
+          key: eventide-ci-debug-keystore-v1
+
+      - name: Dependencies
+        run: flutter pub get
+
+      - name: Production release APKs (arm64-v8a, x86_64)
+        run: |
+          flutter build apk --release --split-per-abi --target-platform android-arm64,android-x64
+          mkdir -p ../dist/production
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../dist/production/eventide-arm64-v8a-release.apk
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk ../dist/production/eventide-x86_64-release.apk
+
+      - name: Production APK has no Premium audio, package be.cinaf.eventide
+        run: |
+          for apk in ../dist/production/*.apk; do
+            bash tool/ci/check_apk_contents.sh production "$apk"
+          done
+
+      # The demo bundles every Premium sound and music (ContentRepository prefers bundled
+      # assets), so that it works without the API. Never done for the production build above.
+      - name: Bundle the Premium audio (demo build only)
+        run: |
+          cp ../content/audio/sons/*.ogg assets/audio/sons/
+          cp ../content/audio/musiques/*.ogg assets/audio/musiques/
+
+      - name: Demo release APKs (« Eventide Démo », be.cinaf.eventide.demo)
+        run: |
+          flutter build apk --release --split-per-abi --target-platform android-arm64,android-x64 \
+            --dart-define=DEMO_MODE=true --android-project-arg=eventide.demo=true
+          mkdir -p ../dist/demo-phone ../dist/demo-emulator
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ../dist/demo-phone/eventide-demo-galaxy-s24-arm64.apk
+          cp build/app/outputs/flutter-apk/app-x86_64-release.apk ../dist/demo-emulator/eventide-demo-emulator-x86_64.apk
+
+      - name: Demo APKs bundle the Premium audio, package be.cinaf.eventide.demo
+        run: |
+          bash tool/ci/check_apk_contents.sh demo ../dist/demo-phone/eventide-demo-galaxy-s24-arm64.apk
+          bash tool/ci/check_apk_contents.sh demo ../dist/demo-emulator/eventide-demo-emulator-x86_64.apk
+
+      # The file the product owner installs on the Galaxy S24 (arm64).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eventide-demo-galaxy-s24-arm64
+          path: dist/demo-phone/eventide-demo-galaxy-s24-arm64.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eventide-demo-emulator-x86_64
+          path: dist/demo-emulator/eventide-demo-emulator-x86_64.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eventide-production-release-apks-debug-signed
+          path: dist/production/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  # Android 15+ phones and Google Play (apps targeting API 35+) require native libraries
+  # aligned on 16 KB pages: ELF LOAD segments and the uncompressed libraries in the APK zip.
+  page-alignment:
+    name: 16 KB page alignment
+    needs: release-apks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Demo release APKs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: eventide-demo-*
+          path: apks
+
+      - name: Production release APKs
+        uses: actions/download-artifact@v4
+        with:
+          name: eventide-production-release-apks-debug-signed
+          path: apks/production
+
+      - name: ELF LOAD alignment and zipalign -P 16 (arm64-v8a, x86_64)
+        run: |
+          mapfile -t apks < <(find apks -name '*.apk' | sort)
+          printf '%s\n' "${apks[@]}"
+          bash app/tool/ci/check_16kb_alignment.sh "${apks[@]}"
+
+  # Real Android systems (x86_64 emulators, KVM): Android 14 (API 34) and 16 (API 36), a
+  # 1080 x 2400 screen at 420 dpi close to the Galaxy S24 (1080 x 2340).
+  emulator:
+    name: Emulator API ${{ matrix.api-level }}
+    needs: release-apks
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [34, 36]
+    env:
+      AVD_TARGET: google_apis
+      AVD_ARCH: x86_64
+      AVD_PROFILE: pixel_7
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      # The emulator needs memory too: cap the Gradle daemon below the project's 8 GB setting
+      # (~/.gradle/gradle.properties wins over android/gradle.properties).
+      - name: Gradle memory for a runner shared with the emulator
+        run: |
+          mkdir -p ~/.gradle
+          echo 'org.gradle.jvmargs=-Xmx3g -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError' >> ~/.gradle/gradle.properties
+
+      - name: Dependencies
+        run: flutter pub get
+
+      - name: Bundle the Premium audio (demo build only)
+        run: |
+          cp ../content/audio/sons/*.ogg assets/audio/sons/
+          cp ../content/audio/musiques/*.ogg assets/audio/musiques/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: eventide-demo-emulator-x86_64
+          path: dist/demo-emulator
+
+      # Builds the integration test once before the emulator starts (Gradle and Kotlin warm,
+      # most tasks up to date for flutter drive), then frees the Gradle daemon's memory.
+      - name: Pre-build the integration test APK (debug demo, x86_64)
+        run: |
+          flutter build apk --debug --target-platform android-x64 \
+            --target=integration_test/demo_flow_test.dart \
+            --dart-define=DEMO_MODE=true --android-project-arg=eventide.demo=true
+          (cd android && ./gradlew --stop) || true
+
+      - name: AVD cache
+        uses: actions/cache@v4
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ matrix.api-level }}-${{ env.AVD_TARGET }}-${{ env.AVD_ARCH }}-${{ env.AVD_PROFILE }}-v1
+
+      - name: Create the AVD and its snapshot (cache miss)
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: ${{ env.AVD_TARGET }}
+          arch: ${{ env.AVD_ARCH }}
+          profile: ${{ env.AVD_PROFILE }}
+          ram-size: 3072M
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "Generated AVD snapshot for caching."
+
+      # A: release demo APK starts (R8), B: integration test, C: scheduled start in background.
+      # The script exits non-zero when A or B fails; C is reported by the next step.
+      - name: Release start, integration test and scheduled start on the emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: ${{ env.AVD_TARGET }}
+          arch: ${{ env.AVD_ARCH }}
+          profile: ${{ env.AVD_PROFILE }}
+          ram-size: 3072M
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: true
+          working-directory: app
+          script: bash tool/ci/emulator_checks.sh ../dist/demo-emulator/eventide-demo-emulator-x86_64.apk ../emulator-results/api-${{ matrix.api-level }}
+
+      # Non-blocking: a scheduled start depends on the emulator's alarm and service timing.
+      - name: Scheduled start verdict (non-blocking)
+        if: always()
+        continue-on-error: true
+        run: |
+          result=../emulator-results/api-${{ matrix.api-level }}
+          cat "$result/scheduled-start.txt" 2>/dev/null || echo "no scheduled-start report"
+          status="$(cat "$result/scheduled-start.status" 2>/dev/null || echo fail)"
+          if [ "$status" != "pass" ]; then
+            echo "::warning title=Scheduled start (API ${{ matrix.api-level }})::the scheduled start was not confirmed, see the emulator-api-${{ matrix.api-level }} artifact"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: emulator-api-${{ matrix.api-level }}
+          path: emulator-results/api-${{ matrix.api-level }}
+          if-no-files-found: warn
           retention-days: 14

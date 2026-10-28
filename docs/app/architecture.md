@@ -11,6 +11,7 @@ Ce document décrit la couche applicative (`app/lib/app`), les services (`app/li
 | `lib/app/app_controller.dart` | `RealAppModel` : enchaîne les règles du domaine avec le stockage, l'audio, le réseau, les achats, la publicité et les démarrages programmés | `core`, `services` |
 | `lib/app/bootstrap.dart` | Construit les services réels, dans le bon ordre (voir § 4) | tout |
 | `lib/app/env.dart` | Configuration par `--dart-define` (§ 10) | — |
+| `lib/app/demo_mode.dart` | Décisions de la version démo (§ 12) | `core` |
 | `lib/app/sleep_tracker.dart` | Suivi du sommeil, méthode 1 du dossier (§ 9) | `core` |
 | `lib/services/` | Accès à la plateforme, chacun derrière une interface remplaçable par un faux dans les tests | plugins |
 | `lib/ui/` | Écrans « Vitre » ; ne connaît que `AppModel` et `core` | `app_model.dart`, `core` |
@@ -31,6 +32,7 @@ Services : `storage.dart` (fichiers JSON), `api_client.dart` (API, jeton d'insta
 - Les fichiers sont **lus depuis le disque** (`LoadMode.disk`) : décodée en mémoire, une boucle stéréo pèse environ 18 Mo pour 47 s ; six couches sur toute une nuit seraient trop lourdes pour un téléphone d'entrée de gamme. Les boucles fournies se raccordent à l'échantillon près dans ce mode.
 - Départ de chaque couche à un endroit tiré au hasard (`seek`), longueurs de boucle différentes (23 à 47 s), légère variation lente et aléatoire du volume (± 7 % sur 20 s) : pas de répétition audible.
 - Changement de paysage : fondu enchaîné de 2 s (une couche commune aux deux paysages glisse simplement vers son nouveau niveau). Changement de niveau : 0,4 s.
+- **Pas de sortie audio** (émulateur sans son, pilote audio en panne) : l'ouverture du périphérique échoue ou ne répond pas en 15 s, le démarrage échoue proprement, le lecteur revient à l'arrêt et l'application affiche « Le son ne peut pas démarrer pour le moment » ; l'interface reste utilisable.
 - **Service au premier plan** : `PlaybackHandler` (`audio_service`, type `mediaPlayback`) porte le moteur, la notification de lecture (titre = paysage, sous-titre = texte du rappel d'une programmation, boutons lecture/pause et arrêt) et **le minuteur**, qui continue donc quand l'application est fermée. Fin du minuteur : fondu de 30 s, arrêt complet, l'écran n'est pas rallumé. « Toute la nuit » s'arrête après `limites.nuit_max_heures` (10 h). Le décompte est gelé pendant une pause.
 - **Focus audio** (`audio_session`) : appel ou autre lecteur → pause, reprise automatique si l'interruption était passagère ; GPS ou notification → volume baissé ; casque débranché → pause. Balayer l'application hors des récentes laisse le son et son minuteur continuer.
 - Le gratuit exige une connexion : avant de **démarrer** un son, un utilisateur gratuit fait une vraie vérification réseau (au plus une toutes les 2 minutes). Une écoute déjà en cours n'est jamais coupée ; seul le chargement d'un nouveau paysage ou d'un nouveau son est refusé hors connexion.
@@ -50,8 +52,9 @@ Dart ne calcule rien au moment du déclenchement ; tout ce qui doit marcher appl
    - si Android refuse (`ForegroundServiceStartNotAllowedException`, typiquement sans alarme exacte) → notification de secours « C’est l’heure d’aller dormir » / « C’est l’heure de vous détendre » avec le bouton « Lancer » : il ouvre l'application, qui démarre la programmation en attente ;
    - réarme toujours l'occurrence suivante.
 4. Côté Dart, `main()` enregistre le *handler* auprès d'`audio_service` **avant** tout le reste. Le *handler* reçoit le clic, publie aussitôt l'état « chargement » (la notification apparaît, ce qui respecte le délai d'Android pour un service au premier plan), lit `consumePendingStart()`, puis demande au contrôleur quoi jouer : mix par défaut du paysage de la programmation, montée depuis le silence sur `montee_minutes`, texte du rappel dans la notification. Si l'on écoute déjà quelque chose, la programmation ne coupe rien.
-5. **`BootReceiver`** réarme après `BOOT_COMPLETED`, `TIME_SET`, `TIMEZONE_CHANGED`, `MY_PACKAGE_REPLACED` et `SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED`.
-6. Autorisations : l'interface explique, puis `requestPermission(PermissionKind.exactAlarm)` ouvre « Alarmes et rappels » (`ACTION_REQUEST_SCHEDULE_EXACT_ALARM`) ; `PermissionKind.notifications` demande `POST_NOTIFICATIONS` (Android 13+). Une autorisation refusée définitivement (« Ne plus demander », `permissionPermanentlyDenied`) n'est plus demandée : l'interface propose « Ouvrir les réglages » (`openAppSettings()`, fiche de l'application), et l'état est relu au retour dans l'application. `openBatteryGuide()` ouvre la fiche de l'application (bouton « Ouvrir les réglages » du guide contre les fabricants qui arrêtent les applications).
+5. Journal : le récepteur Kotlin (étiquette logcat `EventideSchedule`) note l'armement (`armed: mode=exact|inexact`), le déclenchement, le démarrage demandé du service ou la notification de secours ; le *handler* Dart note `EventideSchedule: playback started…` ou `nothing played…`. La CI s'en sert (§ 10, émulateurs).
+6. **`BootReceiver`** réarme après `BOOT_COMPLETED`, `TIME_SET`, `TIMEZONE_CHANGED`, `MY_PACKAGE_REPLACED` et `SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED`.
+7. Autorisations : l'interface explique, puis `requestPermission(PermissionKind.exactAlarm)` ouvre « Alarmes et rappels » (`ACTION_REQUEST_SCHEDULE_EXACT_ALARM`) ; `PermissionKind.notifications` demande `POST_NOTIFICATIONS` (Android 13+). Une autorisation refusée définitivement (« Ne plus demander », `permissionPermanentlyDenied`) n'est plus demandée : l'interface propose « Ouvrir les réglages » (`openAppSettings()`, fiche de l'application), et l'état est relu au retour dans l'application. `openBatteryGuide()` ouvre la fiche de l'application (bouton « Ouvrir les réglages » du guide contre les fabricants qui arrêtent les applications).
 
 Replis, du meilleur au moins bon : alarme exacte + son → alarme inexacte + son (si Android l'autorise) → notification « Lancer » → rien (notifications refusées). Le taux de réussite doit être mesuré pendant la bêta.
 
@@ -99,8 +102,9 @@ Méthode 1 du dossier, sans capteur ni autorisation, calculée et gardée sur le
 | `ADMOB_INTERSTITIAL_OPEN`, `ADMOB_INTERSTITIAL_EXIT` | identifiants de test Google | Blocs d'annonces |
 | `DEBUG_FORCE_PLAN` | vide | **Debug seulement** : `free`, `monthly`, `annual`, `lifetime` |
 | `APP_VERSION` | `1.0.0` | Envoyée à `POST /installations` |
+| `DEMO_MODE` | `false` | Version démo (§ 12), **seulement** avec la propriété Gradle `eventide.demo=true` |
 
-Propriétés Gradle : `-Peventide.shareHost=…` (filtre App Links) et `-Peventide.admobAppId=…` (identifiant d'application AdMob, celui de test par défaut).
+Propriétés Gradle : `-Peventide.shareHost=…` (filtre App Links), `-Peventide.admobAppId=…` (identifiant d'application AdMob, celui de test par défaut) et `-Peventide.demo=true` (paquet de la version démo, § 12 ; avec `flutter build`, s'écrit `--android-project-arg=eventide.demo=true`).
 
 Exemples :
 
@@ -133,7 +137,16 @@ Sans ce fichier, `flutter build appbundle` signe avec la clé de debug (utile po
 
 ### Intégration continue
 
-`.github/workflows/app.yml` : Java 17, Flutter 3.47.8, `flutter analyze`, `flutter test`, puis `flutter build apk --debug`, qui prouve que le Kotlin et Gradle compilent (impossible dans un environnement sans accès à Google Maven). L'APK est publié comme artefact.
+`.github/workflows/app.yml` (aucun identifiant cloud, aucun secret, aucun déploiement) :
+
+| Tâche | Ce qu'elle prouve | Artefacts |
+|---|---|---|
+| `build` | `flutter analyze`, `flutter test`, `flutter build apk --debug` : le Kotlin et Gradle compilent (impossible sans accès à Google Maven) | `eventide-debug-apk` |
+| `release-apks` | Versions *release* (R8) de production puis de démo, arm64-v8a et x86_64, signées avec la clé de debug ; l'APK de production n'a **aucun** son Premium (`assets/flutter_assets/assets/audio/sons/vagues.ogg` absent), paquet `be.cinaf.eventide`, nom « Eventide » ; l'APK de démo a tous les sons et musiques de `content/audio`, paquet `be.cinaf.eventide.demo`, nom « Eventide Démo » (`app/tool/ci/check_apk_contents.sh`) | `eventide-demo-galaxy-s24-arm64` (à installer sur le téléphone), `eventide-demo-emulator-x86_64`, `eventide-production-release-apks-debug-signed` |
+| `page-alignment` | Pages de 16 Ko (Android 15+ et Google Play pour une cible ≥ 35) : chaque `lib/arm64-v8a/*.so` et `lib/x86_64/*.so` a des segments `LOAD` alignés sur au moins `0x4000`, et `zipalign -c -P 16 -v 4` passe (`app/tool/ci/check_16kb_alignment.sh`, qui nomme la bibliothèque fautive) | — |
+| `emulator` (API 34 et 36) | Sur de vrais systèmes Android (émulateurs x86_64, écran 1080 × 2400) : A. l'APK *release* de démo s'installe, démarre (`am start -W`), reste en vie, passe en mode démo, sans `FATAL EXCEPTION`, ANR ni erreur Dart ; B. le test d'intégration (`integration_test/demo_flow_test.dart`, `flutter drive`) : Bienvenue, lecture et pause, un son Premium, un paysage Premium, une programmation, « Version démo » dans Réglages ; C. **non bloquant** : la programmation laissée par B se déclenche application en arrière-plan, et le chemin suivi (service de lecture ou notification « Lancer ») est noté (`app/tool/ci/emulator_checks.sh`) | `emulator-api-34`, `emulator-api-36` : captures d'écran, logcat, `dumpsys`, `scheduled-start.txt` |
+
+Les étapes du test d'intégration sont aussi jouées sans appareil par `test/app/demo_flow_host_test.dart` (vrai `RealAppModel` et vraie interface, services simulés).
 
 ## 11. Ce qui doit être testé sur de vrais téléphones
 
@@ -146,3 +159,48 @@ Les tests unitaires couvrent la logique (faux pour chaque plugin) ; tout ce qui 
 - Focus audio : appel entrant, GPS, autre lecteur, casque filaire et Bluetooth débranchés.
 - Voix : disponibilité de la reconnaissance française hors ligne, `fr_BE`, voix âgées, bruit ; 200 phrases ; temps de réponse.
 - Achats en test interne Google Play (essai de 3 jours, restauration, crédits, remboursement), consentement publicitaire depuis l'Europe, App Links vérifiés une fois le domaine acheté, TalkBack et police à 200 %.
+
+## 12. Version démo
+
+Une version pour montrer et tester l'application sur un téléphone **sans Google Play ni serveur**, avec Premium déjà actif. Elle ne peut pas être confondue avec la production ni publiée à sa place :
+
+- **Deux verrous.** La propriété Gradle `eventide.demo=true` donne un autre paquet (`be.cinaf.eventide.demo`, suffixe `.demo`), le nom « Eventide Démo » sous l'icône et un drapeau dans le manifeste (`be.cinaf.eventide.DEMO_BUILD`, lu par `NativeBridge.isDemoBuild()`). Le Dart n'active le mode démo que si ce drapeau **et** `--dart-define=DEMO_MODE=true` sont présents (`DemoMode.resolve`) : un paquet de production compilé par erreur avec la *dart-define* reste normal, et l'APK de démo, signé par la clé de debug et d'un autre paquet, serait refusé par Google Play.
+- **Construction** (comme la CI) :
+
+  ```bash
+  cd app
+  cp ../content/audio/sons/*.ogg assets/audio/sons/          # sons et musiques Premium : démo seulement
+  cp ../content/audio/musiques/*.ogg assets/audio/musiques/
+  flutter build apk --release --split-per-abi --target-platform android-arm64 \
+    --dart-define=DEMO_MODE=true --android-project-arg=eventide.demo=true
+  git checkout -- assets/audio && git clean -f assets/audio   # ne jamais committer ces copies
+  ```
+
+- **Ce qui change** : droits forcés à la formule annuelle (Premium, assistant inclus), quel que soit le cache ; aucun appel au serveur pour les droits ; aucune publicité (`NoAdsService`) ; aucun appel à Google Play (`DemoBilling`) : l'écran Premium dit « Version démo : Premium est déjà actif », ses boutons sont désactivés, « Restaurer mes achats » répond par un message, « Gérer mon abonnement » n'existe pas ; écoute hors connexion et programmations sans limite ; voix par les règles du téléphone (sans `API_BASE_URL`, jamais de message de quota) ; mention discrète « Version démo » en bas de Réglages.
+- **Sons Premium embarqués** : la CI copie `content/audio/sons/*.ogg` et `content/audio/musiques/*.ogg` dans `app/assets/audio/` **avant** la construction de la démo seulement ; `ContentRepository` préfère les fichiers embarqués. La CI vérifie que l'APK de production n'en contient aucun.
+
+## 13. Installer sur un téléphone (version démo)
+
+Pour le Samsung Galaxy S24 (Android 14 à 16, One UI 6 à 8) ; les autres téléphones Android 7 et plus récents suivent le même chemin, avec d'autres noms de menus.
+
+1. **Télécharger** : sur GitHub, onglet *Actions*, flux « app », dernière exécution réussie de la branche voulue, section *Artifacts* : `eventide-demo-galaxy-s24-arm64` (il faut être connecté à GitHub). C'est un fichier `.zip`.
+2. **Décompresser** : il contient `eventide-demo-galaxy-s24-arm64.apk`. Sur le téléphone, *Mes fichiers* (Samsung) ouvre le `.zip` et propose « Extraire » ; sinon décompresser sur l'ordinateur et copier l'APK par câble USB, Google Drive ou courriel à soi-même.
+3. **Installer** : toucher l'APK dans *Mes fichiers*. Android demande d'autoriser cette source : « Paramètres » → activer « Autoriser depuis cette source » pour *Mes fichiers* (ou Chrome, Drive… selon l'application qui ouvre le fichier), puis revenir et « Installer ».
+   - Si l'installation est bloquée par le **Bloqueur automatique** de Samsung (*Paramètres* → *Sécurité et confidentialité* → *Bloqueur automatique*), le désactiver le temps de l'installation, puis le réactiver.
+   - **Play Protect** peut prévenir qu'il ne connaît pas l'application (« Application inconnue » / « Application non sécurisée bloquée ») : *Plus de détails* → *Installer quand même*. S'il propose d'envoyer l'application pour analyse, les deux réponses conviennent. C'est attendu : l'APK est signé par la clé de test de la CI, pas par Google Play.
+4. **Premier lancement** : l'icône s'appelle **« Eventide Démo »** ; elle peut cohabiter plus tard avec l'application « Eventide » de Google Play (autre paquet, données séparées).
+5. **Mettre à jour** : installer le nouvel APK par-dessus l'ancien (en principe la CI garde la même clé d'une exécution à l'autre ; les réglages sont alors conservés). Si Android répond « Application non installée » ou « en conflit avec un paquet existant », désinstaller d'abord l'ancienne version.
+6. **Désinstaller** : appui long sur l'icône « Eventide Démo » → *Désinstaller*, ou *Paramètres* → *Applications* → *Eventide Démo* → *Désinstaller*.
+7. **Si le téléphone refuse toute installation hors Google Play** (règles de l'entreprise, ou vérification des développeurs que Google déploie pays par pays depuis 2026) : installer depuis un ordinateur par câble USB, *Options de développement* → *Débogage USB* activé, puis `adb install -r eventide-demo-galaxy-s24-arm64.apk`.
+
+**Ce que fait la démo** : tous les paysages, sons, musiques et décors (sons Premium dans l'APK, écoute sans connexion), programmations sans limite, minuteur, Veille, sommeil, partage par lien autonome, voix pour les phrases simples reconnues sur le téléphone (« Ajoute du piano doux », « Arrête dans une heure », « Ajoute plus de pluie »…), sans publicité.
+**Ce qu'elle ne fait pas** : aucun achat ni restauration (l'écran Premium dit « Version démo : Premium est déjà actif »), aucun serveur (pas de compte Google relié, pas de lien de partage court, pas de modèle pour les phrases complexes), pas de mise à jour par Google Play.
+
+**Réglages Samsung pour les programmations** (sinon One UI peut endormir l'application et le son ne démarre pas à l'heure) :
+
+- *Paramètres* → *Applications* → *Eventide Démo* → *Batterie* → **Non restreinte**.
+- *Paramètres* → *Batterie* (ou *Entretien de l'appareil* → *Batterie*) → *Limites d'utilisation en arrière-plan* : Eventide Démo ne doit figurer ni dans **Applications en veille** ni dans **Applications en veille prolongée** (« veille profonde ») ; l'ajouter aux **Applications jamais mises en veille** et, au besoin, désactiver « Mettre en veille les applications inutilisées ».
+- *Paramètres* → *Applications* → *Eventide Démo* → **Alarmes et rappels** : autorisé (la carte « Autoriser » de l'écran Programmations y mène) ; **Notifications** : autorisées (rappel et commandes du son).
+- Test rapide : programmer un départ dans 5 minutes, verrouiller l'écran, attendre. Le son doit démarrer avec sa notification ; sinon une notification « C’est l’heure… » avec « Lancer » apparaît (Android a refusé le démarrage en arrière-plan) : revoir les réglages de batterie ci-dessus.
+
+**Voix sur un Samsung** : l'application utilise le service de reconnaissance vocale choisi dans le téléphone. Selon la version de One UI : *Paramètres* → *Applications* → *Choisir les applications par défaut* → *Application d'assistance numérique* → *Saisie vocale* (ou *Gestion globale* → *Clavier Samsung* / *Saisie vocale*). Le service **Google** (« Services vocaux de Google ») reconnaît bien le français, aussi hors connexion une fois le pack « Français » téléchargé dans ses réglages ; le service **Samsung** fonctionne aussi mais peut demander internet. Si l'assistant répond « La reconnaissance vocale n'est pas disponible », choisir le service Google ou installer l'application Google.

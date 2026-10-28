@@ -54,6 +54,11 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # On-device end-to-end test of the demo build (integration_test/, run by the CI emulators).
+  integration_test:
+    sdk: flutter
+  flutter_driver:
+    sdk: flutter
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
