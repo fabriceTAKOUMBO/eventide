@@ -6,7 +6,7 @@
 - **Sourdine** « Sons de nature » / « Musique » qui garde les niveaux ; voix « coupe / remets la musique ».
 - **Mélodie d'accueil** (décision du product owner) : chaque paysage démarre avec une mélodie douce qui monte en 20 s.
 - **Démo Premium** (`be.cinaf.eventide.demo`) et contrôles Android en CI (alignement 16 Ko, émulateurs Android 14 et 16). La CI a révélé un **plantage au démarrage de la version optimisée** (R8 retirait la base de données de WorkManager) : corrigé ; et un arrêt de l'émulateur ~55 s après le début du son avec `-noaudio` : option retirée.
-- **À faire** : widget de lecture sur l'écran verrouillé (comme Spotify : carte déployée et repliée, image du paysage, minuteur en barre de progression, paysage précédent/suivant, favori) ; accepter la clé `videos/paysages/<id>.mp4` côté API ; vidéos 1080 × 1920 d'au moins 12 s ; décider si les images des paysages Premium servent d'aperçu aux utilisateurs gratuits ; envisager Git LFS (≈ 30 Mo de médias dans le dépôt).
+- **À faire** (mis à jour le 29 octobre) : ~~carte de lecture sur l'écran verrouillé~~ et ~~clé `videos/paysages/<id>.mp4` côté API~~ faites (voir le 29 octobre) ; vidéos 1080 × 1920 d'au moins 12 s ; décider si les images des paysages Premium servent d'aperçu aux utilisateurs gratuits ; envisager Git LFS (≈ 30 Mo de médias dans le dépôt).
 
 ## 28 octobre 2026 (soir) — règle de non-influence et audit de l'infrastructure
 
