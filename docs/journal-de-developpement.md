@@ -1,5 +1,14 @@
 # Journal de développement — Eventide
 
+## 29 octobre 2026 — carte de lecture, vérification sur émulateurs
+
+- **Fait** : carte de lecture de l'écran verrouillé et des notifications, comme Spotify (`8df69fd`, [architecture § 15](app/architecture.md)) ; l'API accepte la clé `videos/paysages/<id>.mp4` (`f259325`).
+- **Émulateurs de la CI** : sur les machines de GitHub, c'est l'émulateur qui plante, pas l'app. Le moteur de rendu de l'émulateur s'arrête net (SIGILL dans un fil « RenderThread », puis un vidage mémoire), au moment où l'app dessine sa première image. Cela arrive sur Android 14 et 16, quel que soit le mode graphique essayé (`swiftshader`, `swangle` ; `angle_indirect` est refusé). Ce qui en découle :
+  - l'étape A (démarrage de la démo optimisée par R8) reste **bloquante**. Si l'émulateur tombe, elle est jugée sur ce que l'app a fait avant : processus lancé, « Eventide: demo mode on », aucun plantage, ANR ni erreur Dart de l'app ;
+  - les étapes B (test d'intégration) et C (démarrage programmé) **ne bloquent plus**.
+- **Passage 40797720083** (`502d4b8`) : tout est vert. Sur Android 14 et 16, la démo atteint le mode démo en 5 à 7 s, sans erreur de l'app ; l'émulateur plante 29 à 33 s après le lancement, avant la première image ; B et C n'ont pas pu tourner. **Non prouvé par la CI** : que la première image s'affiche et que l'app tient ensuite. Le lancement à la main sur le Galaxy S24 reste le test décisif. Fichier pour le S24 : artefact `eventide-demo-galaxy-s24-arm64` (12865301395).
+- **Pistes si l'on veut une preuve sur appareil** : Firebase Test Lab (vrais téléphones dans le cloud, dont des Galaxy S24), qui demande un projet Google Cloud du product owner.
+
 ## 28 octobre 2026 (nuit) — vidéos de paysage, sourdine, mélodie d'accueil, démo
 
 - **Vidéos de paysage** (décision du product owner) : le paysage doit sembler vivant et incrusté, jamais un lecteur vidéo ; **la pause n'arrête que le son**. Image fixe seulement en veille, avec « réduire les animations » et en arrière-plan. Boucles sans raccord (`tools/media/process_video.py`), image de départ identique à la première image de la boucle. `cascade-foret` (gratuit, dans l'app) et `pluie-ville` (Premium, S3) viennent de vidéos Gemini du product owner (usage commercial à confirmer) ; `toits-pluie` et `ciel-etoile` utilisent **deux vidéos YouTube de tiers, pour les tests internes seulement** (`medias-test/`, démo uniquement, garde-fous CI) : **à retirer avant toute bêta**.
