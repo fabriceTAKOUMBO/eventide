@@ -1,4 +1,4 @@
-// One simple sentence before each Android permission (dossier § 4: never ask cold).
+// One short reason before each Android permission (dossier § 4: never ask cold).
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -9,13 +9,13 @@ import 'glass.dart';
 import 'vicons.dart';
 
 String permissionTitle(PermissionKind kind) => switch (kind) {
-  PermissionKind.notifications => 'Les notifications',
+  PermissionKind.notifications => 'Notifications',
   PermissionKind.exactAlarm => 'Démarrer à l’heure',
 };
 
 String permissionSentence(PermissionKind kind) => switch (kind) {
-  PermissionKind.notifications => 'Pour vous rappeler l’heure d’aller dormir et afficher les commandes du son, Eventide a besoin des notifications.',
-  PermissionKind.exactAlarm => 'Pour lancer le son exactement à l’heure choisie, Android demande votre autorisation.',
+  PermissionKind.notifications => 'Pour vos rappels et les commandes du son.',
+  PermissionKind.exactAlarm => 'Pour lancer le son à l’heure exacte.',
 };
 
 VIconData _permissionIcon(PermissionKind kind) => switch (kind) {
@@ -25,7 +25,7 @@ VIconData _permissionIcon(PermissionKind kind) => switch (kind) {
 
 /// Second sentence when Android will no longer ask (« Ne plus demander »).
 const String permissionSettingsSentence =
-    'Cette autorisation a été refusée : Android ne la demandera plus. Vous pouvez l’accorder dans les réglages, rubrique « Autorisations ».';
+    'Android ne la demandera plus : activez-la dans les réglages, rubrique « Autorisations ».';
 
 /// Explains why, then asks Android. Returns true when the permission is granted.
 /// Already granted: returns true without showing anything. Permanently denied: offers
@@ -127,21 +127,13 @@ Future<T?> showVitreDialog<T>(
                             header: true,
                             child: Text(
                               title,
-                              style: manrope(
-                                24,
-                                weight: 600,
-                                letterSpacingEm: -0.015,
-                              ),
+                              style: VitreType.title(size: 28),
                             ),
                           ),
                           const SizedBox(height: 10),
                           Text(
                             message,
-                            style: manrope(
-                              18,
-                              height: 1.4,
-                              color: p.text(0.86),
-                            ),
+                            style: VitreType.body(color: p.text(0.84)),
                           ),
                           if (extra != null) ...[
                             const SizedBox(height: 14),
@@ -152,8 +144,6 @@ Future<T?> showVitreDialog<T>(
                             label: confirm,
                             onPressed: () =>
                                 Navigator.of(dialogContext).pop(true),
-                            height: 60,
-                            fontSize: 19,
                           ),
                           if (cancel != null) ...[
                             const SizedBox(height: 6),
@@ -161,8 +151,7 @@ Future<T?> showVitreDialog<T>(
                               label: cancel,
                               onPressed: () =>
                                   Navigator.of(dialogContext).pop(false),
-                              fontSize: 18,
-                              height: 52,
+                              fontSize: 15,
                             ),
                           ],
                         ],

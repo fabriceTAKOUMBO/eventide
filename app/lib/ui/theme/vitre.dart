@@ -71,8 +71,159 @@ class Vitre extends InheritedWidget {
   bool updateShouldNotify(Vitre oldWidget) => oldWidget.palette != palette;
 }
 
+/// Display face of the « Galerie » style: landscape names and titles only.
+const String kDisplayFamily = 'Cormorant Garamond';
+
+/// Type roles of the « Galerie » style (product owner, 29 October 2026): Cormorant Garamond 500
+/// for landscape names (italic) and titles, a lighter Manrope for everything else, spaced
+/// capitals for eyebrows and buttons. Sizes are logical pixels at text scale 1 (384-dp phone);
+/// every role follows the Android text size and the in-app A−/A+ factor.
+abstract final class VitreType {
+  static const double displaySize = 32;
+  static const double titleSize = 32;
+  static const double headingSize = 24;
+  static const double bodySize = 15;
+  static const double smallSize = 13.5;
+  static const double labelSize = 16;
+  static const double eyebrowSize = 11.5;
+  static const double buttonSize = 13;
+
+  /// Landscape names: Cormorant Garamond 500 italic, slight positive tracking.
+  static TextStyle display({
+    double size = displaySize,
+    Color color = VitreColors.white,
+    double height = 1.08,
+    List<Shadow>? shadows,
+  }) => _serif(size, italic: true, color: color, height: height, shadows: shadows);
+
+  /// Screen, sheet, dialog and card titles: Cormorant Garamond 500 upright.
+  static TextStyle title({
+    double size = titleSize,
+    Color color = VitreColors.white,
+    double height = 1.12,
+  }) => _serif(size, italic: false, color: color, height: height);
+
+  /// Body text: Manrope 400.
+  static TextStyle body({
+    double size = bodySize,
+    Color color = VitreColors.white,
+    double height = 1.45,
+  }) => manrope(size, color: color, height: height, letterSpacingEm: 0.01);
+
+  /// Secondary text (subtitles, notes, prices' units): Manrope 400, smaller.
+  static TextStyle small({
+    double size = smallSize,
+    Color color = VitreColors.white,
+    double height = 1.4,
+    TextDecoration? decoration,
+  }) => manrope(
+    size,
+    color: color,
+    height: height,
+    letterSpacingEm: 0.01,
+    decoration: decoration,
+  );
+
+  /// Emphasised UI labels (row titles, tiles, chips, tabs, prices): Manrope 500.
+  static TextStyle label({
+    double size = labelSize,
+    Color color = VitreColors.white,
+    int weight = 500,
+    double? height,
+    TextDecoration? decoration,
+  }) => manrope(
+    size,
+    weight: weight,
+    color: color,
+    height: height,
+    letterSpacingEm: 0.01,
+    decoration: decoration,
+  );
+
+  /// Eyebrows and section labels: Manrope 500 in spaced capitals (draw with [CapsText]).
+  static TextStyle eyebrow({
+    double size = eyebrowSize,
+    Color color = VitreColors.white,
+  }) => manrope(
+    size,
+    weight: 500,
+    color: color,
+    height: 1.3,
+    letterSpacingEm: 0.22,
+  );
+
+  /// Button labels: Manrope 600 in spaced capitals (draw with [CapsText]).
+  static TextStyle button({
+    double size = buttonSize,
+    Color color = VitreColors.white,
+  }) => manrope(
+    size,
+    weight: 600,
+    color: color,
+    height: 1.3,
+    letterSpacingEm: 0.16,
+  ).copyWith(leadingDistribution: TextLeadingDistribution.even);
+
+  /// Large figures (times, durations, levels): Manrope light.
+  static TextStyle figure(
+    double size, {
+    Color color = VitreColors.white,
+    int weight = 300,
+    double height = 1.1,
+  }) => manrope(size, weight: weight, color: color, height: height);
+
+  static TextStyle _serif(
+    double size, {
+    required bool italic,
+    required Color color,
+    required double height,
+    List<Shadow>? shadows,
+  }) => TextStyle(
+    fontFamily: kDisplayFamily,
+    fontSize: size,
+    fontWeight: FontWeight.w500,
+    fontStyle: italic ? FontStyle.italic : FontStyle.normal,
+    color: color,
+    height: height,
+    letterSpacing: 0.005 * size,
+    shadows: shadows,
+  );
+}
+
+/// Text in spaced capitals (eyebrows, buttons): shows [text] upper-cased, while TalkBack reads
+/// it as written (never spelled letter by letter).
+class CapsText extends StatelessWidget {
+  const CapsText(
+    this.text, {
+    super.key,
+    required this.style,
+    this.textAlign,
+    this.maxLines,
+    this.overflow,
+    this.textScaler,
+  });
+
+  final String text;
+  final TextStyle style;
+  final TextAlign? textAlign;
+  final int? maxLines;
+  final TextOverflow? overflow;
+  final TextScaler? textScaler;
+
+  @override
+  Widget build(BuildContext context) => Text(
+    text.toUpperCase(),
+    semanticsLabel: text,
+    style: style,
+    textAlign: textAlign,
+    maxLines: maxLines,
+    overflow: overflow,
+    textScaler: textScaler,
+  );
+}
+
 /// Manrope with the weight applied both as `fontWeight` and as the `wght` axis
-/// (the variable font defaults to 200).
+/// (the variable font defaults to 200). Prefer the roles of [VitreType].
 TextStyle manrope(
   double size, {
   int weight = 400,
@@ -173,7 +324,7 @@ ThemeData vitreMaterialTheme() {
       displayColor: Colors.white,
     ),
     tooltipTheme: TooltipThemeData(
-      textStyle: manrope(16, weight: 600, color: VitreColors.ink),
+      textStyle: VitreType.label(size: 14, color: VitreColors.ink),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),

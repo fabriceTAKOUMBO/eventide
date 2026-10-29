@@ -22,7 +22,7 @@ class VitreSheet extends StatefulWidget {
     this.backgroundBlur = 3,
     this.actions = const [],
     this.onClose,
-    this.titleSize = 28,
+    this.titleSize = VitreType.titleSize,
     this.footer,
     this.scrollable = true,
     this.contentPadding = const EdgeInsets.fromLTRB(20, 8, 20, 32),
@@ -101,12 +101,7 @@ class _VitreSheetState extends State<VitreSheet> {
                   // Titles are already large: cap their growth so long words never split.
                   textScaler: MediaQuery.textScalerOf(context)
                       .clamp(maxScaleFactor: 1.5),
-                  style: manrope(
-                    widget.titleSize,
-                    weight: 600,
-                    letterSpacingEm: -0.02,
-                    height: 1.15,
-                  ),
+                  style: VitreType.title(size: widget.titleSize),
                 ),
               ),
             ),
@@ -216,34 +211,27 @@ class _Grabber extends StatelessWidget {
   }
 }
 
-/// Body text of sheets (18 px, 84 % white).
+/// Body text of sheets (Manrope 400, 82 % white).
 class SheetText extends StatelessWidget {
   const SheetText(
     this.text, {
     super.key,
-    this.size = 18,
-    this.alpha = 0.84,
+    this.size = VitreType.bodySize,
+    this.alpha = 0.82,
     this.align,
-    this.weight = 400,
   });
 
   final String text;
   final double size;
   final double alpha;
   final TextAlign? align;
-  final int weight;
 
   @override
   Widget build(BuildContext context) {
     return Text(
       text,
       textAlign: align,
-      style: manrope(
-        size,
-        weight: weight,
-        height: 1.4,
-        color: Vitre.of(context).text(alpha),
-      ),
+      style: VitreType.body(size: size, color: Vitre.of(context).text(alpha)),
     );
   }
 }

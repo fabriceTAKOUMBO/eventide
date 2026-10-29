@@ -32,8 +32,10 @@ Future<void> tapLabel(WidgetTester tester, Pattern text) async {
   await settle(tester);
 }
 
+/// Taps [text], or its spaced capitals ([CapsText]: buttons) when it is not written as is.
 Future<void> tapText(WidgetTester tester, String text) async {
-  final finder = find.text(text);
+  var finder = find.text(text);
+  if (finder.evaluate().isEmpty) finder = findCaps(text);
   await tester.ensureVisible(finder.first);
   await tester.tap(finder.first);
   await settle(tester);
@@ -66,7 +68,7 @@ void main() {
       final model = FakeAppModel(onboarded: false);
       await pumpApp(tester, model);
       expect(
-        find.text('Gratuit pour commencer, sans carte bancaire.'),
+        find.text('Gratuit, sans carte bancaire'),
         findsOneWidget,
       );
       await tapText(tester, 'Commencer');
@@ -289,7 +291,7 @@ void main() {
       await pumpApp(tester, model);
       await tapLabel(tester, 'Choisir un paysage');
       expect(find.byType(LandscapesSheet), findsOneWidget);
-      expect(find.text('Version gratuite : 2 paysages'), findsOneWidget);
+      expect(label('Débloquer tous les paysages avec Premium'), findsOneWidget);
       await tapLabel(tester, RegExp('^Torrent de montagne, Premium'));
       expect(find.byType(PremiumScreen), findsOneWidget);
       navigatorOf(tester).pop();
@@ -336,7 +338,7 @@ void main() {
       expect(label(RegExp('^Écouter Cascade en forêt')), findsOneWidget);
       await tapLabel(tester, 'Retirer Cascade en forêt des favoris');
       expect(model.favorites, isEmpty);
-      expect(find.text('Aucun favori pour l’instant'), findsOneWidget);
+      expect(find.text('Aucun favori'), findsOneWidget);
       await tearDownApp(tester);
     });
   });
@@ -351,7 +353,7 @@ void main() {
       final model = FakeAppModel();
       await pumpApp(tester, model);
       await openRoute(tester, Routes.mix, (_) => const MixSheet());
-      expect(find.text('Dans mon mix'), findsOneWidget);
+      expect(findCaps('Dans mon mix'), findsOneWidget);
       await tapLabel(tester, 'Ajouter pluie douce');
       expect(model.scene.levelOf(LayerKind.son, 'pluie-douce'), 30);
       expect(find.text('30 %'), findsWidgets);
@@ -390,7 +392,7 @@ void main() {
         expect(model.calls, contains('setCategoryMuted:son:true'));
         expect(model.soundsMuted, isTrue);
         expect(label('Sons de nature en sourdine'), findsOneWidget);
-        expect(find.text('En sourdine, niveaux gardés'), findsOneWidget);
+        expect(find.text('En sourdine'), findsOneWidget);
         // Rows stay, dimmed, with their level.
         expect(model.scene.levelOf(LayerKind.son, 'ambiance-cascade-foret'), 60);
         expect(find.text('60 %'), findsOneWidget);
@@ -404,7 +406,7 @@ void main() {
         expect(model.scene.levelOf(LayerKind.son, 'ambiance-cascade-foret'), 70);
         expect(model.soundsMuted, isFalse);
         // (The header may have scrolled off while reaching the row.)
-        expect(find.text('Activés', skipOffstage: false), findsOneWidget);
+        expect(find.text('En sourdine', skipOffstage: false), findsNothing);
 
         // Musique tab: « Musique activée » / « Musique en sourdine ».
         await tapText(tester, 'Musique');
@@ -452,11 +454,11 @@ void main() {
         navigatorOf(tester).pop();
         await settle(tester);
         await tapText(tester, 'Décor');
-        expect(find.text('Moment de la journée'), findsOneWidget);
+        expect(findCaps('Moment'), findsOneWidget);
         await tapText(tester, 'Nuit');
         expect(model.scene.moment, Moment.nuit);
         await tapText(tester, 'Musique');
-        expect(find.text('Ajouter une musique'), findsOneWidget);
+        expect(findCaps('Ajouter une musique'), findsOneWidget);
         await tearDownApp(tester);
       },
     );
@@ -469,15 +471,12 @@ void main() {
       await pumpApp(tester, model);
       await openRoute(tester, Routes.mix, (_) => const MixSheet());
       await tapLabel(tester, 'Partager mon ambiance');
-      expect(
-        find.text('Votre proche retrouve exactement vos sons et vos réglages.'),
-        findsOneWidget,
-      );
-      await tapText(tester, 'Envoyer à un proche');
+      expect(label('Envoyer mon ambiance à un proche'), findsOneWidget);
+      await tapText(tester, 'Envoyer');
       expect(model.calls, contains('shareMix'));
       await tapText(tester, 'Copier le lien');
       expect(model.calls, contains('copyShareLink'));
-      expect(find.text('Lien copié'), findsOneWidget);
+      expect(findCaps('Lien copié'), findsOneWidget);
       await tearDownApp(tester);
     });
   });
@@ -490,30 +489,24 @@ void main() {
       final model = FakeAppModel();
       await pumpApp(tester, model);
       await openRoute(tester, Routes.schedules, (_) => const SchedulesScreen());
-      expect(
-        find.text(
-          'Pour démarrer à l’heure, Android demande votre autorisation.',
-        ),
-        findsOneWidget,
-      );
+      expect(find.text('Autorisez le démarrage à l’heure.'), findsOneWidget);
       await tapText(tester, 'Autoriser');
       expect(model.exactAlarmAllowed, isTrue);
-      expect(find.text('Autoriser'), findsNothing);
+      expect(findCaps('Autoriser'), findsNothing);
 
-      await tapText(tester, 'Ajouter une programmation');
+      await tapLabel(tester, 'Ajouter une programmation');
       expect(find.text('Nouvelle programmation'), findsOneWidget);
       await tapLabel(tester, 'Une heure plus tard');
       await tapLabel(tester, 'Cinq minutes plus tard');
       await tapLabel(tester, 'Samedi');
       await tapLabel(tester, 'Dimanche');
       expect(find.text('Du lundi au vendredi'), findsOneWidget);
-      await tapText(tester, 'Personnalisé');
+      await tapText(tester, 'Autre');
       await tapLabel(tester, 'Allonger la durée');
       expect(find.text('20 min'), findsOneWidget);
       await tapText(tester, 'Pour se détendre');
-      expect(find.text('« C’est l’heure de vous détendre »'), findsOneWidget);
       await tapText(tester, 'Enregistrer');
-      expect(find.text('Les notifications'), findsOneWidget);
+      expect(find.text('Notifications'), findsOneWidget);
       await tapText(tester, 'Continuer');
       expect(model.schedules, hasLength(1));
       final s = model.schedules.single;
@@ -525,12 +518,7 @@ void main() {
       expect(find.text('23 h 05'), findsOneWidget);
 
       // Free limit reached: the add button now opens Premium.
-      expect(
-        find.text(
-          'Version gratuite : 1 programmation. Premium n’a pas de limite.',
-        ),
-        findsOneWidget,
-      );
+      expect(find.text('1 programmation en version gratuite'), findsOneWidget);
       await tapLabel(tester, 'Ajouter une programmation, avec Premium');
       expect(find.byType(PremiumScreen), findsOneWidget);
       await tearDownApp(tester);
@@ -550,8 +538,10 @@ void main() {
       expect(model.schedules.single.active, isFalse);
       await tapLabel(tester, RegExp('^Modifier la programmation de 22 h 00'));
       expect(find.text('Modifier la programmation'), findsOneWidget);
-      await tapText(tester, 'Supprimer la programmation');
       await tapText(tester, 'Supprimer');
+      // The dialog's button (the link stays behind the barrier).
+      await tester.tap(findCaps('Supprimer'));
+      await settle(tester);
       expect(model.schedules, isEmpty);
       await tearDownApp(tester);
     });
@@ -563,22 +553,22 @@ void main() {
       final model = FakeAppModel();
       await pumpApp(tester, model);
       await openRoute(tester, Routes.premium, (_) => const PremiumScreen());
-      expect(find.text('Essayer 3 jours gratuits'), findsOneWidget);
+      expect(findCaps('Essayer 3 jours gratuits'), findsOneWidget);
       expect(
         find.text(
-          'Rien à payer aujourd’hui. Ensuite 59,99 € par an, annulable à tout moment.',
+          '3 jours gratuits, puis 59,99 € par an. Annulable à tout moment.',
         ),
         findsOneWidget,
       );
       expect(find.text('−37 %'), findsOneWidget);
       await tapLabel(tester, RegExp('^Mensuel'));
-      expect(find.text('S’abonner'), findsOneWidget);
+      expect(findCaps('S’abonner'), findsOneWidget);
       expect(
         find.text('7,99 € par mois, annulable à tout moment.'),
         findsOneWidget,
       );
       await tapLabel(tester, RegExp('^À vie'));
-      expect(find.text('Acheter une fois'), findsOneWidget);
+      expect(findCaps('Acheter une fois'), findsOneWidget);
       expect(
         find.text('79,99 € en une seule fois, sans abonnement.'),
         findsOneWidget,
@@ -598,7 +588,7 @@ void main() {
       await pumpApp(tester, model);
       await tapLabel(tester, 'Réglages');
       expect(find.byType(SettingsScreen), findsOneWidget);
-      expect(find.text('Mon abonnement · Version gratuite'), findsOneWidget);
+      expect(findCaps('Version gratuite'), findsOneWidget);
       expect(
         find.text('Puis 59,99 € par an. Annulable à tout moment.'),
         findsOneWidget,
@@ -615,15 +605,15 @@ void main() {
       // Wi-Fi only is Premium: opens Premium for the free plan.
       await tapLabel(
         tester,
-        'Téléchargements en Wi-Fi seulement, avec Premium',
+        'Télécharger en Wi-Fi seulement, avec Premium',
       );
       expect(find.byType(PremiumScreen), findsOneWidget);
       navigatorOf(tester).pop();
       await settle(tester);
       await tapLabel(tester, 'Se connecter avec Google');
       expect(model.calls, contains('signInWithGoogle'));
-      await tapLabel(tester, 'Confidentialité et données');
-      expect(find.text('Exporter mes données'), findsOneWidget);
+      await tapLabel(tester, 'Confidentialité');
+      expect(findCaps('Exporter mes données'), findsOneWidget);
       await tapText(tester, 'Supprimer mes données');
       await tapText(tester, 'Supprimer');
       expect(model.calls, contains('deleteAccountData'));
@@ -635,11 +625,11 @@ void main() {
       final model = FakeAppModel(plan: Plan.annual);
       await pumpApp(tester, model);
       await openRoute(tester, Routes.settings, (_) => const SettingsScreen());
-      expect(find.text('Mon abonnement · Annuel'), findsOneWidget);
+      expect(findCaps('Abonnement · Annuel'), findsOneWidget);
       expect(find.text('Renouvelé le 28 octobre 2027.'), findsOneWidget);
-      await tapText(tester, 'Gérer mon abonnement sur Google Play');
+      await tapLabel(tester, 'Gérer mon abonnement sur Google Play');
       expect(model.calls, contains('openManageSubscription'));
-      await tapLabel(tester, 'Téléchargements en Wi-Fi seulement');
+      await tapLabel(tester, 'Télécharger en Wi-Fi seulement');
       expect(model.settings.wifiOnly, isTrue);
       await tearDownApp(tester);
     });
@@ -679,16 +669,14 @@ void main() {
       await pumpApp(tester, model);
       await tapLabel(tester, 'Sommeil');
       expect(
-        find.text(
-          'Mesures indicatives, calculées sur votre téléphone. Ne remplace pas un avis médical.',
-        ),
+        find.text('Indicatif, ne remplace pas un avis médical.'),
         findsOneWidget,
       );
       expect(find.text('Pas encore de nuit'), findsOneWidget);
       await tapText(tester, 'Commencer la nuit');
       expect(model.calls, contains('startNight'));
       expect(find.byType(StandbyScreen), findsOneWidget);
-      expect(find.text('Touchez l’écran pour le réveiller'), findsOneWidget);
+      expect(find.text('Touchez pour réveiller'), findsOneWidget);
       expect(find.textContaining('Il reste'), findsOneWidget);
       await tester.tapAt(const Offset(200, 300));
       await settle(tester);
@@ -703,9 +691,9 @@ void main() {
       await pumpApp(tester, model);
       model.loadingAudio = true;
       await settle(tester);
-      expect(find.text('Chargement des sons…'), findsOneWidget);
+      expect(find.text('Chargement…'), findsOneWidget);
       await tester.pump(const Duration(seconds: 9));
-      expect(find.text('Réseau lent, encore un instant…'), findsOneWidget);
+      expect(find.text('Réseau lent…'), findsOneWidget);
       model.loadingAudio = false;
       await settle(tester);
       expect(find.text('Ambiance de la cascade · Oiseaux · Vent'), findsOneWidget);
@@ -794,7 +782,7 @@ void main() {
         (_) => const ScheduleEditorScreen(),
       );
       await tapText(tester, 'Enregistrer');
-      expect(find.text('Continuer'), findsNothing);
+      expect(findCaps('Continuer'), findsNothing);
       expect(
         find.textContaining('Android ne la demandera plus'),
         findsOneWidget,

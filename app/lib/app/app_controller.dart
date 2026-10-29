@@ -74,27 +74,27 @@ class AppConfig {
   final Duration subscriptionOfflineGrace;
 }
 
-/// Messages shown by the controller (French, plain words).
+/// Messages shown by the controller (French, as few words as possible).
 abstract final class AppMessages {
   static const addedToFavorites = 'Ajouté aux favoris';
   static const removedFromFavorites = 'Retiré des favoris';
-  static String tooManyLayers(int max) => '$max sons au maximum en même temps. Retirez-en un d’abord.';
-  static const nothingToPlay = 'Ajoutez un son dans « Mon mix » pour commencer.';
-  static const contentUnavailable = 'Ce son n’est pas disponible pour le moment. Réessayez plus tard.';
-  static const notDownloaded = 'Ces sons ne sont pas encore téléchargés. Connectez-vous une fois à internet.';
-  static const cannotStart = 'Le son ne peut pas démarrer pour le moment (un appel est peut-être en cours).';
+  static String tooManyLayers(int max) => '$max sons au maximum en même temps. Retirez-en un.';
+  static const nothingToPlay = 'Ajoutez un son dans « Mon mix ».';
+  static const contentUnavailable = 'Son indisponible. Réessayez plus tard.';
+  static const notDownloaded = 'Sons pas encore téléchargés. Connectez-vous une fois.';
+  static const cannotStart = 'Le son ne peut pas démarrer (appel en cours ?).';
   static const shareNotFound = 'Ce lien de partage n’existe plus.';
-  static const shareOffline = 'Pas de connexion pour ouvrir ce lien. Réessayez plus tard.';
+  static const shareOffline = 'Pas de connexion pour ouvrir ce lien.';
   static const premiumActive = 'Merci ! Premium est activé.';
-  static const purchasePending = 'Paiement en attente de confirmation par Google Play.';
-  static const nothingToRestore = 'Aucun achat Premium trouvé pour ce compte Google Play.';
-  static const signInFailed = 'La connexion avec Google n’a pas abouti. Réessayez.';
-  static const signedIn = 'Votre compte Google est relié.';
-  static const deleteOffline = 'Suppression impossible sans connexion. Réessayez plus tard.';
-  static const deleteFailed = 'La suppression n’a pas abouti. Réessayez plus tard.';
-  static const dataDeleted = 'Vos données ont été supprimées.';
+  static const purchasePending = 'Paiement en attente de Google Play.';
+  static const nothingToRestore = 'Aucun achat Premium trouvé.';
+  static const signInFailed = 'Connexion Google impossible. Réessayez.';
+  static const signedIn = 'Compte Google relié.';
+  static const deleteOffline = 'Suppression impossible sans connexion.';
+  static const deleteFailed = 'Suppression impossible. Réessayez plus tard.';
+  static const dataDeleted = 'Données supprimées.';
   static const openPlayManually =
-      'Ouvrez Google Play, touchez votre photo, puis « Paiements et abonnements » et « Abonnements ».';
+      'Google Play › votre photo › Paiements et abonnements › Abonnements.';
   static String openPageManually(Uri uri) => 'La page ne s’ouvre pas. Adresse : $uri';
 }
 

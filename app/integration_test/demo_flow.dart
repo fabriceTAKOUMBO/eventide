@@ -100,14 +100,16 @@ Future<DemoFlowResult> runDemoFlow(
   expect(model.entitlements.premium, isTrue);
   report('demo_mode=on plan=${model.plan.name}');
 
-  // ---- 1. Bienvenue → « Commencer » (already done if this install was used before).
+  // ---- 1. Bienvenue → « Commencer » (already done if this install was used before). Buttons
+  // are drawn in capitals: found by their TalkBack label, which keeps the words as written.
+  final start = find.bySemanticsLabel('Commencer');
   await pumpUntil(
     tester,
-    () => present(find.text('Commencer')) || present(find.byType(HomeScreen)),
+    () => present(start) || present(find.byType(HomeScreen)),
     what: 'the first screen',
   );
-  if (present(find.text('Commencer'))) {
-    await tapWhenPresent(tester, find.text('Commencer'), '« Commencer »');
+  if (present(start)) {
+    await tapWhenPresent(tester, start, '« Commencer »');
   }
   await pumpUntil(tester, () => present(find.byType(HomeScreen)), what: 'Accueil');
   expect(model.onboarded, isTrue);
@@ -154,7 +156,7 @@ Future<DemoFlowResult> runDemoFlow(
   final before = model.schedules.length;
   await tapWhenPresent(tester, find.bySemanticsLabel('Ajouter une programmation'), '« Ajouter une programmation »');
   await pumpUntil(tester, () => present(find.byType(ScheduleEditorScreen)), what: 'the schedule editor');
-  await tapWhenPresent(tester, find.text('Enregistrer'), '« Enregistrer »');
+  await tapWhenPresent(tester, find.bySemanticsLabel('Enregistrer'), '« Enregistrer »');
   // Notifications not seen as granted yet: « Plus tard » (a test cannot answer Android's dialog).
   if (present(find.text('Plus tard'))) {
     await tapWhenPresent(tester, find.text('Plus tard'), '« Plus tard »');

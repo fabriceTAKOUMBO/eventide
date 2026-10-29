@@ -2,6 +2,7 @@
 import 'dart:io';
 import 'dart:ui' as ui;
 
+import 'package:eventide/ui/theme/vitre.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -13,23 +14,32 @@ const String kScreenshotDir =
 
 bool _fontsLoaded = false;
 
-/// Loads Manrope and Fraunces so layouts are measured with the real fonts.
-/// Call it from `setUpAll` (outside the fake-async zone of `testWidgets`).
+/// Loads Manrope, Cormorant Garamond (upright and italic) and Fraunces so layouts are measured
+/// with the real fonts. Call it from `setUpAll` (outside the fake-async zone of `testWidgets`).
 Future<void> loadAppFonts() async {
   if (_fontsLoaded) return;
   _fontsLoaded = true;
-  Future<void> load(String family, String path) async {
-    final file = File(path);
-    if (!file.existsSync()) return;
-    final bytes = file.readAsBytesSync();
-    final loader = FontLoader(family)
-      ..addFont(Future.value(ByteData.view(bytes.buffer)));
+  Future<void> load(String family, List<String> paths) async {
+    final loader = FontLoader(family);
+    for (final path in paths) {
+      final file = File(path);
+      if (!file.existsSync()) continue;
+      final bytes = file.readAsBytesSync();
+      loader.addFont(Future.value(ByteData.view(bytes.buffer)));
+    }
     await loader.load();
   }
 
-  await load('Manrope', 'assets/fonts/Manrope-Variable.ttf');
-  await load('Fraunces', 'assets/fonts/Fraunces-Variable.ttf');
+  await load('Manrope', ['assets/fonts/Manrope-Variable.ttf']);
+  await load(kDisplayFamily, [
+    'assets/fonts/CormorantGaramond-Medium.ttf',
+    'assets/fonts/CormorantGaramond-MediumItalic.ttf',
+  ]);
+  await load('Fraunces', ['assets/fonts/Fraunces-Variable.ttf']);
 }
+
+/// A label drawn in spaced capitals (buttons, eyebrows: [CapsText]), found by its words.
+Finder findCaps(String text) => find.text(text.toUpperCase());
 
 /// Phone view of the mockup (390 × 844 logical px, 3× density), status bar 44 px,
 /// gesture bar 20 px, reduced motion so frames settle.

@@ -6,41 +6,42 @@ import '../theme/vitre.dart';
 import '../widgets/glass.dart';
 import '../widgets/sheet_scaffold.dart';
 
+// Menu paths in the words of each phone (« › » between menus).
 const List<(String, List<String>)> _brands = [
   (
     'Samsung',
     [
-      'Ouvrez Paramètres, puis Applications, puis Eventide.',
-      'Touchez Batterie et choisissez « Non restreinte ».',
+      'Paramètres › Applications › Eventide',
+      'Batterie › « Non restreinte »',
     ],
   ),
   (
     'Xiaomi, Redmi, Poco',
     [
-      'Ouvrez Paramètres, puis Applications, puis Gérer les applications, puis Eventide.',
-      'Touchez Économiseur de batterie et choisissez « Aucune restriction ».',
-      'Activez aussi « Démarrage automatique ».',
+      'Paramètres › Applications › Gérer les applications › Eventide',
+      'Économiseur de batterie › « Aucune restriction »',
+      'Activez « Démarrage automatique »',
     ],
   ),
   (
     'Huawei, Honor',
     [
-      'Ouvrez Paramètres, puis Batterie, puis Lancement d’applications.',
-      'Désactivez la gestion automatique d’Eventide et laissez tout activé.',
+      'Paramètres › Batterie › Lancement d’applications',
+      'Eventide : désactivez la gestion automatique, laissez tout activé',
     ],
   ),
   (
     'Oppo, OnePlus, Realme',
     [
-      'Ouvrez Paramètres, puis Batterie, puis Plus de paramètres ou Optimisation.',
-      'Choisissez Eventide puis « Ne pas optimiser » ou « Autoriser l’activité en arrière-plan ».',
+      'Paramètres › Batterie › Plus de paramètres (ou Optimisation)',
+      'Eventide › « Ne pas optimiser » (ou « Autoriser l’activité en arrière-plan »)',
     ],
   ),
   (
     'Autres téléphones',
     [
-      'Ouvrez Paramètres, puis Applications, puis Eventide, puis Batterie.',
-      'Choisissez l’option qui laisse l’application fonctionner sans restriction.',
+      'Paramètres › Applications › Eventide › Batterie',
+      '« Sans restriction »',
     ],
   ),
 ];
@@ -53,7 +54,7 @@ class BatteryGuideScreen extends StatelessWidget {
     final p = Vitre.of(context);
     return VitreSheet(
       title: 'Si le son ne démarre pas',
-      titleSize: 24,
+      titleSize: 28,
       top: 70,
       panelAlpha: 0.74,
       backgroundBrightness: 0.5,
@@ -61,9 +62,9 @@ class BatteryGuideScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SheetText(
-            'Certains téléphones arrêtent les applications pour économiser la batterie. Voici comment laisser Eventide démarrer à l’heure.',
+            'Laissez Eventide fonctionner en arrière-plan :',
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           for (final (brand, steps) in _brands)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
@@ -75,7 +76,10 @@ class BatteryGuideScreen extends StatelessWidget {
                   children: [
                     Semantics(
                       header: true,
-                      child: Text(brand, style: manrope(19, weight: 700)),
+                      child: CapsText(
+                        brand,
+                        style: VitreType.eyebrow(color: p.text(0.74)),
+                      ),
                     ),
                     const SizedBox(height: 8),
                     for (var i = 0; i < steps.length; i++)
@@ -88,9 +92,8 @@ class BatteryGuideScreen extends StatelessWidget {
                               width: 26,
                               child: Text(
                                 '${i + 1}.',
-                                style: manrope(
-                                  17,
-                                  weight: 700,
+                                style: VitreType.label(
+                                  size: 15,
                                   color: p.text(0.84),
                                 ),
                               ),
@@ -98,11 +101,7 @@ class BatteryGuideScreen extends StatelessWidget {
                             Expanded(
                               child: Text(
                                 steps[i],
-                                style: manrope(
-                                  17,
-                                  height: 1.4,
-                                  color: p.text(0.84),
-                                ),
+                                style: VitreType.body(color: p.text(0.86)),
                               ),
                             ),
                           ],
@@ -112,12 +111,7 @@ class BatteryGuideScreen extends StatelessWidget {
                 ),
               ),
             ),
-          Text(
-            'Les noms des menus changent selon la version d’Android.',
-            textAlign: TextAlign.center,
-            style: manrope(16, color: p.text(0.72)),
-          ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 8),
           // Opens Eventide's page in Android settings (first step of every guide).
           PrimaryButton(
             label: 'Ouvrir les réglages',

@@ -82,25 +82,16 @@ class _LandscapesSheetState extends State<LandscapesSheet> {
               const SizedBox(height: 18),
               LinkRow(
                 title: 'Fond d’écran',
-                subtitle: 'Mettre « ${selectedLandscape.name} » sur l’écran d’accueil ou verrouillé',
                 onTap: () => WallpaperSheet.open(context, selectedLandscape.id),
               ),
             ],
             if (!premium) ...[
               const SizedBox(height: 18),
               SecondaryButton(
-                label: 'Débloquer tous les paysages',
-                height: 56,
-                fontSize: 18,
-                weight: 600,
+                label: 'Tout débloquer',
+                semanticLabel: 'Débloquer tous les paysages avec Premium',
                 borderAlpha: 0.25,
                 onPressed: () => Nav.premium(context),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Version gratuite : ${catalog.landscapes.where((l) => l.free).length} paysages',
-                textAlign: TextAlign.center,
-                style: manrope(16, color: Vitre.of(context).text(0.72)),
               ),
             ],
           ],
@@ -157,12 +148,10 @@ class _TextTabs extends StatelessWidget {
                         children: [
                           Text(
                             labels[i],
-                            style: manrope(
-                              18,
-                              weight: 600,
+                            style: VitreType.label(
                               color: i == selected
                                   ? VitreColors.white
-                                  : p.text(0.7),
+                                  : p.text(0.68),
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -278,7 +267,7 @@ class _Grid extends StatelessWidget {
                     l.name,
                     maxLines: 3,
                     overflow: TextOverflow.ellipsis,
-                    style: manrope(17, weight: 600, height: 1.2),
+                    style: VitreType.display(size: 21, height: 1.05),
                   ),
                 ),
                 if (selected)
@@ -352,14 +341,11 @@ class _FavoritesList extends StatelessWidget {
             children: [
               VIcon(VIcons.heart, size: 28, color: p.text(0.9)),
               const SizedBox(height: 10),
+              Text('Aucun favori', style: VitreType.label()),
+              const SizedBox(height: 4),
               Text(
-                'Aucun favori pour l’instant',
-                style: manrope(19, weight: 700),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Touchez le cœur de l’accueil pour garder un paysage avec ses sons.',
-                style: manrope(17, height: 1.4, color: p.text(0.8)),
+                'Touchez le cœur sur l’accueil.',
+                style: VitreType.small(color: p.text(0.74)),
               ),
             ],
           ),
@@ -412,11 +398,14 @@ class _FavoritesList extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(l.name, style: manrope(18, weight: 700)),
+                                  Text(
+                                    l.name,
+                                    style: VitreType.display(size: 21),
+                                  ),
                                   if (names.isNotEmpty)
                                     Text(
                                       names,
-                                      style: manrope(16, color: p.text(0.72)),
+                                      style: VitreType.small(color: p.text(0.7)),
                                     ),
                                 ],
                               ),
@@ -446,9 +435,9 @@ class _FavoritesList extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(top: 8),
           child: Text(
-            'Version gratuite : $max favoris. Premium n’a pas de limite.',
+            '$max favoris en version gratuite',
             textAlign: TextAlign.center,
-            style: manrope(16, color: p.text(0.72)),
+            style: VitreType.small(color: p.text(0.7)),
           ),
         ),
       );

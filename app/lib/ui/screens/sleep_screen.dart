@@ -60,13 +60,13 @@ class SleepScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Pas encore de nuit', style: manrope(22, weight: 600)),
+                  Text('Pas encore de nuit', style: VitreType.title(size: 26)),
                   const SizedBox(height: 6),
                   Text(
                     tracking
-                        ? 'Touchez « Commencer la nuit » ce soir : la durée de votre nuit apparaîtra ici demain matin.'
-                        : 'Activez le suivi du sommeil, puis touchez « Commencer la nuit » ce soir.',
-                    style: manrope(17, height: 1.4, color: p.text(0.8)),
+                        ? 'Touchez « Commencer la nuit » ce soir.'
+                        : 'Activez le suivi, puis « Commencer la nuit ».',
+                    style: VitreType.small(color: p.text(0.76)),
                   ),
                 ],
               ),
@@ -87,23 +87,17 @@ class SleepScreen extends StatelessWidget {
                       VIcon(VIcons.lock, size: 20, color: p.text(0.9)),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
+                        child: CapsText(
                           '7 derniers jours',
-                          style: manrope(17, weight: 600, color: p.text(0.78)),
+                          style: VitreType.eyebrow(color: p.text(0.74)),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'L’historique de vos nuits est inclus dans Premium.',
-                    style: manrope(17, height: 1.4, color: p.text(0.86)),
-                  ),
                   const SizedBox(height: 14),
                   SecondaryButton(
-                    label: 'Découvrir Premium',
-                    height: 56,
-                    fontSize: 18,
+                    label: 'Avec Premium',
+                    semanticLabel: 'Historique des nuits avec Premium',
                     onPressed: () => Nav.premium(context),
                   ),
                 ],
@@ -117,14 +111,14 @@ class SleepScreen extends StatelessWidget {
               child: Row(
                 children: [
                   Expanded(
-                    child: Text(
+                    child: CapsText(
                       'Écoute',
-                      style: manrope(16, color: p.text(0.76)),
+                      style: VitreType.eyebrow(color: p.text(0.74)),
                     ),
                   ),
                   Text(
                     formatDuration(Duration(minutes: night.listenedMinutes)),
-                    style: manrope(24, weight: 700),
+                    style: VitreType.figure(24, weight: 400),
                   ),
                 ],
               ),
@@ -138,14 +132,13 @@ class SleepScreen extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'Mesures indicatives, calculées sur votre téléphone. Ne remplace pas un avis médical.',
+            'Indicatif, ne remplace pas un avis médical.',
             textAlign: TextAlign.center,
-            style: manrope(16, height: 1.35, color: p.text(0.72)),
+            style: VitreType.small(size: 13, color: p.text(0.66)),
           ),
           const SizedBox(height: 18),
           SwitchRow(
             title: 'Suivi du sommeil',
-            subtitle: 'Durée de vos nuits, sur ce téléphone',
             value: tracking,
             onChanged: model.setSleepTracking,
           ),
@@ -188,7 +181,7 @@ class _SmallButton extends StatelessWidget {
           children: [
             VIcon(icon, size: 22, color: VitreColors.white),
             const SizedBox(width: 8),
-            Flexible(child: Text(label, style: manrope(17, weight: 700))),
+            Flexible(child: Text(label, style: VitreType.label(size: 15))),
           ],
         ),
       ),
@@ -211,24 +204,16 @@ class _LastNightCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          CapsText(
             'Cette nuit',
-            style: manrope(17, weight: 600, color: p.text(0.78)),
+            style: VitreType.eyebrow(color: p.text(0.74)),
           ),
-          const SizedBox(height: 4),
-          Text(
-            formatDuration(night.duration),
-            style: manrope(
-              56,
-              weight: 300,
-              letterSpacingEm: -0.02,
-              height: 1.1,
-            ),
-          ),
+          const SizedBox(height: 6),
+          Text(formatDuration(night.duration), style: VitreType.figure(52)),
           const SizedBox(height: 4),
           Text(
             'Couché ${formatClock(start.hour, start.minute)} · Réveil ${formatClock(end.hour, end.minute)}',
-            style: manrope(17, color: p.text(0.78)),
+            style: VitreType.small(size: 14, color: p.text(0.76)),
           ),
         ],
       ),
@@ -256,14 +241,14 @@ class _HistoryCard extends StatelessWidget {
             alignment: WrapAlignment.spaceBetween,
             runSpacing: 4,
             children: [
-              Text(
+              CapsText(
                 '7 derniers jours',
-                style: manrope(17, weight: 600, color: p.text(0.78)),
+                style: VitreType.eyebrow(color: p.text(0.74)),
               ),
               if (stats.average7 != null)
                 Text(
                   'Moyenne ${formatDuration(stats.average7!)}',
-                  style: manrope(17, weight: 700),
+                  style: VitreType.label(size: 15),
                 ),
             ],
           ),
@@ -311,12 +296,12 @@ class _HistoryCard extends StatelessWidget {
                       _dayLetters[days[i].day.weekday - 1],
                       textAlign: TextAlign.center,
                       maxLines: 1,
-                      style: manrope(
-                        16,
-                        weight: i == days.length - 1 ? 700 : 500,
+                      style: VitreType.label(
+                        size: 14,
+                        weight: i == days.length - 1 ? 600 : 400,
                         color: i == days.length - 1
                             ? VitreColors.white
-                            : p.text(0.72),
+                            : p.text(0.7),
                       ),
                     ),
                   ),

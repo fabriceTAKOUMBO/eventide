@@ -111,20 +111,15 @@ class _OfflineScreenState extends State<OfflineScreen> {
                       header: true,
                       child: Text(
                         'Pas de connexion',
-                        style: manrope(
-                          30,
-                          weight: 600,
-                          letterSpacingEm: -0.02,
-                          height: 1.15,
-                        ),
+                        style: VitreType.title(size: 36),
                       ),
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'La version gratuite a besoin d’internet pour jouer vos sons. Reconnectez-vous, ou passez à Premium pour écouter sans connexion.',
-                      style: manrope(19, height: 1.4, color: p.text(0.84)),
+                      'La version gratuite a besoin d’internet. Premium s’écoute hors connexion.',
+                      style: VitreType.body(size: 16, color: p.text(0.84)),
                     ),
-                    const SizedBox(height: 26),
+                    const SizedBox(height: 24),
                     PrimaryButton(
                       label: 'Réessayer',
                       busy: _retrying,

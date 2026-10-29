@@ -90,6 +90,16 @@ flutter:
     - family: Manrope
       fonts:
         - asset: assets/fonts/Manrope-Variable.ttf
+    # Display face (landscape names, titles): npm @expo-google-fonts/cormorant-garamond@0.4.1,
+    # files 500Medium and 500Medium_Italic unchanged (SIL OFL, OFL-CormorantGaramond.txt).
+    - family: Cormorant Garamond
+      fonts:
+        - asset: assets/fonts/CormorantGaramond-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/CormorantGaramond-MediumItalic.ttf
+          weight: 500
+          style: italic
+    # Wordmark only (brand identity, same drawing as assets/brand/wordmark.svg).
     - family: Fraunces
       fonts:
         - asset: assets/fonts/Fraunces-Variable.ttf

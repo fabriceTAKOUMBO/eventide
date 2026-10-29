@@ -218,15 +218,16 @@ class RoundIconButton extends StatelessWidget {
   }
 }
 
-/// White primary button (64 px, radius 32, 20 px bold). Grows with large text.
+/// White primary button (56 px, fully rounded, label in spaced capitals). Grows with large
+/// text; TalkBack reads the label as written.
 class PrimaryButton extends StatelessWidget {
   const PrimaryButton({
     super.key,
     required this.label,
     required this.onPressed,
     this.icon,
-    this.height = 64,
-    this.fontSize = 20,
+    this.height = 56,
+    this.fontSize = VitreType.buttonSize,
     this.busy = false,
     this.semanticLabel,
   });
@@ -293,12 +294,11 @@ class PrimaryButton extends StatelessWidget {
                         : _IconLabel(
                             icon: icon,
                             label: label,
-                            style: manrope(
-                              fontSize,
-                              weight: 700,
+                            style: VitreType.button(
+                              size: fontSize,
                               color: VitreColors.ink,
                             ),
-                            iconSize: 24,
+                            iconSize: 20,
                             color: VitreColors.ink,
                           ),
                   ),
@@ -312,16 +312,15 @@ class PrimaryButton extends StatelessWidget {
   }
 }
 
-/// Glass secondary button with a white hairline border.
+/// Glass secondary button with a white hairline border (label in spaced capitals).
 class SecondaryButton extends StatelessWidget {
   const SecondaryButton({
     super.key,
     required this.label,
     required this.onPressed,
     this.icon,
-    this.height = 60,
-    this.fontSize = 19,
-    this.weight = 700,
+    this.height = 52,
+    this.fontSize = VitreType.buttonSize,
     this.borderAlpha = 0.28,
     this.fillAlpha = 0.08,
     this.semanticLabel,
@@ -333,7 +332,6 @@ class SecondaryButton extends StatelessWidget {
   final VIconData? icon;
   final double height;
   final double fontSize;
-  final int weight;
   final double borderAlpha;
   final double fillAlpha;
   final String? semanticLabel;
@@ -369,8 +367,8 @@ class SecondaryButton extends StatelessWidget {
               : _IconLabel(
                   icon: icon,
                   label: label,
-                  style: manrope(fontSize, weight: weight),
-                  iconSize: 22,
+                  style: VitreType.button(size: fontSize),
+                  iconSize: 19,
                   color: VitreColors.white,
                 ),
         ),
@@ -386,9 +384,9 @@ class LinkButton extends StatelessWidget {
     required this.label,
     required this.onPressed,
     this.underline = false,
-    this.fontSize = 17,
-    this.weight = 600,
-    this.alpha = 0.88,
+    this.fontSize = 14,
+    this.weight = 500,
+    this.alpha = 0.86,
     this.height = 48,
   });
 
@@ -416,8 +414,8 @@ class LinkButton extends StatelessWidget {
             child: Text(
               label,
               textAlign: TextAlign.center,
-              style: manrope(
-                fontSize,
+              style: VitreType.label(
+                size: fontSize,
                 weight: weight,
                 color: color,
                 decoration: underline ? TextDecoration.underline : null,
@@ -447,20 +445,20 @@ class _IconLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final text = Text(label, textAlign: TextAlign.center, style: style);
+    final text = CapsText(label, textAlign: TextAlign.center, style: style);
     if (icon == null) return text;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         VIcon(icon!, size: iconSize, color: color),
-        const SizedBox(width: 10),
+        const SizedBox(width: 12),
         Flexible(child: text),
       ],
     );
   }
 }
 
-/// Small uppercase-free section label (« Écoute », « Jours »…).
+/// Section label in spaced capitals (« ÉCOUTE », « JOURS »…), a header for TalkBack.
 class SectionLabel extends StatelessWidget {
   const SectionLabel(
     this.text, {
@@ -477,9 +475,9 @@ class SectionLabel extends StatelessWidget {
       padding: padding,
       child: Semantics(
         header: true,
-        child: Text(
+        child: CapsText(
           text,
-          style: manrope(16, weight: 700, color: Vitre.of(context).text(0.7)),
+          style: VitreType.eyebrow(color: Vitre.of(context).text(0.7)),
         ),
       ),
     );
@@ -571,7 +569,7 @@ class SwitchRow extends StatelessWidget {
                 ? onLockedTap
                 : (onChanged == null ? null : () => onChanged!(!value)),
             child: ConstrainedBox(
-              constraints: const BoxConstraints(minHeight: 68),
+              constraints: BoxConstraints(minHeight: subtitle == null ? 58 : 66),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -583,12 +581,12 @@ class SwitchRow extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(title, style: manrope(18, weight: 700)),
+                        Text(title, style: VitreType.label()),
                         if (subtitle != null) ...[
                           const SizedBox(height: 2),
                           Text(
                             subtitle!,
-                            style: manrope(16, color: p.text(0.72)),
+                            style: VitreType.small(color: p.text(0.7)),
                           ),
                         ],
                       ],
@@ -660,7 +658,7 @@ class LinkRow extends StatelessWidget {
             onTap: onTap,
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                minHeight: subtitle == null ? 60 : 68,
+                minHeight: subtitle == null ? 58 : 66,
               ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -678,12 +676,12 @@ class LinkRow extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(title, style: manrope(18, weight: 700)),
+                          Text(title, style: VitreType.label()),
                           if (subtitle != null) ...[
                             const SizedBox(height: 2),
                             Text(
                               subtitle!,
-                              style: manrope(16, color: p.text(0.72)),
+                              style: VitreType.small(color: p.text(0.7)),
                             ),
                           ],
                         ],
@@ -714,8 +712,8 @@ class ChoiceChipButton extends StatelessWidget {
     required this.label,
     required this.selected,
     required this.onTap,
-    this.height = 56,
-    this.fontSize = 17,
+    this.height = 52,
+    this.fontSize = 15,
     this.semanticLabel,
     this.radio = true,
     this.width,
@@ -767,9 +765,8 @@ class ChoiceChipButton extends StatelessWidget {
             child: Text(
               label,
               textAlign: TextAlign.center,
-              style: manrope(
-                fontSize,
-                weight: 700,
+              style: VitreType.label(
+                size: fontSize,
                 color: selected ? VitreColors.ink : VitreColors.white,
               ),
             ),
@@ -789,7 +786,7 @@ class SegmentedTabs extends StatelessWidget {
     required this.onSelected,
     this.height = 52,
     this.expand = true,
-    this.fontSize = 17,
+    this.fontSize = 15,
     this.semanticGroupLabel,
     this.backgroundAlpha,
     this.dark = false,
@@ -872,9 +869,8 @@ class SegmentedTabs extends StatelessWidget {
                 labels[i],
                 textAlign: TextAlign.center,
                 maxLines: 1,
-                style: manrope(
-                  fontSize,
-                  weight: 700,
+                style: VitreType.label(
+                  size: fontSize,
                   color: on ? VitreColors.ink : p.text(0.86),
                 ),
               ),

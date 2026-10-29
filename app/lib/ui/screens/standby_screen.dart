@@ -109,21 +109,21 @@ class _StandbyScreenState extends State<StandbyScreen> {
                           Text(
                             remaining,
                             textAlign: TextAlign.center,
-                            style: manrope(26, weight: 300, color: dim),
+                            style: VitreType.figure(26, weight: 200, color: dim),
                           ),
                           if (landscape != null) ...[
                             const SizedBox(height: 8),
                             Text(
                               landscape.name,
                               textAlign: TextAlign.center,
-                              style: manrope(17, color: dimmer),
+                              style: VitreType.display(size: 22, color: dimmer),
                             ),
                           ],
                           const Spacer(flex: 6),
                           Text(
-                            'Touchez l’écran pour le réveiller',
+                            'Touchez pour réveiller',
                             textAlign: TextAlign.center,
-                            style: manrope(16, color: dimmer),
+                            style: VitreType.small(color: dimmer),
                           ),
                           const SizedBox(height: 44),
                         ],

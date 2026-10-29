@@ -137,12 +137,7 @@ class HomeMenu extends StatelessWidget {
     data.name,
     maxLines: maxLines,
     overflow: TextOverflow.ellipsis,
-    style: manrope(
-      size,
-      weight: 600,
-      letterSpacingEm: size > 21 ? -0.015 : -0.01,
-      height: 1.15,
-    ),
+    style: VitreType.display(size: size, height: 1.05),
   );
 
   Widget _subtitle(BuildContext context) {
@@ -150,10 +145,10 @@ class HomeMenu extends StatelessWidget {
     if (data.locked) {
       return Row(
         children: [
-          const VIcon(VIcons.lock, size: 17, color: VitreColors.white),
+          const VIcon(VIcons.lock, size: 15, color: VitreColors.white),
           const SizedBox(width: 6),
           Flexible(
-            child: Text('Avec Premium', style: manrope(17, weight: 600)),
+            child: Text('Avec Premium', style: VitreType.label(size: 14)),
           ),
         ],
       );
@@ -175,7 +170,7 @@ class HomeMenu extends StatelessWidget {
             data.subtitle,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: manrope(17, color: p.text(0.78)),
+            style: VitreType.small(size: 14, color: p.text(0.76)),
           ),
         ),
       ],
@@ -263,7 +258,7 @@ class HomeMenu extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _title(context, size: 23, maxLines: 2),
+                        _title(context, size: 30, maxLines: 2),
                         const SizedBox(height: 4),
                         _subtitle(context),
                       ],
@@ -349,23 +344,17 @@ class HomeMenu extends StatelessWidget {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Text(
+                                    CapsText(
                                       data.scheduleTop,
-                                      style: manrope(
-                                        16,
-                                        weight: 500,
-                                        color: p.text(0.78),
+                                      style: VitreType.eyebrow(
+                                        color: p.text(0.74),
                                       ),
                                     ),
-                                    const SizedBox(height: 1),
+                                    const SizedBox(height: 3),
                                     Text(
                                       data.scheduleMain,
-                                      style: manrope(
-                                        data.scheduleMain == 'Programmer'
-                                            ? 20
-                                            : 22,
-                                        weight: 700,
-                                        letterSpacingEm: -0.01,
+                                      style: VitreType.label(
+                                        size: 17,
                                         height: 1.15,
                                       ),
                                     ),
@@ -396,7 +385,7 @@ class HomeMenu extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(20, 28, 14, 14),
           child: Row(
             children: [
-              Expanded(child: _title(context, size: 20, maxLines: 2)),
+              Expanded(child: _title(context, size: 26, maxLines: 2)),
               const SizedBox(width: 10),
               _mainButton(context, 64),
             ],
@@ -444,7 +433,7 @@ class _Tile extends StatelessWidget {
               child: FittedBox(
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerLeft,
-                child: Text(label, style: manrope(18, weight: 700)),
+                child: Text(label, style: VitreType.label()),
               ),
             ),
           ],

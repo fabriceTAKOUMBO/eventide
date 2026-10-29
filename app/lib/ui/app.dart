@@ -117,7 +117,7 @@ class _EventideAppState extends State<EventideApp> {
         if (!model.playing && !model.rules.offlineAllowed(model.plan)) {
           _navigator.currentState?.popUntil((r) => r.isFirst);
         } else {
-          _toasts.show('Pas de connexion pour le moment');
+          _toasts.show('Pas de connexion');
         }
       case ToastEvent(:final message):
         _toasts.show(message);
@@ -125,7 +125,7 @@ class _EventideAppState extends State<EventideApp> {
         _navigator.currentState?.popUntil((r) => r.isFirst);
         _toasts.show(
           lockedItems == 0
-              ? 'Mix reçu, prêt à écouter'
+              ? 'Mix reçu'
               : lockedItems == 1
               ? 'Mix reçu · 1 élément réservé à Premium'
               : 'Mix reçu · $lockedItems éléments réservés à Premium',

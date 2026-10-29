@@ -1,6 +1,6 @@
 // « Fond d'écran »: the landscape as the phone's wallpaper (docs/app/architecture.md
 // « Fond d'écran vidéo »). Opened from Paysages. A live wallpaper (the looping video, muted, on
-// the home screen; the lock screen depends on the phone), explained in plain words.
+// the home and lock screens), in as few words as possible.
 import 'package:flutter/material.dart';
 
 import '../../app/app_model.dart';
@@ -14,24 +14,18 @@ import '../widgets/sheet_scaffold.dart';
 import '../widgets/toast.dart';
 import 'home/home_menu.dart' show LandscapeThumbnail;
 
-/// Messages of the sheet (French, plain words).
+/// Messages of the sheet (French, as few words as possible).
 abstract final class WallpaperMessages {
   /// Short enough for one line on a 384-dp-wide phone (Galaxy S24) at the default text size.
   static const liveTitle = 'Fond d’écran animé';
   static const stillTitle = 'Mettre en fond d’écran';
-  static const liveText =
-      'Le paysage bouge doucement sur l’écran d’accueil, sans aucun son. Android affiche un '
-      'aperçu : touchez « Définir comme fond d’écran » pour confirmer. Sur l’écran verrouillé, '
-      'cela dépend du téléphone. La vidéo se met en pause dès qu’elle n’est plus visible, pour '
-      'économiser la batterie.';
-  static const stillText =
-      'Ce paysage n’a pas de vidéo sur ce téléphone : son image fixe sera utilisée.';
-  static const lockedText = 'Ce paysage fait partie de Premium.';
-  static const nothingText = 'Ce paysage n’a pas encore d’image à mettre en fond d’écran.';
+  static const liveText = 'Écran d’accueil et écran verrouillé, sans son.';
+  static const stillText = 'Pas encore de vidéo pour ce paysage.';
+  static const lockedText = 'Réservé à Premium.';
+  static const nothingText = 'Pas encore d’image pour ce paysage.';
   static const unsupported = 'Ce téléphone ne permet pas les fonds d’écran animés.';
-  static const unavailable =
-      'La vidéo de ce paysage n’est pas encore sur le téléphone. Réessayez avec une connexion.';
-  static const failed = 'Le fond d’écran n’a pas pu être ouvert. Réessayez.';
+  static const unavailable = 'Vidéo pas encore téléchargée. Réessayez avec une connexion.';
+  static const failed = 'Ouverture impossible. Réessayez.';
 }
 
 class WallpaperSheet extends StatefulWidget {
@@ -82,7 +76,7 @@ class _WallpaperSheetState extends State<WallpaperSheet> {
     final support = model.wallpaperSupport;
     final video = LandscapeImages.hasVideo(landscape.id);
     final still = LandscapeImages.providerFor(landscape.id) != null;
-    final explanation = manrope(16, height: 1.4, color: p.text(0.78));
+    final explanation = VitreType.small(size: 14, color: p.text(0.74));
 
     final children = <Widget>[
       Row(
@@ -100,11 +94,11 @@ class _WallpaperSheetState extends State<WallpaperSheet> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(landscape.name, style: manrope(21, weight: 700, height: 1.2)),
-                const SizedBox(height: 2),
+                Text(landscape.name, style: VitreType.display(size: 26)),
+                const SizedBox(height: 4),
                 Text(
-                  video ? 'Paysage vivant, sans son' : 'Image du paysage',
-                  style: manrope(16, color: p.text(0.72)),
+                  video ? 'Paysage vivant' : 'Image fixe',
+                  style: VitreType.small(color: p.text(0.7)),
                 ),
               ],
             ),
@@ -120,8 +114,6 @@ class _WallpaperSheetState extends State<WallpaperSheet> {
         const SizedBox(height: 14),
         PrimaryButton(
           label: 'Découvrir Premium',
-          height: 60,
-          fontSize: 19,
           onPressed: () => Nav.premium(context),
         ),
       ]);
@@ -131,13 +123,15 @@ class _WallpaperSheetState extends State<WallpaperSheet> {
       children.addAll([
         PrimaryButton(
           label: video ? WallpaperMessages.liveTitle : WallpaperMessages.stillTitle,
-          height: 60,
-          fontSize: 18,
           busy: _applying,
           onPressed: () => _apply(model),
         ),
         const SizedBox(height: 10),
-        Text(video ? WallpaperMessages.liveText : WallpaperMessages.stillText, style: explanation),
+        Text(
+          video ? WallpaperMessages.liveText : WallpaperMessages.stillText,
+          textAlign: TextAlign.center,
+          style: explanation,
+        ),
       ]);
     } else {
       children.add(Text(WallpaperMessages.nothingText, style: explanation));

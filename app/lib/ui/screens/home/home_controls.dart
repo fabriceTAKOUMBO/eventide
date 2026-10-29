@@ -117,7 +117,7 @@ class HomeTopBar extends StatelessWidget {
                                       textScaler: MediaQuery.textScalerOf(
                                         context,
                                       ).clamp(maxScaleFactor: 1.6),
-                                      style: manrope(17, weight: 700),
+                                      style: VitreType.label(size: 15),
                                     ),
                                     const SizedBox(width: 8),
                                     Opacity(
@@ -379,7 +379,7 @@ class TimerMenu extends StatelessWidget {
                             Expanded(
                               child: Text(
                                 label,
-                                style: manrope(18, weight: 600),
+                                style: VitreType.label(),
                               ),
                             ),
                             const SizedBox(width: 8),

@@ -366,7 +366,7 @@ class _HomeScreenState extends State<HomeScreen>
         if (name != null) names.add(name);
       }
     }
-    if (names.isEmpty) return 'Aucun son pour l’instant';
+    if (names.isEmpty) return 'Sans son';
     return names.take(3).join(' · ');
   }
 
@@ -390,7 +390,7 @@ class _HomeScreenState extends State<HomeScreen>
       style: shown.style,
       name: shown.name,
       subtitle: loading
-          ? (_slow ? 'Réseau lent, encore un instant…' : 'Chargement des sons…')
+          ? (_slow ? 'Réseau lent…' : 'Chargement…')
           : _soundsLine(model, shown),
       locked: locked,
       playing: model.playing,
@@ -702,7 +702,7 @@ class _SwipeHint extends StatelessWidget {
               child: Text(
                 'Balayez pour changer de paysage',
                 textAlign: TextAlign.center,
-                style: manrope(17, weight: 600),
+                style: VitreType.label(size: 15),
               ),
             ),
           ],
