@@ -50,7 +50,6 @@ class HomeMenu extends StatelessWidget {
     required this.onUnlock,
     required this.onLandscapes,
     required this.onMix,
-    required this.onVoice,
     required this.onSchedule,
   });
 
@@ -61,7 +60,6 @@ class HomeMenu extends StatelessWidget {
   final VoidCallback onUnlock;
   final VoidCallback onLandscapes;
   final VoidCallback onMix;
-  final VoidCallback onVoice;
   final VoidCallback onSchedule;
 
   @override
@@ -322,8 +320,6 @@ class HomeMenu extends StatelessWidget {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  _VoicePill(onTap: onVoice),
-                  const SizedBox(width: 12),
                   Expanded(
                     child: Pressable(
                       onTap: onSchedule,
@@ -402,15 +398,6 @@ class HomeMenu extends StatelessWidget {
             children: [
               Expanded(child: _title(context, size: 20, maxLines: 2)),
               const SizedBox(width: 10),
-              RoundIconButton(
-                icon: VIcons.mic,
-                label: 'Régler à la voix',
-                onPressed: onVoice,
-                size: 56,
-                iconSize: 26,
-                fillAlpha: 0.1,
-              ),
-              const SizedBox(width: 10),
               _mainButton(context, 64),
             ],
           ),
@@ -459,53 +446,6 @@ class _Tile extends StatelessWidget {
                 alignment: Alignment.centerLeft,
                 child: Text(label, style: manrope(18, weight: 700)),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _VoicePill extends StatelessWidget {
-  const _VoicePill({required this.onTap});
-
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = Vitre.of(context);
-    return Pressable(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(34),
-      semanticLabel: 'Régler à la voix',
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 68, minWidth: 116),
-        padding: const EdgeInsets.fromLTRB(10, 6, 14, 6),
-        decoration: BoxDecoration(
-          color: p.fill(0.1),
-          borderRadius: BorderRadius.circular(34),
-          border: Border.all(color: p.border(0.2)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 46,
-              height: 46,
-              decoration: const BoxDecoration(
-                color: VitreColors.white,
-                shape: BoxShape.circle,
-              ),
-              alignment: Alignment.center,
-              child: const VIcon(VIcons.mic, size: 26, color: VitreColors.ink),
-            ),
-            const SizedBox(width: 10),
-            Text(
-              'Voix',
-              textScaler: MediaQuery.textScalerOf(context)
-                  .clamp(maxScaleFactor: 1.5),
-              style: manrope(18, weight: 700),
             ),
           ],
         ),

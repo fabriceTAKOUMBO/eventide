@@ -2,12 +2,10 @@
 // 1.0 and 2.0 (and with the in-app « Très grande » size and high contrast).
 import 'package:eventide/app/app_model.dart';
 import 'package:eventide/core/catalog.dart';
-import 'package:eventide/core/ops.dart' show ChangeLine;
 import 'package:eventide/core/plan.dart';
 import 'package:eventide/core/settings.dart';
 import 'package:eventide/ui/navigation.dart';
 import 'package:eventide/ui/screens/battery_guide_screen.dart';
-import 'package:eventide/ui/screens/credits_screen.dart';
 import 'package:eventide/ui/screens/landscapes_sheet.dart';
 import 'package:eventide/ui/screens/mix_sheet.dart';
 import 'package:eventide/ui/screens/premium_screen.dart';
@@ -18,7 +16,6 @@ import 'package:eventide/ui/screens/settings_screen.dart';
 import 'package:eventide/ui/screens/share_screen.dart';
 import 'package:eventide/ui/screens/sleep_screen.dart';
 import 'package:eventide/ui/screens/standby_screen.dart';
-import 'package:eventide/ui/screens/voice_screen.dart';
 import 'package:eventide/ui/widgets/permission_dialog.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -41,39 +38,7 @@ final List<_Screen> _sheets = [
   (Routes.premium, (_) => const PremiumScreen()),
   (Routes.settings, (_) => const SettingsScreen()),
   (Routes.privacy, (_) => const PrivacyScreen()),
-  (Routes.credits, (_) => const CreditsScreen()),
   (Routes.batteryGuide, (_) => const BatteryGuideScreen()),
-];
-
-const List<VoiceState> _voiceStates = [
-  VoiceListening(
-    partialText:
-        'Mets le minuteur sur 1 h et programme la pluie tous les soirs à 22 h',
-    soundLevel: 0.5,
-  ),
-  VoiceThinking(phrase: 'Mets le minuteur sur 1 h'),
-  VoiceResult(
-    phrase:
-        'Mets le minuteur sur 1 h et programme la pluie tous les soirs à 22 h',
-    changes: [
-      ChangeLine('Minuteur', 'Arrêt après 1 h'),
-      ChangeLine('Programmation', 'Tous les jours à 22 h · pluie douce'),
-    ],
-    quotaLabel: 'Essai gratuit · 2 demandes restantes',
-  ),
-  VoiceRephrase(
-    phrase: 'Mets le truc',
-    message:
-        'Je n’ai pas bien compris. Dites par exemple « Ajoute de la pluie ».',
-  ),
-  VoiceRefused(
-    phrase: 'Quelle heure est-il ?',
-    message: 'Je peux seulement régler les sons, le paysage et le minuteur.',
-  ),
-  VoiceError(
-    message: 'Sans connexion, je ne peux pas comprendre votre demande.',
-    offline: true,
-  ),
 ];
 
 void main() {
@@ -155,22 +120,9 @@ void main() {
         await tearDownApp(tester);
       });
 
-      testWidgets('voice states and dialogs', (tester) async {
+      testWidgets('permission dialogs', (tester) async {
         usePhoneView(tester, textScale: scale);
-        final model = FakeAppModel(granted: {PermissionKind.microphone});
-        await pumpApp(tester, model);
-        await openRoute(tester, Routes.voice, (_) => const VoiceScreen());
-        for (final state in _voiceStates) {
-          model.voiceState = state;
-          await settle(tester);
-          expect(
-            tester.takeException(),
-            isNull,
-            reason: state.runtimeType.toString(),
-          );
-        }
-        navigatorOf(tester).pop();
-        await settle(tester);
+        await pumpApp(tester, FakeAppModel());
         final context = tester.element(find.byType(Navigator).first);
         for (final kind in PermissionKind.values) {
           final model2 = FakeAppModel();
@@ -184,10 +136,7 @@ void main() {
           expect(await result, isFalse);
         }
         // Permanently denied: the dialog sends to Android's settings instead.
-        for (final kind in const [
-          PermissionKind.microphone,
-          PermissionKind.notifications,
-        ]) {
+        for (final kind in const [PermissionKind.notifications]) {
           final model3 = FakeAppModel(deniedForever: {kind});
           final result = explainAndRequestPermission(context, model3, kind);
           await settle(tester);

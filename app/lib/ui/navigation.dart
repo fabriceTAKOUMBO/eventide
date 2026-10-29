@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 
 import '../core/schedule.dart';
 import 'screens/battery_guide_screen.dart';
-import 'screens/credits_screen.dart';
 import 'screens/landscapes_sheet.dart';
 import 'screens/mix_sheet.dart';
 import 'screens/premium_screen.dart';
@@ -15,13 +14,11 @@ import 'screens/settings_screen.dart';
 import 'screens/share_screen.dart';
 import 'screens/sleep_screen.dart';
 import 'screens/standby_screen.dart';
-import 'screens/voice_screen.dart';
 import 'theme/vitre.dart';
 
 abstract final class Routes {
   static const landscapes = 'paysages';
   static const mix = 'mon-mix';
-  static const voice = 'voix';
   static const share = 'partage';
   static const sleep = 'sommeil';
   static const standby = 'veille';
@@ -30,7 +27,6 @@ abstract final class Routes {
   static const premium = 'premium';
   static const settings = 'reglages';
   static const privacy = 'confidentialite';
-  static const credits = 'credits';
   static const batteryGuide = 'guide-batterie';
 }
 
@@ -126,8 +122,6 @@ abstract final class Nav {
 
   static Future<void> mix(BuildContext context) =>
       _push(context, Routes.mix, (_) => const MixSheet());
-  static Future<void> voice(BuildContext context) =>
-      _push(context, Routes.voice, (_) => const VoiceScreen());
   static Future<void> share(BuildContext context) =>
       _push(context, Routes.share, (_) => const ShareScreen());
   static Future<void> sleep(BuildContext context) =>
@@ -154,8 +148,6 @@ abstract final class Nav {
       _push(context, Routes.settings, (_) => const SettingsScreen());
   static Future<void> privacy(BuildContext context) =>
       _push(context, Routes.privacy, (_) => const PrivacyScreen());
-  static Future<void> credits(BuildContext context) =>
-      _push(context, Routes.credits, (_) => const CreditsScreen());
   static Future<void> batteryGuide(BuildContext context) =>
       _push(context, Routes.batteryGuide, (_) => const BatteryGuideScreen());
 }

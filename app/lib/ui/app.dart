@@ -10,11 +10,9 @@ import '../core/settings.dart';
 import 'landscape/landscape_image.dart';
 import 'model_scope.dart';
 import 'navigation.dart';
-import 'screens/credits_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/offline_screen.dart';
 import 'screens/premium_screen.dart';
-import 'screens/share_screen.dart';
 import 'screens/standby_screen.dart';
 import 'screens/welcome_screen.dart';
 import 'theme/vitre.dart';
@@ -111,10 +109,6 @@ class _EventideAppState extends State<EventideApp> {
     switch (event) {
       case OpenPremiumEvent():
         _open(Routes.premium, (_) => const PremiumScreen());
-      case OpenCreditsEvent():
-        _open(Routes.credits, (_) => const CreditsScreen());
-      case OpenShareEvent():
-        _open(Routes.share, (_) => const ShareScreen());
       case OpenStandbyEvent():
         _open(Routes.standby, (_) => const StandbyScreen(), fadeOnly: true);
       case OfflineEvent():

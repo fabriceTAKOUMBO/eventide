@@ -51,7 +51,6 @@ class Harness {
   final focus = FakeFocus();
   final native = FakeNativeBridge();
   final connectivity = FakeConnectivity();
-  final speech = FakeSpeech();
   final billing = FakeBilling();
   final ads = FakeAds();
   final account = FakeAccount();
@@ -101,7 +100,6 @@ class Harness {
       native: native,
       api: api,
       connectivity: connectivity,
-      speech: speech,
       billing: billing,
       ads: ads,
       account: account,
@@ -131,14 +129,6 @@ class Harness {
     return events.whereType<T>().toList();
   }
 }
-
-Future<http.Response> Function(http.Request) _voiceBackend(int status, Object body) => (request) async {
-      if (request.url.path == '/v1/installations') {
-        return http.Response(jsonEncode({'installation_id': 'i', 'token': 't'}), 201);
-      }
-      if (request.url.path == '/v1/voice') return http.Response(jsonEncode(body), status);
-      return http.Response(jsonEncode({'error': 'not_found'}), 404);
-    };
 
 void main() {
   late Harness h;
@@ -386,38 +376,6 @@ void main() {
       expect(model.soundsMuted || model.musicMuted, isFalse);
     });
 
-    test('voice: « coupe la musique » mutes, « Annuler » restores; « remets la musique » unmutes', () async {
-      final model = await h.start();
-      await model.play();
-      await model.startVoice();
-      h.speech.finalResult('coupe la musique');
-      await settle();
-      final result = model.voiceState as VoiceResult;
-      expect(result.changes.single.label, 'Musique');
-      expect(result.changes.single.value, 'En sourdine');
-      expect(model.musicMuted, isTrue);
-      expect(model.scene.levelOf(LayerKind.musique, 'piano-doux'), 20);
-      expect(h.engine.parkedKeys, {'musique:piano-doux'});
-      expect(h.engine.lastFade, MixRules.muteFade);
-      await model.undoVoice();
-      expect(model.musicMuted, isFalse);
-      await settle();
-      expect(h.engine.parkedKeys, isEmpty);
-
-      model.setCategoryMuted(LayerKind.musique, true);
-      await model.startVoice();
-      h.speech.finalResult('remets la musique');
-      await settle();
-      expect(model.musicMuted, isFalse);
-      expect((model.voiceState as VoiceResult).changes.single.value, 'Rétablie');
-      model.keepVoice();
-      // « Enlève la musique » still removes.
-      await model.startVoice();
-      h.speech.finalResult('enlève la musique');
-      await settle();
-      expect(model.scene.music, isEmpty);
-    });
-
     test('the melody comes in over 20 s at a start and a landscape change, the sounds faster', () async {
       final model = await h.start();
       await model.play();
@@ -588,133 +546,6 @@ void main() {
     });
   });
 
-  group('voice (no backend: rules only)', () {
-    test('« pause » is heard at once, « Annuler » restores the exact previous state', () async {
-      final model = await h.start();
-      await model.play();
-      await model.startVoice();
-      expect(model.voiceState, isA<VoiceListening>());
-      expect(h.speech.usedLocale, 'fr_BE');
-      h.speech.partial('pau');
-      h.speech.level(0.5);
-      final listening = model.voiceState as VoiceListening;
-      expect(listening.partialText, 'pau');
-      expect(listening.soundLevel, 0.5);
-      h.speech.finalOnStop = 'Pause';
-      await model.stopVoice();
-      await settle();
-      final result = model.voiceState as VoiceResult;
-      expect(result.phrase, 'Pause');
-      expect(result.changes.single.label, 'Lecture');
-      expect(model.playing, isFalse);
-      await model.undoVoice();
-      expect(model.playing, isTrue);
-      expect(model.voiceState, isA<VoiceIdle>());
-    });
-
-    test('settings and schedules changed by voice are undone too', () async {
-      final model = await h.start(plan: Plan.annual);
-      await model.startVoice();
-      h.speech.finalResult('mets le texte plus grand');
-      await settle();
-      expect(model.settings.textSize, 1);
-      expect(model.voiceState, isA<VoiceResult>());
-      expect((model.voiceState as VoiceResult).quotaLabel, isNull);
-      await model.undoVoice();
-      expect(model.settings.textSize, 0);
-
-      await model.startVoice();
-      h.speech.finalResult('arrête dans une heure et demie');
-      await settle();
-      expect(model.scene.timer, const TimerDuration(90));
-      model.keepVoice();
-      expect(model.voiceState, isA<VoiceIdle>());
-      expect(model.scene.timer, const TimerDuration(90));
-    });
-
-    test('not understood → rephrase; out of catalog → refused; nothing heard', () async {
-      final model = await h.start();
-      await model.startVoice();
-      h.speech.finalResult('raconte-moi une histoire');
-      await settle();
-      expect(model.voiceState, isA<VoiceRephrase>());
-      await model.startVoice();
-      h.speech.finalResult('quelle heure est-il');
-      await settle();
-      expect(model.voiceState, isA<VoiceRefused>());
-      await model.startVoice();
-      h.speech.error('error_no_match');
-      await settle();
-      expect((model.voiceState as VoiceRephrase).phrase, '');
-    });
-
-    test('share by voice opens the Share screen', () async {
-      final model = await h.start();
-      await model.startVoice();
-      h.speech.finalResult('partage mon mix');
-      await settle();
-      expect((await h.got<OpenShareEvent>()), hasLength(1));
-      expect(model.voiceState, isA<VoiceResult>());
-    });
-
-    test('microphone not granted: explained error, nothing recorded', () async {
-      h.permissions.granted[PermissionKind.microphone] = false;
-      final model = await h.start();
-      await model.startVoice();
-      expect(model.voiceState, isA<VoiceError>());
-      expect(h.speech.listening, isFalse);
-    });
-
-    test('resetVoice cancels listening', () async {
-      final model = await h.start();
-      await model.startVoice();
-      model.resetVoice();
-      expect(h.speech.cancels, 1);
-      expect(model.voiceState, isA<VoiceIdle>());
-      h.speech.finalResult('pause');
-      await settle();
-      expect(model.voiceState, isA<VoiceIdle>());
-    });
-  });
-
-  group('voice with backend', () {
-    test('free trial used up → Premium screen', () async {
-      final model = await h.start(backend: _voiceBackend(402, {'error': 'voice_quota_exhausted'}));
-      await model.startVoice();
-      h.speech.finalResult('pause');
-      await settle();
-      expect(model.voiceState, isA<VoiceRefused>());
-      expect((await h.got<OpenPremiumEvent>()), hasLength(1));
-      expect(model.entitlements.voice.trialRemaining, 0);
-    });
-
-    test('lifetime without credits → credits screen', () async {
-      final model = await h.start(plan: Plan.lifetime, backend: _voiceBackend(402, {'error': 'voice_quota_exhausted'}));
-      await model.startVoice();
-      h.speech.finalResult('raconte-moi une histoire');
-      await settle();
-      expect((await h.got<OpenCreditsEvent>()), hasLength(1));
-    });
-
-    test('counted request shows the remaining trial', () async {
-      final model = await h.start(
-        backend: _voiceBackend(200, {
-          'actions': [
-            {'op': 'definir', 'cible': 'moment', 'valeur': 'nuit'},
-          ],
-          'source': 'model',
-          'voice': {'mode': 'trial', 'trial_remaining': 2},
-        }),
-      );
-      await model.startVoice();
-      h.speech.finalResult('fais comme si c’était la nuit noire');
-      await settle();
-      final result = model.voiceState as VoiceResult;
-      expect(result.quotaLabel, 'Essai gratuit · 2 demandes restantes');
-      expect(model.scene.moment, Moment.nuit);
-    });
-  });
-
   group('sharing', () {
     test('without backend: self-contained link, share sheet and clipboard', () async {
       final model = await h.start();
@@ -787,8 +618,7 @@ void main() {
       expect((await h.got<ToastEvent>()).last.message, AppMessages.premiumActive);
       expect(jsonDecode(h.store.files[StoreKeys.entitlements]!)['data']['plan'], 'annual');
       await model.buy(PurchaseChoice.annual);
-      await model.buyCredits();
-      expect(h.billing.calls, containsAll(['buy:annual', 'credits']));
+      expect(h.billing.calls, contains('buy:annual'));
     });
 
     test('free: interstitial at opening and at exit, capped; never during playback', () async {
@@ -874,7 +704,6 @@ void main() {
         plan: Plan.annual,
         premium: true,
         expiresAt: h.now.subtract(const Duration(days: 3)),
-        voice: const VoiceQuota(mode: VoiceMode.included),
       );
       h.store.files[StoreKeys.entitlements] = jsonEncode({'version': 1, 'data': expired.toJson()});
       final model = await h.start();
@@ -907,19 +736,12 @@ void main() {
       expect(again.hintSeen('home_swipe'), isFalse);
     });
 
-    test('permanently denied: known at launch, after a request, and cleared from the settings', () async {
-      h.permissions.granted[PermissionKind.microphone] = false;
+    test('permanently denied: known at launch, cleared from the settings, and after a request', () async {
       h.permissions.granted[PermissionKind.notifications] = false;
-      h.permissions.deniedForever.add(PermissionKind.microphone);
-      final model = await h.start();
-      expect(model.permissionPermanentlyDenied(PermissionKind.microphone), isTrue);
-      expect(model.permissionPermanentlyDenied(PermissionKind.notifications), isFalse);
-      expect(model.permissionPermanentlyDenied(PermissionKind.exactAlarm), isFalse);
-
-      // Refused with « Ne plus demander » now.
       h.permissions.deniedForever.add(PermissionKind.notifications);
-      expect(await model.requestPermission(PermissionKind.notifications), isFalse);
+      final model = await h.start();
       expect(model.permissionPermanentlyDenied(PermissionKind.notifications), isTrue);
+      expect(model.permissionPermanentlyDenied(PermissionKind.exactAlarm), isFalse);
 
       await model.openAppSettings();
       expect(h.permissions.settingsOpened, 1);
@@ -928,12 +750,18 @@ void main() {
       model.handleLifecycle(AppLifecycleState.resumed);
       await settle();
       model.handleLifecycle(AppLifecycleState.paused);
-      h.permissions.granted[PermissionKind.microphone] = true;
-      h.permissions.deniedForever.remove(PermissionKind.microphone);
+      h.permissions.granted[PermissionKind.notifications] = true;
+      h.permissions.deniedForever.remove(PermissionKind.notifications);
       model.handleLifecycle(AppLifecycleState.resumed);
       await settle();
-      expect(model.permissionGranted(PermissionKind.microphone), isTrue);
-      expect(model.permissionPermanentlyDenied(PermissionKind.microphone), isFalse);
+      expect(model.permissionGranted(PermissionKind.notifications), isTrue);
+      expect(model.permissionPermanentlyDenied(PermissionKind.notifications), isFalse);
+
+      // Turned off again, then refused with « Ne plus demander » at the next request.
+      h.permissions.granted[PermissionKind.notifications] = false;
+      h.permissions.deniedForever.add(PermissionKind.notifications);
+      expect(await model.requestPermission(PermissionKind.notifications), isFalse);
+      expect(model.permissionGranted(PermissionKind.notifications), isFalse);
       expect(model.permissionPermanentlyDenied(PermissionKind.notifications), isTrue);
     });
 
@@ -963,13 +791,12 @@ void main() {
       expect(h.urls.opened.single.toString(), 'https://ambiances.example/confidentialite');
     });
 
-    test('battery guide, ad choices and credits price reach the services', () async {
+    test('battery guide and ad choices reach the services', () async {
       final model = await h.start();
       await model.openBatteryGuide();
       await model.openAdPrivacyOptions();
       expect(h.native.batteryGuides, 1);
       expect(h.ads.privacyForms, 1);
-      expect(model.creditsPrice, '2,99 €');
     });
   });
   group('audio output unavailable', () {
@@ -986,7 +813,7 @@ void main() {
 
   group('demo build (Premium unlocked on the phone)', () {
     test('entitlements are forced to annual, whatever is cached; the server is never asked', () async {
-      h.store.files[StoreKeys.entitlements] = jsonEncode({'version': 1, 'data': Entitlements.free(trialRemaining: 0).toJson()});
+      h.store.files[StoreKeys.entitlements] = jsonEncode({'version': 1, 'data': Entitlements.free().toJson()});
       final asked = <String>[];
       final model = await h.start(
         demo: true,
@@ -1003,7 +830,6 @@ void main() {
       expect(model.demoMode, isTrue);
       expect(model.plan, Plan.annual);
       expect(model.entitlements.premium, isTrue);
-      expect(model.entitlements.voice.mode, VoiceMode.included);
       expect(asked, isNot(contains('/v1/entitlements')));
       await model.retryConnection();
       await model.restorePurchases();
@@ -1015,14 +841,12 @@ void main() {
     test('no purchase, no restore, no Google Play page: the demo explains itself', () async {
       final model = await h.start(demo: true);
       await model.buy(PurchaseChoice.monthly);
-      await model.buyCredits();
       await model.restorePurchases();
       await model.openManageSubscription();
       expect(h.billing.calls.where((c) => c != 'initialize'), isEmpty);
       expect(h.urls.opened, isEmpty);
       final toasts = [for (final t in await h.got<ToastEvent>()) t.message];
       expect(toasts, [
-        DemoMode.premiumActive,
         DemoMode.premiumActive,
         DemoMode.nothingToRestore,
         DemoMode.premiumActive,
@@ -1060,24 +884,6 @@ void main() {
       expect(model.schedules, hasLength(2));
       expect(h.native.lastPayload['requires_network'], isFalse);
       expect((h.native.lastPayload['schedules'] as List), hasLength(2));
-    });
-
-    test('voice without backend: on-device rules, never a quota error', () async {
-      final model = await h.start(demo: true);
-      for (var i = 0; i < 5; i++) {
-        await model.startVoice();
-        h.speech.finalResult('mets le texte plus grand');
-        await settle();
-        expect(model.voiceState, isA<VoiceResult>());
-        expect((model.voiceState as VoiceResult).quotaLabel, isNull);
-        model.keepVoice();
-      }
-      await model.startVoice();
-      h.speech.finalResult('raconte-moi une histoire');
-      await settle();
-      expect(model.voiceState, isA<VoiceRephrase>());
-      expect(await h.got<OpenPremiumEvent>(), isEmpty);
-      expect(await h.got<OpenCreditsEvent>(), isEmpty);
     });
 
     test('a production build (demo off) keeps the normal plan and purchases', () async {

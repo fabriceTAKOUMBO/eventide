@@ -13,15 +13,11 @@ abstract final class DemoMode {
   static bool resolve({required bool requested, required bool nativeDemoBuild}) =>
       requested && nativeDemoBuild;
 
-  /// Plan forced in demo mode: annual, i.e. Premium with the voice assistant included.
+  /// Plan forced in demo mode: annual Premium.
   static const Plan plan = Plan.annual;
 
   /// Entitlements forced in demo mode, whatever is cached or answered by a server.
-  static const Entitlements entitlements = Entitlements(
-    plan: plan,
-    premium: true,
-    voice: VoiceQuota(mode: VoiceMode.included),
-  );
+  static const Entitlements entitlements = Entitlements(plan: plan, premium: true);
 
   /// Message when a purchase or Google Play's subscription page is asked for in demo mode
   /// (the Premium screen itself disables its button and says the same).

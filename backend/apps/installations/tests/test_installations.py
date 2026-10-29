@@ -10,7 +10,7 @@ from rest_framework.test import APIClient
 
 from apps.installations.models import Installation
 from apps.installations.tokens import hash_token
-from conftest import client_for
+from conftest import client_for, make_purchase
 
 PKG = "app.eventide.test"
 DECODE_URL = f"https://playintegrity.googleapis.com/v1/{PKG}:decodeIntegrityToken"
@@ -80,14 +80,14 @@ def test_same_device_gets_a_new_token_and_the_old_one_is_revoked(settings):
 
 
 @pytest.mark.django_db
-def test_reinstall_keeps_the_trial_counter(settings):
+def test_reinstall_keeps_the_purchases(settings):
     settings.PLAY_INTEGRITY_ENFORCED = False
     data = body()
     first = APIClient().post("/v1/installations", data, format="json").json()
-    Installation.objects.filter(pk=first["installation_id"]).update(trial_used=3)
+    make_purchase(installation=Installation.objects.get(pk=first["installation_id"]))
     second = APIClient().post("/v1/installations", data, format="json").json()
     response = client_for(second["token"]).get("/v1/entitlements").json()
-    assert response["voice"]["trial_remaining"] == 0
+    assert response["plan"] == "monthly"
 
 
 @pytest.mark.django_db

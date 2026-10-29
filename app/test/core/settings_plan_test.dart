@@ -32,7 +32,7 @@ void main() {
       expect(const AppSettings().copyWith(textSize: -1).textSize, 0);
     });
 
-    test('JSON round trip and voice state', () {
+    test('JSON round trip', () {
       const s = AppSettings(
         textSize: 2,
         highContrast: true,
@@ -41,11 +41,12 @@ void main() {
         onboarded: true,
       );
       expect(AppSettings.fromJson(s.toJson()), s);
-      expect(s.toVoiceStateJson(), {
+      expect(s.toJson(), {
         'taille_texte': 2,
         'contraste_renforce': true,
         'ecran_noir_minuteur': true,
         'wifi_seulement': true,
+        'onboarded': true,
       });
       expect(
         AppSettings.fromJson({'taille_texte': 9, 'contraste_renforce': 'oui'}),
@@ -61,8 +62,6 @@ void main() {
       expect(Plan.monthly.isPremium, isTrue);
       expect(Plan.annual.isPremium, isTrue);
       expect(Plan.lifetime.isPremium, isTrue);
-      expect(Plan.lifetime.includesAssistant, isFalse);
-      expect(Plan.annual.includesAssistant, isTrue);
       expect(Plan.fromId('annual'), Plan.annual);
       expect(Plan.fromId('gold'), Plan.free);
     });
@@ -71,15 +70,12 @@ void main() {
       final e = Entitlements.fromJson(
         jsonDecode(
           '''
-{"plan": "free", "premium": false, "expires_at": null, "auto_renewing": false,
- "voice": {"mode": "trial", "trial_remaining": 3, "credits_remaining": 0, "monthly_cap_reached": false}}''',
+{"plan": "free", "premium": false, "expires_at": null, "auto_renewing": false}''',
         ) as Map<String, dynamic>,
       );
       expect(e, Entitlements.free());
-      expect(e.voice.mode, VoiceMode.trial);
-      expect(e.voice.trialRemaining, 3);
-      expect(e.voice.canUseModel, isTrue);
       expect(Entitlements.fromJson(e.toJson()), e);
+      expect(e.toJson().keys, ['plan', 'premium', 'expires_at', 'auto_renewing']);
     });
 
     test('annual subscriber with expiry', () {
@@ -88,35 +84,14 @@ void main() {
         'premium': true,
         'expires_at': '2027-10-28T10:00:00Z',
         'auto_renewing': true,
-        'voice': {
-          'mode': 'included',
-          'trial_remaining': 0,
-          'credits_remaining': 0,
-          'monthly_cap_reached': true,
-        },
+        // A body cached by an earlier version (voice block, removed): ignored.
+        'voice': {'mode': 'included'},
       });
       expect(e.plan, Plan.annual);
       expect(e.premium, isTrue);
       expect(e.expiresAt, DateTime.utc(2027, 10, 28, 10));
       expect(e.autoRenewing, isTrue);
-      expect(e.voice.monthlyCapReached, isTrue);
-      expect(e.voice.canUseModel, isFalse);
       expect(Entitlements.fromJson(e.toJson()), e);
-    });
-
-    test('voice modes', () {
-      expect(
-        const VoiceQuota(
-          mode: VoiceMode.credits,
-          creditsRemaining: 2,
-        ).canUseModel,
-        isTrue,
-      );
-      expect(const VoiceQuota(mode: VoiceMode.credits).canUseModel, isFalse);
-      expect(const VoiceQuota(mode: VoiceMode.trial).canUseModel, isFalse);
-      expect(const VoiceQuota(mode: VoiceMode.none).canUseModel, isFalse);
-      expect(VoiceMode.fromId('included'), VoiceMode.included);
-      expect(VoiceMode.fromId('x'), VoiceMode.none);
     });
   });
 

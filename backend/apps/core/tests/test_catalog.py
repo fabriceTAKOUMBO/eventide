@@ -22,7 +22,6 @@ def test_embedded_catalog_matches_app_catalog():
 
 def test_catalog_shape_used_by_the_api(catalog):
     assert catalog.limits["couches_max"] == 6
-    assert catalog.limits["essais_assistant_gratuits"] == settings.VOICE_TRIAL_REQUESTS
     for section in ("paysages", "sons", "musiques", "decors"):
         ids = [item["id"] for item in catalog.raw[section]]
         assert len(ids) == len(set(ids)), f"duplicate id in {section}"

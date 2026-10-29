@@ -35,19 +35,6 @@ class ApiUnavailableException implements Exception {
   String toString() => 'ApiUnavailableException($reason)';
 }
 
-/// `POST /voice` answer.
-class VoiceApiResponse {
-  const VoiceApiResponse({required this.actions, required this.source, this.voice});
-
-  final List<Map<String, dynamic>> actions;
-
-  /// `model` or `local`.
-  final String source;
-
-  /// Same shape as `/entitlements` `voice`.
-  final Map<String, dynamic>? voice;
-}
-
 class ApiClient {
   ApiClient({
     required String baseUrl,
@@ -71,9 +58,6 @@ class ApiClient {
   final String? _cloudProjectNumber;
   final Random _random;
   final Duration timeout;
-
-  /// End-to-end target for a voice request is under 3 s; past this we stop waiting.
-  static const voiceTimeout = Duration(seconds: 5);
 
   String? _token;
   Future<String>? _registering;
@@ -235,37 +219,6 @@ class ApiClient {
         'purchase_token': purchaseToken,
         'base_plan_id': basePlanId,
       }));
-
-  /// `POST /voice`. [localActions] non-null: resolved on the phone, the server only counts it.
-  Future<VoiceApiResponse> voice({
-    required String phrase,
-    required String normalized,
-    required Map<String, dynamic> state,
-    List<Map<String, dynamic>>? localActions,
-  }) async {
-    final body = _asMap(await _send(
-      'POST',
-      '/voice',
-      body: {
-        'phrase': phrase,
-        'phrase_normalisee': normalized,
-        'etat': state,
-        'actions_locales': localActions,
-      },
-      timeout: voiceTimeout,
-    ));
-    final actions = body['actions'];
-    final voice = body['voice'];
-    return VoiceApiResponse(
-      actions: [
-        if (actions is List)
-          for (final a in actions)
-            if (a is Map) Map<String, dynamic>.from(a),
-      ],
-      source: body['source'] is String ? body['source'] as String : 'model',
-      voice: voice is Map ? Map<String, dynamic>.from(voice) : null,
-    );
-  }
 
   /// `POST /shares` → short link.
   Future<Uri> createShare(Map<String, dynamic> scene) async {

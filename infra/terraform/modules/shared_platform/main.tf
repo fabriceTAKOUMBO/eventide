@@ -123,7 +123,6 @@ module "secrets" {
   db_name              = var.db_name
   db_roles             = var.db_roles
   manual_secrets = {
-    "gemini-api-key"              = "GEMINI_API_KEY : cle de l'API Gemini (offre payante), deposee par le product owner"
     "google-play-service-account" = "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON : cle JSON du compte de service lie a la Play Console (API Play Developer et Play Integrity), deposee par le product owner"
   }
 }
@@ -214,11 +213,6 @@ locals {
       GOOGLE_OAUTH_CLIENT_IDS    = join(",", var.google_oauth_client_ids)
       RTDN_AUDIENCE              = var.rtdn_audience != "" ? var.rtdn_audience : (local.ingress_enabled ? "${local.api_url}/v1/play/rtdn" : "")
       RTDN_SERVICE_ACCOUNT_EMAIL = var.rtdn_service_account_email
-      VOICE_ROUTER               = var.voice.router
-      GEMINI_MODEL               = var.voice.model
-      VOICE_MONTHLY_CAP_EUR      = var.voice.monthly_cap_eur
-      USD_EUR_RATE               = var.voice.usd_eur_rate
-      VOICE_GLOBAL_DAILY_CAP_EUR = var.voice.global_daily_cap_eur
       CONTENT_BASE_URL           = module.content.content_base_url
       CLOUDFRONT_KEY_PAIR_ID     = module.content.key_pair_id
       LEGAL_PUBLISHER_NAME       = var.legal_publisher_name
@@ -234,20 +228,19 @@ locals {
   api_secrets = {
     DJANGO_SECRET_KEY                = module.secrets.django_secret_key_arn
     DATABASE_URL                     = "${module.secrets.db_secret_arns["app"]}:url::"
-    GEMINI_API_KEY                   = module.secrets.manual_secret_arns["gemini-api-key"]
     GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = module.secrets.manual_secret_arns["google-play-service-account"]
     CLOUDFRONT_PRIVATE_KEY           = module.content.private_key_secret_arn
   }
 
   # Migrations : rôle propriétaire, sans aucun secret Google ni CloudFront ; pas de pool.
-  migrate_environment = merge(local.api_environment, { VOICE_ROUTER = "rules-only", DB_POOL_MAX_SIZE = "0" })
+  migrate_environment = merge(local.api_environment, { DB_POOL_MAX_SIZE = "0" })
   migrate_secrets = {
     DJANGO_SECRET_KEY = module.secrets.django_secret_key_arn
     DATABASE_URL      = "${module.secrets.db_secret_arns["migrator"]}:url::"
   }
 
   # Tâches planifiées (purge, finalisation des achats) : rôle applicatif, compte de service Google.
-  jobs_environment = merge(local.api_environment, { VOICE_ROUTER = "rules-only", DB_POOL_MAX_SIZE = "0" })
+  jobs_environment = merge(local.api_environment, { DB_POOL_MAX_SIZE = "0" })
   jobs_secrets = {
     DJANGO_SECRET_KEY                = module.secrets.django_secret_key_arn
     DATABASE_URL                     = "${module.secrets.db_secret_arns["app"]}:url::"
@@ -378,12 +371,12 @@ module "scheduler" {
   # workflow Deploy enregistre après le service api stable.
   jobs = {
     "purge-expired" = {
-      description = "Compteurs expires, reservations vocales oubliees, details vocaux de plus de 90 jours"
+      description = "Compteurs de limites de debit expires"
       schedule    = "cron(10 3 * * ? *)"
       command     = ["python", "manage.py", "purge_expired"]
     }
     "finalize-purchases" = {
-      description = "Acquittement ou consommation des achats Google Play pas encore finalises"
+      description = "Acquittement des achats Google Play pas encore finalises"
       schedule    = "cron(20 * * * ? *)"
       command     = ["python", "manage.py", "finalize_purchases"]
     }

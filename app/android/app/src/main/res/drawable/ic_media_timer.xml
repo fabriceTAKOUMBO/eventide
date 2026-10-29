@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Media card timer: a duration outside the cycle (voice: 45 min…). Material « timer ». -->
+<!-- Media card timer: a duration outside the cycle (a stored scene: 45 min…). Material « timer ». -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"

@@ -124,9 +124,6 @@ def assetlinks(request: HttpRequest) -> HttpResponse:
 def privacy(request: HttpRequest) -> HttpResponse:
     context = {
         **_common(),
-        "trial_requests": settings.VOICE_TRIAL_REQUESTS,
-        "monthly_cap": settings.VOICE_MONTHLY_CAP_EUR,
-        "voice_retention_days": settings.VOICE_REQUEST_RETENTION_DAYS,
         "publisher": settings.LEGAL_PUBLISHER_NAME or "[à compléter]",
         "contact_email": settings.LEGAL_CONTACT_EMAIL or "[à compléter]",
         "updated_on": settings.LEGAL_PRIVACY_UPDATED_ON,

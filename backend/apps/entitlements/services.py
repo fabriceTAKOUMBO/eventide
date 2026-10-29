@@ -1,15 +1,14 @@
-"""Entitlements (contract § 6): plan, Premium, voice mode, computed from verified purchases.
+"""Entitlements (contract § 6): plan and Premium, computed from verified purchases.
 
-Owner of purchases, credits and the monthly cost: the Google account when the installation is
-linked (contract § 5), otherwise the installation itself.
+Owner of purchases: the Google account when the installation is linked (contract § 5),
+otherwise the installation itself.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, datetime
 
-from django.conf import settings
 from django.db.models import Q
 from django.utils import timezone
 
@@ -56,17 +55,9 @@ class Plan:
     def premium(self) -> bool:
         return self.plan != "free"
 
-    @property
-    def voice_mode(self) -> str:
-        if not settings.VOICE_ENABLED:
-            return "none"
-        return {"free": "trial", "monthly": "included", "annual": "included"}.get(
-            self.plan, "credits"
-        )
-
 
 def current_plan(owner: Owner) -> Plan:
-    """An entitled subscription wins (voice included); otherwise lifetime; otherwise free."""
+    """An entitled subscription wins; otherwise lifetime; otherwise free."""
     now = timezone.now()
     purchases = Purchase.objects.filter(owner.filter)
     subscription = (
@@ -86,41 +77,10 @@ def current_plan(owner: Owner) -> Plan:
     return Plan("free", None, False)
 
 
-def trial_remaining(installation: Installation, account: Account | None) -> int:
-    used = installation.trial_used
-    if account is not None:
-        used = max(used, account.trial_used)
-    return max(0, settings.VOICE_TRIAL_REQUESTS - used)
-
-
-def credits_of(owner: Owner) -> int:
-    holder = owner.account if owner.account is not None else owner.installation
-    return holder.credits
-
-
-def month_start(today: date | None = None) -> date:
-    today = today or timezone.now().astimezone(UTC).date()
-    return today.replace(day=1)
-
-
 def iso(value: datetime | None) -> str | None:
     if value is None:
         return None
     return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
-
-
-def voice_body(owner: Owner, plan: Plan) -> dict:
-    from apps.voice.quota import monthly_cap_reached
-
-    installation = Installation.objects.select_related("account").get(pk=owner.installation.pk)
-    account = installation.account
-    mode = plan.voice_mode
-    return {
-        "mode": mode,
-        "trial_remaining": trial_remaining(installation, account),
-        "credits_remaining": (account or installation).credits,
-        "monthly_cap_reached": mode == "included" and monthly_cap_reached(owner),
-    }
 
 
 def entitlements_body(installation: Installation) -> dict:
@@ -131,5 +91,4 @@ def entitlements_body(installation: Installation) -> dict:
         "premium": plan.premium,
         "expires_at": iso(plan.expires_at),
         "auto_renewing": plan.auto_renewing,
-        "voice": voice_body(owner, plan),
     }

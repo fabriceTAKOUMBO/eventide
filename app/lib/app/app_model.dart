@@ -10,7 +10,6 @@ import '../core/scene.dart';
 import '../core/schedule.dart';
 import '../core/settings.dart';
 import '../core/sleep.dart';
-import '../core/ops.dart' show ChangeLine;
 
 /// A saved selection: landscape and its full mix (dossier, screen 2: "le cœur enregistre la sélection").
 class Favorite {
@@ -33,61 +32,6 @@ class Favorite {
         scene: Scene.fromJson((json['scene'] as Map).cast<String, dynamic>()),
         createdAt: DateTime.parse(json['created_at'] as String),
       );
-}
-
-/// Voice screen states (dossier, screen 5): listening, thinking, result, plus failure cases.
-sealed class VoiceState {
-  const VoiceState();
-}
-
-class VoiceIdle extends VoiceState {
-  const VoiceIdle();
-}
-
-class VoiceListening extends VoiceState {
-  const VoiceListening({this.partialText = '', this.soundLevel = 0});
-
-  /// Live transcription.
-  final String partialText;
-
-  /// 0..1, drives the wave bars.
-  final double soundLevel;
-}
-
-class VoiceThinking extends VoiceState {
-  const VoiceThinking({required this.phrase});
-  final String phrase;
-}
-
-class VoiceResult extends VoiceState {
-  const VoiceResult({required this.phrase, required this.changes, this.quotaLabel});
-  final String phrase;
-
-  /// One line per change, shown on the result card. Empty when nothing changed.
-  final List<ChangeLine> changes;
-
-  /// For example « Essai gratuit · 2 demandes restantes »; null for subscribers.
-  final String? quotaLabel;
-}
-
-/// The assistant asks to rephrase instead of acting (ambiguous or not understood).
-class VoiceRephrase extends VoiceState {
-  const VoiceRephrase({required this.phrase, required this.message});
-  final String phrase;
-  final String message;
-}
-
-/// Polite refusal (out of catalog, forbidden action).
-class VoiceRefused extends VoiceState {
-  const VoiceRefused({required this.phrase, required this.message});
-  final String phrase;
-  final String message;
-}
-
-class VoiceError extends VoiceState {
-  const VoiceError({required this.message, this.offline = false});
-  final String message;
-  final bool offline;
 }
 
 enum PurchaseChoice { annual, monthly, lifetime }
@@ -118,15 +62,7 @@ class OpenPremiumEvent extends AppEvent {
   const OpenPremiumEvent();
 }
 
-class OpenCreditsEvent extends AppEvent {
-  const OpenCreditsEvent();
-}
-
-class OpenShareEvent extends AppEvent {
-  const OpenShareEvent();
-}
-
-/// "Commencer la nuit", by the button, by voice or by the setting "Écran noir pendant le minuteur".
+/// "Commencer la nuit", by the button or by the setting "Écran noir pendant le minuteur".
 class OpenStandbyEvent extends AppEvent {
   const OpenStandbyEvent();
 }
@@ -146,7 +82,7 @@ class SharedMixOpenedEvent extends AppEvent {
   final int lockedItems;
 }
 
-enum PermissionKind { microphone, notifications, exactAlarm }
+enum PermissionKind { notifications, exactAlarm }
 
 abstract class AppModel extends ChangeNotifier {
   // ---- Static data
@@ -191,9 +127,6 @@ abstract class AppModel extends ChangeNotifier {
   /// False only after a real failed attempt (dossier, screen 13).
   bool get online;
   bool get exactAlarmAllowed;
-
-  // ---- Voice
-  VoiceState get voiceState;
 
   // ---- Events
   Stream<AppEvent> get events;
@@ -284,19 +217,8 @@ abstract class AppModel extends ChangeNotifier {
   /// Copies the link to the clipboard.
   Future<void> copyShareLink();
 
-  // ---- Voice
-  /// Starts listening at once (no "done" button: a single stop button).
-  Future<void> startVoice();
-  Future<void> stopVoice();
-
-  /// Restores the exact state before the request.
-  Future<void> undoVoice();
-  void keepVoice();
-  void resetVoice();
-
-  // ---- Purchases (never triggered by voice)
+  // ---- Purchases
   Future<void> buy(PurchaseChoice choice);
-  Future<void> buyCredits();
   Future<void> restorePurchases();
 
   // ---- Account and data
@@ -326,9 +248,6 @@ abstract class AppModel extends ChangeNotifier {
 
   /// The full privacy policy online (`https://<SHARE_HOST>/confidentialite`).
   Future<void> openPrivacyPolicy() async {}
-
-  /// Price of the assistant credits pack from Google Play (lifetime plan), when known.
-  String? get creditsPrice => null;
 
   /// Demo build (« Eventide Démo »): Premium is forced on the phone, nothing can be bought.
   bool get demoMode => false;

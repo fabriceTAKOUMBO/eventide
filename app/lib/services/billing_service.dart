@@ -1,9 +1,9 @@
 // Google Play Billing (Billing Library 9 through in_app_purchase_android).
 //
-// Products: subscription `eventide_premium` (base plans `monthly`, `annual` with a 3-day trial),
-// one-time `eventide_lifetime`, consumable `eventide_credits_50`. Every purchase is verified by
-// the server (POST /purchases), which acknowledges or consumes it. Prices are read from Play;
-// the dossier prices are only a display fallback when Play does not answer.
+// Products: subscription `eventide_premium` (base plans `monthly`, `annual` with a 3-day trial)
+// and one-time `eventide_lifetime`. Every purchase is verified by the server (POST /purchases),
+// which acknowledges it. Prices are read from Play; the dossier prices are only a display
+// fallback when Play does not answer.
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
@@ -18,12 +18,8 @@ import 'api_client.dart';
 abstract final class ProductIds {
   static const premium = 'eventide_premium';
   static const lifetime = 'eventide_lifetime';
-  static const credits = 'eventide_credits_50';
   static const monthlyPlan = 'monthly';
   static const annualPlan = 'annual';
-
-  /// Credits granted locally by the debug-only acknowledgement path.
-  static const creditsPerPack = 50;
 }
 
 /// Display fallback (dossier § 3) when Google Play is unavailable.
@@ -62,11 +58,7 @@ abstract class Billing {
   Future<List<ProductOffer>> loadOffers();
 
   Future<void> buy(PurchaseChoice choice);
-  Future<void> buyCredits();
   Future<void> restore();
-
-  /// Price of the credits pack, when Play answered.
-  String? get creditsPrice;
 }
 
 /// Demo build: Premium is already active on the phone, Google Play is never called.
@@ -90,45 +82,32 @@ class DemoBilling implements Billing {
   Future<void> buy(PurchaseChoice choice) async => calls.add('buy:${choice.name}');
 
   @override
-  Future<void> buyCredits() async => calls.add('credits');
-
-  @override
   Future<void> restore() async => calls.add('restore');
-
-  @override
-  String? get creditsPrice => null;
 }
 
 class PlayBilling implements Billing {
   PlayBilling({
     required this._api,
     required this._localAcknowledgement,
-    required Entitlements Function() currentEntitlements,
     InAppPurchase? iap,
-  })  : _current = currentEntitlements,
-        _iap = iap ?? InAppPurchase.instance;
+  }) : _iap = iap ?? InAppPurchase.instance;
 
   final ApiClient _api;
 
   /// Debug builds without backend only: purchases are acknowledged on the phone, unverified.
   final bool _localAcknowledgement;
-  final Entitlements Function() _current;
   final InAppPurchase _iap;
 
   final _events = StreamController<BillingEvent>.broadcast();
   StreamSubscription<List<PurchaseDetails>>? _subscription;
   final Map<String, GooglePlayProductDetails> _byOffer = {};
   GooglePlayProductDetails? _lifetime;
-  GooglePlayProductDetails? _credits;
 
   /// Base plan asked for the last subscription purchase (sent to POST /purchases).
   String? _requestedBasePlan;
 
   @override
   Stream<BillingEvent> get events => _events.stream;
-
-  @override
-  String? get creditsPrice => _credits?.price;
 
   @override
   Future<void> initialize() async {
@@ -142,7 +121,7 @@ class PlayBilling implements Billing {
   Future<List<ProductOffer>> loadOffers() async {
     try {
       if (!await _iap.isAvailable()) return fallbackOffers;
-      final response = await _iap.queryProductDetails({ProductIds.premium, ProductIds.lifetime, ProductIds.credits});
+      final response = await _iap.queryProductDetails({ProductIds.premium, ProductIds.lifetime});
       _byOffer.clear();
       for (final details in response.productDetails.whereType<GooglePlayProductDetails>()) {
         switch (details.id) {
@@ -155,8 +134,6 @@ class PlayBilling implements Billing {
             _byOffer[key] = details;
           case ProductIds.lifetime:
             _lifetime = details;
-          case ProductIds.credits:
-            _credits = details;
         }
       }
       return [
@@ -239,21 +216,6 @@ class PlayBilling implements Billing {
     }
   }
 
-  @override
-  Future<void> buyCredits() async {
-    if (_credits == null) await loadOffers();
-    final details = _credits;
-    if (details == null) {
-      _events.add(const PurchaseFailed('Google Play ne répond pas. Réessayez plus tard.'));
-      return;
-    }
-    // The server consumes the pack after verification (autoConsume: false).
-    await _launch(() => _iap.buyConsumable(
-          purchaseParam: GooglePlayPurchaseParam(productDetails: details),
-          autoConsume: false,
-        ));
-  }
-
   Future<void> _launch(Future<bool> Function() action) async {
     try {
       await action();
@@ -308,7 +270,7 @@ class PlayBilling implements Billing {
           basePlanId: purchase.productID == ProductIds.premium ? _requestedBasePlan : null,
         );
         _events.add(EntitlementsChanged(Entitlements.fromJson(body)));
-        // The server already acknowledged (or consumed) it; this only clears the client flag.
+        // The server already acknowledged it; this only clears the client flag.
         await _complete(purchase);
       } on ApiException catch (e) {
         _events.add(PurchaseFailed(switch (e.code) {
@@ -324,16 +286,8 @@ class PlayBilling implements Billing {
       return;
     }
     if (_localAcknowledgement) {
-      // DEBUG ONLY, no backend: acknowledge/consume on the phone without any verification.
+      // DEBUG ONLY, no backend: acknowledge on the phone without any verification.
       await _complete(purchase);
-      if (purchase.productID == ProductIds.credits) {
-        try {
-          final addition = _iap.getPlatformAddition<InAppPurchaseAndroidPlatformAddition>();
-          await addition.consumePurchase(purchase);
-        } catch (e) {
-          debugPrint('PlayBilling: local consume failed ($e)');
-        }
-      }
       _events.add(EntitlementsChanged(_localEntitlements(purchase.productID)));
       return;
     }
@@ -341,34 +295,10 @@ class PlayBilling implements Billing {
   }
 
   Entitlements _localEntitlements(String productId) {
-    final current = _current();
-    switch (productId) {
-      case ProductIds.lifetime:
-        return Entitlements(
-          plan: Plan.lifetime,
-          premium: true,
-          voice: VoiceQuota(mode: VoiceMode.credits, creditsRemaining: current.voice.creditsRemaining),
-        );
-      case ProductIds.credits:
-        return Entitlements(
-          plan: current.plan,
-          premium: current.premium,
-          expiresAt: current.expiresAt,
-          autoRenewing: current.autoRenewing,
-          voice: VoiceQuota(
-            mode: current.plan == Plan.lifetime ? VoiceMode.credits : current.voice.mode,
-            trialRemaining: current.voice.trialRemaining,
-            creditsRemaining: current.voice.creditsRemaining + ProductIds.creditsPerPack,
-          ),
-        );
-      default:
-        final plan = _requestedBasePlan == ProductIds.monthlyPlan ? Plan.monthly : Plan.annual;
-        return Entitlements(
-          plan: plan,
-          premium: true,
-          autoRenewing: true,
-          voice: const VoiceQuota(mode: VoiceMode.included),
-        );
+    if (productId == ProductIds.lifetime) {
+      return const Entitlements(plan: Plan.lifetime, premium: true);
     }
+    final plan = _requestedBasePlan == ProductIds.monthlyPlan ? Plan.monthly : Plan.annual;
+    return Entitlements(plan: plan, premium: true, autoRenewing: true);
   }
 }

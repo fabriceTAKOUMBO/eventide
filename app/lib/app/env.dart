@@ -7,8 +7,8 @@ class Env {
   const Env._();
 
   /// Base URL of the API, e.g. `https://api.eventide.app/v1` (no trailing slash needed).
-  /// Empty: no backend. The app works locally, voice uses on-device rules only and, in debug
-  /// builds only, purchases are acknowledged locally without verification.
+  /// Empty: no backend. The app works locally and, in debug builds only, purchases are
+  /// acknowledged locally without verification.
   static const String apiBaseUrl = String.fromEnvironment('API_BASE_URL');
 
   /// Host of the share links (`https://<host>/m/<code>`, `https://<host>/s#<data>`).

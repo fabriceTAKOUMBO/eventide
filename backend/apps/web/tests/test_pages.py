@@ -74,15 +74,16 @@ def test_assetlinks(client, settings):
     assert client.get("/.well-known/assetlinks.json").status_code == 404
 
 
-def test_privacy_policy_mentions_us_hosting_and_voice(client, settings):
+def test_privacy_policy_mentions_us_hosting_and_no_microphone(client, settings):
     settings.LEGAL_CONTACT_EMAIL = "confidentialite@exemple.test"
     response = client.get("/confidentialite")
     assert response.status_code == 200
     html = response.content.decode()
     assert "États-Unis (Virginie du Nord)" in html
-    assert "Jamais le son de votre voix, jamais le texte de votre phrase" in html
+    assert "L'application n'utilise pas le micro" in html
     assert "confidentialite@exemple.test" in html
-    assert "Gemini" in html
+    # The voice assistant is gone (contract § 7): no model, no voice data.
+    assert "Gemini" not in html and "assistant" not in html
 
 
 def test_pages_refuse_post(client):

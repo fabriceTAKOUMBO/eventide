@@ -123,11 +123,11 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
           ),
           section(
             'Ce qui passe par nos serveurs',
-            'Vos demandes à la voix, sous forme de texte, le temps de les comprendre. Le son de votre voix n’est jamais gardé. Vos achats sont vérifiés avec Google Play. Un mix partagé est enregistré sans donnée personnelle.',
+            'Vos achats sont vérifiés avec Google Play. Un mix partagé est enregistré sans donnée personnelle.',
           ),
           section(
             'Jamais',
-            'Aucune vente de vos données. Aucune publicité pendant l’écoute.',
+            'Aucune vente de vos données. Aucune publicité pendant l’écoute. Aucun accès au micro.',
           ),
           const SizedBox(height: 4),
           LinkRow(

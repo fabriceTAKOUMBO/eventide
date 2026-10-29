@@ -29,7 +29,6 @@ class PlatformPermissions implements Permissions {
   Future<bool> isGranted(PermissionKind kind) async {
     try {
       return switch (kind) {
-        PermissionKind.microphone => await Permission.microphone.isGranted,
         PermissionKind.notifications => await Permission.notification.isGranted,
         PermissionKind.exactAlarm => await _native.canScheduleExactAlarms(),
       };
@@ -42,8 +41,6 @@ class PlatformPermissions implements Permissions {
   Future<bool> request(PermissionKind kind) async {
     try {
       switch (kind) {
-        case PermissionKind.microphone:
-          return (await Permission.microphone.request()).isGranted;
         case PermissionKind.notifications:
           return (await Permission.notification.request()).isGranted;
         case PermissionKind.exactAlarm:
@@ -60,7 +57,6 @@ class PlatformPermissions implements Permissions {
   Future<bool> isPermanentlyDenied(PermissionKind kind) async {
     try {
       return switch (kind) {
-        PermissionKind.microphone => await Permission.microphone.isPermanentlyDenied,
         PermissionKind.notifications => await Permission.notification.isPermanentlyDenied,
         PermissionKind.exactAlarm => false,
       };

@@ -46,7 +46,7 @@ void main() {
         installs++;
         return json(201, {'installation_id': 'i1', 'token': 'tok-1'});
       }
-      return json(200, {'plan': 'free', 'premium': false, 'voice': {'mode': 'trial', 'trial_remaining': 3}});
+      return json(200, {'plan': 'free', 'premium': false});
     });
     await api.entitlements();
     await api.entitlements();
@@ -90,10 +90,10 @@ void main() {
 
   test('error envelopes become ApiException with the contract code', () async {
     await store.write(StoreKeys.installation, {'token': 't'});
-    final api = build((request) async => json(402, {'error': 'voice_quota_exhausted', 'detail': 'x'}));
+    final api = build((request) async => json(402, {'error': 'purchase_invalid', 'detail': 'x'}));
     await expectLater(
-      api.voice(phrase: 'a', normalized: 'a', state: const {}),
-      throwsA(isA<ApiException>().having((e) => e.code, 'code', 'voice_quota_exhausted').having((e) => e.status, 'status', 402)),
+      api.postPurchase(productId: 'eventide_lifetime', purchaseToken: 'p'),
+      throwsA(isA<ApiException>().having((e) => e.code, 'code', 'purchase_invalid').having((e) => e.status, 'status', 402)),
     );
   });
 
@@ -108,30 +108,6 @@ void main() {
     expect(none.enabled, isFalse);
     await expectLater(none.entitlements(), throwsA(isA<ApiUnavailableException>()));
     expect(await none.health(), isFalse);
-  });
-
-  test('voice request carries the contract fields', () async {
-    await store.write(StoreKeys.installation, {'token': 't'});
-    final api = build((request) async => json(200, {
-          'actions': [
-            {'op': 'lecture', 'valeur': 'pause'},
-          ],
-          'source': 'local',
-          'voice': {'mode': 'trial', 'trial_remaining': 2},
-        }));
-    final response = await api.voice(
-      phrase: 'pause',
-      normalized: 'pause',
-      state: const {'lecture': 'en_cours'},
-      localActions: const [
-        {'op': 'lecture', 'valeur': 'pause'},
-      ],
-    );
-    final sent = jsonDecode(requests.single.body) as Map<String, dynamic>;
-    expect(sent.keys, containsAll(['phrase', 'phrase_normalisee', 'etat', 'actions_locales']));
-    expect(response.source, 'local');
-    expect(response.voice?['trial_remaining'], 2);
-    expect(response.actions.single['op'], 'lecture');
   });
 
   test('shares and content urls', () async {

@@ -271,7 +271,6 @@ module "prod" {
   android_cert_fingerprints  = var.android_cert_fingerprints
   google_oauth_client_ids    = var.google_oauth_client_ids
   rtdn_service_account_email = var.rtdn_service_account_email
-  voice                      = var.voice
   legal_publisher_name       = var.legal_publisher_name
   legal_contact_email        = var.legal_contact_email
   api_extra_environment      = var.api_extra_environment
@@ -341,7 +340,6 @@ module "preprod" {
   android_cert_fingerprints  = var.android_cert_fingerprints
   google_oauth_client_ids    = var.google_oauth_client_ids
   rtdn_service_account_email = var.rtdn_service_account_email
-  voice                      = var.voice
   legal_publisher_name       = var.legal_publisher_name
   legal_contact_email        = var.legal_contact_email
   content_budget_enabled     = false

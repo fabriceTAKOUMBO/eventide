@@ -16,7 +16,6 @@ from django.utils import timezone
 from .errors import RateLimited
 from .models import RateCounter
 
-MINUTE = 60
 HOUR = 3600
 DAY = 86400
 

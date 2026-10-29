@@ -160,7 +160,7 @@ class _SubscriptionCard extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         Text(
-          'Tous les paysages, sans publicité, avec écoute sans connexion et assistant vocal.',
+          'Tous les paysages et leurs ambiances, toutes les mélodies, sans publicité et même sans connexion.',
           style: manrope(17, height: 1.38, color: p.text(0.88)),
         ),
         const SizedBox(height: 16),
@@ -190,7 +190,7 @@ class _SubscriptionCard extends StatelessWidget {
       if (model.demoMode) {
         status = kDemoPremiumNote;
       } else if (plan == Plan.lifetime) {
-        status = 'Payé une fois. L’assistant vocal fonctionne avec des crédits, vendus à part.';
+        status = 'Payé une fois, sans abonnement.';
       } else if (e.expiresAt == null) {
         status = 'Abonnement actif.';
       } else if (e.autoRenewing) {
@@ -211,16 +211,9 @@ class _SubscriptionCard extends StatelessWidget {
         const SizedBox(height: 8),
         Text(status, style: manrope(17, height: 1.38, color: p.text(0.88))),
         const SizedBox(height: 14),
-        // Demo build: nothing to manage on Google Play.
-        if (model.demoMode)
+        // Demo build and lifetime: nothing to manage on Google Play.
+        if (model.demoMode || plan == Plan.lifetime)
           const SizedBox.shrink()
-        else if (plan == Plan.lifetime)
-          PrimaryButton(
-            label: 'Crédits d’assistant',
-            height: 60,
-            fontSize: 19,
-            onPressed: () => Nav.credits(context),
-          )
         else
           SecondaryButton(
             label: 'Gérer mon abonnement sur Google Play',

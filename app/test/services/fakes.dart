@@ -17,7 +17,6 @@ import 'package:eventide/services/links_service.dart';
 import 'package:eventide/services/native_bridge.dart';
 import 'package:eventide/services/permissions_service.dart';
 import 'package:eventide/services/storage.dart';
-import 'package:eventide/services/voice/speech_recognizer.dart';
 
 /// The real catalog shipped with the app.
 Catalog loadTestCatalog() =>
@@ -167,64 +166,6 @@ class FakeFocus implements AudioFocus {
   Stream<void> get becomingNoisy => _noisy.stream;
 }
 
-class FakeSpeech implements SpeechRecognizer {
-  bool available = true;
-  List<String> locales = const ['en_US', 'fr_FR', 'fr_BE'];
-  String? usedLocale;
-  void Function(String text, bool isFinal)? _onResult;
-  void Function(double level)? _onLevel;
-  void Function(String error)? _onError;
-  void Function()? _onDone;
-  int stops = 0;
-  int cancels = 0;
-
-  /// Text delivered as final result when stop() is called.
-  String? finalOnStop;
-
-  bool get listening => _onResult != null;
-
-  void partial(String text) => _onResult?.call(text, false);
-  void finalResult(String text) => _onResult?.call(text, true);
-  void level(double value) => _onLevel?.call(value);
-  void error(String message) => _onError?.call(message);
-  void done() => _onDone?.call();
-
-  @override
-  Future<bool> initialize() async => available;
-
-  @override
-  Future<String?> frenchLocale() async => pickFrenchLocale(locales);
-
-  @override
-  Future<void> listen({
-    required String? localeId,
-    required void Function(String text, bool isFinal) onResult,
-    required void Function(double level) onLevel,
-    required void Function(String error) onError,
-    required void Function() onDone,
-    Duration maxDuration = const Duration(seconds: 20),
-  }) async {
-    usedLocale = localeId;
-    _onResult = onResult;
-    _onLevel = onLevel;
-    _onError = onError;
-    _onDone = onDone;
-  }
-
-  @override
-  Future<void> stop() async {
-    stops++;
-    final text = finalOnStop;
-    if (text != null) finalResult(text);
-  }
-
-  @override
-  Future<void> cancel() async {
-    cancels++;
-    _onResult = null;
-  }
-}
-
 class FakeBilling implements Billing {
   final _events = StreamController<BillingEvent>.broadcast();
   final List<String> calls = [];
@@ -248,13 +189,7 @@ class FakeBilling implements Billing {
   Future<void> buy(PurchaseChoice choice) async => calls.add('buy:${choice.name}');
 
   @override
-  Future<void> buyCredits() async => calls.add('credits');
-
-  @override
   Future<void> restore() async => calls.add('restore');
-
-  @override
-  String? get creditsPrice => '2,99 €';
 }
 
 class FakeAds implements AdsService {
@@ -310,7 +245,6 @@ class FakeShare implements ShareSheet {
 
 class FakePermissions implements Permissions {
   final Map<PermissionKind, bool> granted = {
-    PermissionKind.microphone: true,
     PermissionKind.notifications: true,
     PermissionKind.exactAlarm: true,
   };
@@ -370,12 +304,8 @@ class MemoryArtworkFiles implements ArtworkFiles {
   }
 }
 
-Entitlements entitlementsFor(Plan plan) => switch (plan) {
-      Plan.free => Entitlements.free(),
-      Plan.lifetime => const Entitlements(
-          plan: Plan.lifetime, premium: true, voice: VoiceQuota(mode: VoiceMode.credits, creditsRemaining: 10)),
-      _ => Entitlements(plan: plan, premium: true, voice: const VoiceQuota(mode: VoiceMode.included)),
-    };
+Entitlements entitlementsFor(Plan plan) =>
+    plan == Plan.free ? Entitlements.free() : Entitlements(plan: plan, premium: true);
 
 /// Lets pending microtasks and short timers run.
 Future<void> settle([int ms = 20]) => Future<void>.delayed(Duration(milliseconds: ms));

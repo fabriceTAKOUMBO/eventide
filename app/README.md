@@ -1,6 +1,6 @@
 # eventide
 
-Sons de nature sur de vrais paysages, réglables à la voix.
+Sons de nature et mélodies sur de vrais paysages.
 
 ## Getting Started
 

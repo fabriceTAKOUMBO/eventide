@@ -10,7 +10,6 @@ class Purchase(models.Model):
     class Kind(models.TextChoices):
         SUBSCRIPTION = "subscription"
         LIFETIME = "lifetime"
-        CREDITS = "credits"
 
     class State(models.TextChoices):
         ACTIVE = "active"  # paid and entitled (subscription: until expires_at)
@@ -36,8 +35,6 @@ class Purchase(models.Model):
     expires_at = models.DateTimeField(null=True, blank=True)
     auto_renewing = models.BooleanField(default=False)
     acknowledged = models.BooleanField(default=False)
-    consumed = models.BooleanField(default=False)
-    credits_granted = models.PositiveIntegerField(default=0)
     # Owner: the account when the installation is linked, otherwise the installation.
     installation = models.ForeignKey(
         "installations.Installation",

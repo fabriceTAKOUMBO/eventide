@@ -97,7 +97,7 @@ Future<DemoFlowResult> runDemoFlow(
     reason: 'demo mode is off: build with --dart-define=DEMO_MODE=true AND --android-project-arg=eventide.demo=true',
   );
   expect(model.plan, Plan.annual);
-  expect(model.entitlements.voice.mode, VoiceMode.included);
+  expect(model.entitlements.premium, isTrue);
   report('demo_mode=on plan=${model.plan.name}');
 
   // ---- 1. Bienvenue → « Commencer » (already done if this install was used before).

@@ -6,11 +6,7 @@ from .base import *
 from .base import (
     ALLOWED_HOSTS,
     CLOUDFRONT_PRIVATE_KEY,
-    GEMINI_API_KEY,
-    GEMINI_MODEL,
     PUBLIC_WEB_BASE_URL,
-    VOICE_PRICE_TABLE,
-    VOICE_ROUTER,
     env,
 )
 
@@ -20,13 +16,6 @@ if not ALLOWED_HOSTS:
     raise ImproperlyConfigured("ALLOWED_HOSTS must be set in production.")
 if not PUBLIC_WEB_BASE_URL.startswith("https://"):
     raise ImproperlyConfigured("PUBLIC_WEB_BASE_URL must be an https:// origin in production.")
-if VOICE_ROUTER == "gemini":
-    if not GEMINI_API_KEY:
-        raise ImproperlyConfigured("GEMINI_API_KEY is required with VOICE_ROUTER=gemini.")
-    if GEMINI_MODEL not in VOICE_PRICE_TABLE:
-        raise ImproperlyConfigured(
-            f"No price for {GEMINI_MODEL} in VOICE_PRICE_TABLE: the 2 EUR cap needs real costs."
-        )
 if CLOUDFRONT_PRIVATE_KEY and "PRIVATE KEY" not in CLOUDFRONT_PRIVATE_KEY:
     raise ImproperlyConfigured("CLOUDFRONT_PRIVATE_KEY must be a PEM private key.")
 

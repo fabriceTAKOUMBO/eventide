@@ -11,7 +11,6 @@ import 'package:flutter/widgets.dart' show AppLifecycleState;
 import '../core/catalog.dart';
 import '../core/landscape_media.dart';
 import '../core/media_card.dart';
-import '../core/ops.dart';
 import '../core/plan.dart';
 import '../core/scene.dart';
 import '../core/schedule.dart';
@@ -31,8 +30,6 @@ import '../services/links_service.dart';
 import '../services/native_bridge.dart';
 import '../services/permissions_service.dart';
 import '../services/storage.dart';
-import '../services/voice/speech_recognizer.dart';
-import '../services/voice/voice_pipeline.dart';
 import 'app_model.dart';
 import 'demo_mode.dart';
 import 'sleep_tracker.dart';
@@ -76,7 +73,6 @@ abstract final class AppMessages {
   static const shareNotFound = 'Ce lien de partage n’existe plus.';
   static const shareOffline = 'Pas de connexion pour ouvrir ce lien. Réessayez plus tard.';
   static const premiumActive = 'Merci ! Premium est activé.';
-  static const creditsAdded = 'Crédits d’assistant ajoutés.';
   static const purchasePending = 'Paiement en attente de confirmation par Google Play.';
   static const nothingToRestore = 'Aucun achat Premium trouvé pour ce compte Google Play.';
   static const signInFailed = 'La connexion avec Google n’a pas abouti. Réessayez.';
@@ -87,28 +83,6 @@ abstract final class AppMessages {
   static const openPlayManually =
       'Ouvrez Google Play, touchez votre photo, puis « Paiements et abonnements » et « Abonnements ».';
   static String openPageManually(Uri uri) => 'La page ne s’ouvre pas. Adresse : $uri';
-
-  // Voice
-  static const micDenied = 'Autorisez le micro pour parler à l’assistant.';
-  static const noRecognizer = 'La reconnaissance vocale n’est pas disponible sur ce téléphone.';
-  static const nothingHeard = 'Je n’ai rien entendu. Touchez le micro et parlez tout de suite.';
-  static const recognizerOffline = 'Pas de connexion : la reconnaissance vocale de ce téléphone a besoin d’internet.';
-  static const trialUsed = 'Vos 3 essais gratuits de l’assistant sont utilisés.';
-  static const creditsUsed = 'Vos crédits d’assistant sont épuisés.';
-  static const premiumOnly = 'Cela fait partie de Premium.';
-
-  static String rephrase(String reason) => switch (reason) {
-        'ambigu' => 'Plusieurs programmations correspondent. Précisez l’heure, par exemple « celle de 22 h ».',
-        'introuvable' => 'Je ne trouve pas cette programmation.',
-        _ => VoiceMessages.notUnderstood,
-      };
-
-  static String refuse(String reason, int maxLayers) => switch (reason) {
-        'hors_catalogue' =>
-          'Je ne sais pas faire cela. Je règle les sons, le minuteur, les programmations, le sommeil et les réglages.',
-        'couches_max' => tooManyLayers(maxLayers),
-        _ => 'Je ne peux pas faire cela à la voix.',
-      };
 }
 
 class _Prepared {
@@ -130,9 +104,8 @@ class RealAppModel extends AppModel implements PlaybackHost {
     required this._handler,
     required this._content,
     required this._native,
-    required ApiClient api,
+    required this._api,
     required this._connectivity,
-    required this._speech,
     required this._billing,
     required this._ads,
     required this._account,
@@ -146,8 +119,6 @@ class RealAppModel extends AppModel implements PlaybackHost {
     Random? random,
   })  : _catalog = catalog,
         _rules = ProductRules(catalog),
-        _api = api,
-        _voice = VoicePipeline(catalog: catalog, api: api),
         _now = now ?? DateTime.now,
         _random = random ?? Random(),
         _scene = Scene.fromLandscape(catalog.defaultLandscape),
@@ -161,8 +132,6 @@ class RealAppModel extends AppModel implements PlaybackHost {
   final NativeBridge _native;
   final ApiClient _api;
   final ConnectivityChecker _connectivity;
-  final SpeechRecognizer _speech;
-  final VoicePipeline _voice;
   final Billing _billing;
   final AdsService _ads;
   final AccountAuth _account;
@@ -223,19 +192,6 @@ class RealAppModel extends AppModel implements PlaybackHost {
   DateTime? _lastLinkAt;
   Timer? _saveSceneTimer;
   Timer? _saveStateTimer;
-
-  // Voice
-  VoiceState _voiceState = const VoiceIdle();
-  int _voiceSession = 0;
-  String _partial = '';
-  double _level = 0;
-  bool _finalHandled = true;
-  Timer? _voiceMaxTimer;
-  Timer? _voiceStopGrace;
-  String? _locale;
-  bool _localeResolved = false;
-  AppSnapshot? _undoSnapshot;
-  OpenNight? _undoNight;
 
   /// Completes when local data is loaded (the audio handler waits for it).
   Future<void> get ready => _ready.future;
@@ -305,8 +261,6 @@ class RealAppModel extends AppModel implements PlaybackHost {
     if (settingsJson != null) _settings = AppSettings.fromJson(settingsJson);
     final entitlementsJson = await _store.readMap(StoreKeys.entitlements);
     if (entitlementsJson != null) _entitlements = Entitlements.fromJson(entitlementsJson);
-    final quotaJson = await _store.readMap(StoreKeys.voiceTrial);
-    if (quotaJson != null) _entitlements = _withQuota(_entitlements, VoiceQuota.fromJson(quotaJson));
     final state = await _store.readMap(StoreKeys.appState);
     if (state != null) {
       final last = state['last_landscape_by_theme'];
@@ -419,8 +373,6 @@ class RealAppModel extends AppModel implements PlaybackHost {
     _browseTimer?.cancel();
     _saveSceneTimer?.cancel();
     _saveStateTimer?.cancel();
-    _voiceMaxTimer?.cancel();
-    _voiceStopGrace?.cancel();
     _handler.status.removeListener(_onPlaybackStatus);
     _events.close();
     _mediaCard.dispose();
@@ -495,20 +447,13 @@ class RealAppModel extends AppModel implements PlaybackHost {
       return Entitlements(
         plan: forced,
         premium: forced.isPremium,
-        voice: switch (forced) {
-          Plan.free => _entitlements.voice.mode == VoiceMode.trial
-              ? _entitlements.voice
-              : const VoiceQuota(mode: VoiceMode.trial, trialRemaining: 3),
-          Plan.lifetime => VoiceQuota(mode: VoiceMode.credits, creditsRemaining: _entitlements.voice.creditsRemaining),
-          _ => const VoiceQuota(mode: VoiceMode.included),
-        },
       );
     }
     final e = _entitlements;
     final expires = e.expiresAt;
     if (e.plan == Plan.monthly || e.plan == Plan.annual) {
       if (expires != null && _now().isAfter(expires.add(_config.subscriptionOfflineGrace))) {
-        return Entitlements(plan: Plan.free, premium: false, voice: e.voice);
+        return Entitlements.free();
       }
     }
     return e;
@@ -516,29 +461,15 @@ class RealAppModel extends AppModel implements PlaybackHost {
 
   Plan get _plan => entitlements.plan;
 
-  static Entitlements _withQuota(Entitlements e, VoiceQuota quota) => Entitlements(
-        plan: e.plan,
-        premium: e.premium,
-        expiresAt: e.expiresAt,
-        autoRenewing: e.autoRenewing,
-        voice: quota,
-      );
-
   Future<void> _setEntitlements(Entitlements next) async {
     final wasPremium = entitlements.plan.isPremium;
     _entitlements = next;
     await _store.write(StoreKeys.entitlements, next.toJson());
-    await _store.write(StoreKeys.voiceTrial, next.voice.toJson());
     await _syncSchedules();
     if (!wasPremium && entitlements.plan.isPremium) {
       unawaited(_prefetch(wifiOnly: _settings.wifiOnly));
     }
     notifyListeners();
-  }
-
-  Future<void> _updateVoiceQuota(VoiceQuota quota) async {
-    _entitlements = _withQuota(_entitlements, quota);
-    await _store.write(StoreKeys.voiceTrial, quota.toJson());
   }
 
   Future<void> _refreshEntitlements() async {
@@ -555,9 +486,6 @@ class RealAppModel extends AppModel implements PlaybackHost {
 
   @override
   List<ProductOffer> get offers => _offers;
-
-  @override
-  String? get creditsPrice => _billing.creditsPrice;
 
   @override
   bool get online => _online;
@@ -1499,276 +1427,6 @@ class RealAppModel extends AppModel implements PlaybackHost {
   }
 
   // ---------------------------------------------------------------------------
-  // Voice
-  // ---------------------------------------------------------------------------
-
-  @override
-  VoiceState get voiceState => _voiceState;
-
-  void _setVoice(VoiceState state) {
-    _voiceState = state;
-    notifyListeners();
-  }
-
-  AppSnapshot _snapshot() => AppSnapshot(
-        scene: _scene,
-        schedules: _schedules,
-        settings: _settings,
-        playing: playing,
-      );
-
-  @override
-  Future<void> startVoice() async {
-    if (_voiceState is VoiceListening || _voiceState is VoiceThinking) return;
-    if (!await _permissions.isGranted(PermissionKind.microphone)) {
-      _permissionCache[PermissionKind.microphone] = false;
-      _setVoice(const VoiceError(message: AppMessages.micDenied));
-      return;
-    }
-    if (!await _speech.initialize()) {
-      _setVoice(const VoiceError(message: AppMessages.noRecognizer));
-      return;
-    }
-    if (!_localeResolved) {
-      _locale = await _speech.frenchLocale();
-      _localeResolved = true;
-    }
-    final session = ++_voiceSession;
-    _partial = '';
-    _level = 0;
-    _finalHandled = false;
-    _undoSnapshot = null;
-    _setVoice(const VoiceListening());
-    _voiceMaxTimer?.cancel();
-    _voiceMaxTimer = Timer(const Duration(seconds: 21), () => unawaited(stopVoice()));
-    try {
-      await _speech.listen(
-        localeId: _locale,
-        maxDuration: const Duration(seconds: 20),
-        onResult: (text, isFinal) {
-          if (session != _voiceSession || _finalHandled) return;
-          _partial = text;
-          if (isFinal) {
-            _onVoiceFinal(session, text);
-          } else {
-            _setVoice(VoiceListening(partialText: text, soundLevel: _level));
-          }
-        },
-        onLevel: (level) {
-          if (session != _voiceSession || _finalHandled) return;
-          _level = level;
-          _setVoice(VoiceListening(partialText: _partial, soundLevel: level));
-        },
-        onError: (error) {
-          if (session != _voiceSession || _finalHandled) return;
-          if (_partial.trim().isEmpty) {
-            _finalHandled = true;
-            _cancelVoiceTimers();
-            if (error.contains('network')) {
-              _setVoice(const VoiceError(message: AppMessages.recognizerOffline, offline: true));
-            } else if (error.contains('permission')) {
-              _setVoice(const VoiceError(message: AppMessages.micDenied));
-            } else {
-              _setVoice(const VoiceRephrase(phrase: '', message: AppMessages.nothingHeard));
-            }
-            return;
-          }
-          _onVoiceFinal(session, _partial);
-        },
-        onDone: () {
-          if (session != _voiceSession) return;
-          _onVoiceFinal(session, _partial);
-        },
-      );
-    } catch (e) {
-      debugPrint('RealAppModel: listen failed ($e)');
-      _finalHandled = true;
-      _cancelVoiceTimers();
-      _setVoice(const VoiceError(message: AppMessages.noRecognizer));
-    }
-  }
-
-  void _cancelVoiceTimers() {
-    _voiceMaxTimer?.cancel();
-    _voiceMaxTimer = null;
-    _voiceStopGrace?.cancel();
-    _voiceStopGrace = null;
-  }
-
-  @override
-  Future<void> stopVoice() async {
-    if (_voiceState is! VoiceListening || _finalHandled) return;
-    final session = _voiceSession;
-    _voiceMaxTimer?.cancel();
-    // The final result normally follows stop(); never wait more than 2 s for it.
-    _voiceStopGrace?.cancel();
-    _voiceStopGrace = Timer(const Duration(seconds: 2), () => _onVoiceFinal(session, _partial));
-    try {
-      await _speech.stop();
-    } catch (_) {
-      _onVoiceFinal(session, _partial);
-    }
-  }
-
-  void _onVoiceFinal(int session, String text) {
-    if (session != _voiceSession || _finalHandled) return;
-    _finalHandled = true;
-    _cancelVoiceTimers();
-    unawaited(_processPhrase(session, text.trim()));
-  }
-
-  Future<void> _processPhrase(int session, String phrase) async {
-    if (phrase.isEmpty) {
-      _setVoice(const VoiceRephrase(phrase: '', message: AppMessages.nothingHeard));
-      return;
-    }
-    _setVoice(VoiceThinking(phrase: phrase));
-    final before = _snapshot();
-    final resolution = await _voice.resolve(phrase: phrase, snapshot: before, entitlements: entitlements);
-    if (session != _voiceSession) return; // closed meanwhile
-    switch (resolution) {
-      case VoiceQuotaExhaustedResolution():
-        final lifetime = _plan == Plan.lifetime;
-        final quota = entitlements.voice;
-        await _updateVoiceQuota(VoiceQuota(
-          mode: quota.mode,
-          trialRemaining: lifetime ? quota.trialRemaining : 0,
-          creditsRemaining: lifetime ? 0 : quota.creditsRemaining,
-          monthlyCapReached: quota.monthlyCapReached,
-        ));
-        _setVoice(VoiceRefused(phrase: phrase, message: lifetime ? AppMessages.creditsUsed : AppMessages.trialUsed));
-        _emit(lifetime ? const OpenCreditsEvent() : const OpenPremiumEvent());
-      case VoiceFailureResolution(:final message, :final offline, :final rephrase, :final quota):
-        if (quota != null) await _updateVoiceQuota(quota);
-        if (offline) {
-          _setVoice(VoiceError(message: message, offline: true));
-        } else if (rephrase) {
-          _setVoice(VoiceRephrase(phrase: phrase, message: message));
-        } else {
-          _setVoice(VoiceError(message: message));
-        }
-      case VoiceOpsResolution(:final ops, :final quota):
-        if (quota != null) await _updateVoiceQuota(quota);
-        await _applyVoiceOps(session, phrase, before, ops);
-    }
-  }
-
-  Future<void> _applyVoiceOps(int session, String phrase, AppSnapshot before, List<Map<String, dynamic>> ops) async {
-    final result = applyOps(before, ops, _catalog, newId: _newId, now: _now(), plan: _plan);
-    final effects = result.effects;
-    final changes = [...result.changes];
-    if (effects.contains(const ShareEffect()) && !changes.any((c) => c.label == 'Partage')) {
-      changes.add(const ChangeLine('Partage', 'Prêt à envoyer'));
-    }
-    final label = quotaLabel(entitlements.voice);
-    if (changes.isEmpty) {
-      // Nothing changed: explain why instead of a « C’est fait » card.
-      final rephrase = effects.whereType<RephraseEffect>().firstOrNull;
-      final refuse = effects.whereType<RefuseEffect>().firstOrNull;
-      if (effects.contains(const OpenPremiumEffect())) {
-        _setVoice(VoiceRefused(phrase: phrase, message: AppMessages.premiumOnly));
-        _emit(const OpenPremiumEvent());
-      } else if (refuse != null) {
-        _setVoice(VoiceRefused(phrase: phrase, message: AppMessages.refuse(refuse.reason, _catalog.limits.layersMax)));
-      } else {
-        _setVoice(VoiceRephrase(phrase: phrase, message: AppMessages.rephrase(rephrase?.reason ?? 'incompris')));
-      }
-      return;
-    }
-    // Provisional application: heard at once, undone by « Annuler ».
-    _undoSnapshot = before;
-    _undoNight = _tracker.open;
-    await _installSnapshot(result.snapshot);
-    for (final effect in effects) {
-      switch (effect) {
-        case PauseEffect():
-          await pause();
-        case ResumeEffect():
-          await play();
-        case StartNightEffect():
-          await startNight();
-        case ShareEffect():
-          _emit(const OpenShareEvent());
-        case OpenPremiumEffect():
-          _emit(const OpenPremiumEvent());
-        case RephraseEffect():
-        case RefuseEffect():
-          break;
-      }
-    }
-    if (session != _voiceSession) return;
-    _setVoice(VoiceResult(phrase: phrase, changes: changes, quotaLabel: label));
-  }
-
-  /// Installs scene, schedules and settings (voice result or undo) and brings audio along.
-  Future<void> _installSnapshot(AppSnapshot snapshot) async {
-    final landscapeChanged = snapshot.scene.landscapeId != _scene.landscapeId;
-    final muteChanged =
-        snapshot.scene.mutedSounds != _scene.mutedSounds || snapshot.scene.mutedMusic != _scene.mutedMusic;
-    final timerChanged = snapshot.scene.timer != _scene.timer;
-    final schedulesChanged = !listEquals(snapshot.schedules, _schedules);
-    final settingsChanged = snapshot.settings != _settings;
-    _scene = snapshot.scene;
-    _browseTimer?.cancel();
-    _browsedId = _scene.landscapeId;
-    _rememberTheme(_scene.landscapeId);
-    _saveScene();
-    if (schedulesChanged) {
-      _schedules = snapshot.schedules;
-      await _saveSchedules();
-      await _syncSchedules();
-    }
-    if (settingsChanged) {
-      _settings = snapshot.settings;
-      await _saveSettings();
-    }
-    if (!_scene.sleepTracking && _tracker.isOpen) {
-      _tracker.open = null;
-      _saveState();
-    }
-    notifyListeners();
-    if (timerChanged) _handler.setTimer(_scene.timer);
-    await _syncAudio(crossFade: landscapeChanged, fade: muteChanged ? MixRules.muteFade : null);
-  }
-
-  @override
-  Future<void> undoVoice() async {
-    final before = _undoSnapshot;
-    _undoSnapshot = null;
-    if (before == null) {
-      _setVoice(const VoiceIdle());
-      return;
-    }
-    await _installSnapshot(before);
-    _tracker.open = _undoNight;
-    _saveState();
-    if (before.playing && !playing) {
-      await play();
-    } else if (!before.playing && playing) {
-      await pause();
-    }
-    _setVoice(const VoiceIdle());
-  }
-
-  @override
-  void keepVoice() {
-    _undoSnapshot = null;
-    _setVoice(const VoiceIdle());
-  }
-
-  @override
-  void resetVoice() {
-    if (_voiceState is VoiceListening && !_finalHandled) {
-      unawaited(_speech.cancel().catchError((_) {}));
-    }
-    _voiceSession++;
-    _finalHandled = true;
-    _cancelVoiceTimers();
-    _undoSnapshot = null;
-    _setVoice(const VoiceIdle());
-  }
-
-  // ---------------------------------------------------------------------------
   // Purchases
   // ---------------------------------------------------------------------------
 
@@ -1776,12 +1434,9 @@ class RealAppModel extends AppModel implements PlaybackHost {
     switch (event) {
       case EntitlementsChanged(:final entitlements):
         final wasPremium = this.entitlements.plan.isPremium;
-        final credits = this.entitlements.voice.creditsRemaining;
         unawaited(_setEntitlements(entitlements).then((_) {
           if (!wasPremium && this.entitlements.plan.isPremium) {
             _emit(const ToastEvent(AppMessages.premiumActive));
-          } else if (this.entitlements.voice.creditsRemaining > credits) {
-            _emit(const ToastEvent(AppMessages.creditsAdded));
           }
         }));
       case PurchasePending():
@@ -1798,15 +1453,6 @@ class RealAppModel extends AppModel implements PlaybackHost {
       return;
     }
     await _billing.buy(choice);
-  }
-
-  @override
-  Future<void> buyCredits() async {
-    if (_config.demo) {
-      _emit(const ToastEvent(DemoMode.premiumActive));
-      return;
-    }
-    await _billing.buyCredits();
   }
 
   @override

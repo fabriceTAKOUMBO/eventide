@@ -4,7 +4,7 @@
 # - générés par Terraform : clé Django, mots de passe des rôles PostgreSQL (JSON avec l'URL de
 #   connexion en TLS verify-full) ;
 # - déposés à la main par le product owner (valeur provisoire « A_REMPLACER », jamais dans
-#   Terraform ni les tfvars) : clé de l'API Gemini, compte de service Google Play.
+#   Terraform ni les tfvars) : compte de service Google Play.
 #
 # Compromis assumé (comme Candidature Express) : random_password garde sa valeur dans l'état
 # Terraform ; l'état est protégé par la pile bootstrap (refus explicite hors administrateurs).

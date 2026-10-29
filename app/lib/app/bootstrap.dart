@@ -28,7 +28,6 @@ import '../services/links_service.dart';
 import '../services/native_bridge.dart';
 import '../services/permissions_service.dart';
 import '../services/storage.dart';
-import '../services/voice/speech_recognizer.dart';
 import '../ui/landscape/landscape_artwork.dart';
 import 'app_controller.dart';
 import 'demo_mode.dart';
@@ -156,15 +155,10 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
     downloadedPoster: (id) => content.cachedPath(LandscapeMediaKeys.image(id)),
     render: renderLandscapeArtwork,
   );
-  late final RealAppModel model;
   final Billing billing = demo
       ? DemoBilling()
-      : PlayBilling(
-          api: api,
-          localAcknowledgement: Env.localPurchaseAcknowledgement,
-          currentEntitlements: () => model.entitlements,
-        );
-  model = RealAppModel(
+      : PlayBilling(api: api, localAcknowledgement: Env.localPurchaseAcknowledgement);
+  final model = RealAppModel(
     catalog: catalog,
     store: store,
     handler: handler,
@@ -172,7 +166,6 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
     native: native,
     api: api,
     connectivity: connectivity,
-    speech: SpeechToTextRecognizer(),
     billing: billing,
     ads: demo
         ? const NoAdsService()
