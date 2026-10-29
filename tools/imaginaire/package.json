@@ -1,0 +1,16 @@
+{
+  "name": "eventide-imaginaire-tools",
+  "private": true,
+  "description": "Build the vendored three.js bundle of the Imaginaire 3D scenes and render their posters and wallpaper loops.",
+  "license": "UNLICENSED",
+  "type": "commonjs",
+  "scripts": {
+    "build-three": "node build-three.mjs",
+    "serve": "node serve.js",
+    "render": "node render.js"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "three": "0.186.1"
+  }
+}

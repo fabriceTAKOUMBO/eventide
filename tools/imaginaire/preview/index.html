@@ -1,0 +1,439 @@
+<title>Scènes Imaginaire</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;1,500&display=swap">
+<style>
+/* Layout: the live scene fills a phone-shaped stage (the whole screen on a phone); a dark glass
+   panel beside it (below it on a phone) holds the scene list and the decor sliders.
+   Single dark look, like the app (« Vitre » glass over a living landscape). */
+@font-face { font-family: "Manrope"; src: url("fonts/Manrope-Variable.ttf") format("truetype"); font-weight: 200 800; font-display: swap; }
+:root {
+  --ground: #07090f;
+  --glass: rgba(18, 22, 34, 0.62);
+  --glass-strong: rgba(14, 17, 27, 0.82);
+  --line: rgba(214, 224, 255, 0.14);
+  --ink: #eef1f8;
+  --ink-soft: #a9b1c4;
+  --ink-faint: #7c849a;
+  --accent: #d9c49a;
+  --accent-ink: #1a1408;
+  --focus: #9cc8ff;
+  --font-display: "Cormorant Garamond", "Iowan Old Style", Georgia, serif;
+  --font-ui: "Manrope", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --radius: 18px;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font: 15px/1.45 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+.app {
+  height: 100%;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(300px, 380px);
+  justify-content: center;
+  align-items: center;
+  gap: 32px;
+  padding-block: 24px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+/* the stage: a phone screen at 9 : 19.5 */
+.stage {
+  position: relative;
+  height: min(calc(100vh - 48px), 880px);
+  aspect-ratio: 9 / 19.5;
+  max-width: 100%;
+  border-radius: 34px;
+  overflow: hidden;
+  background: #000;
+  box-shadow: 0 0 0 1px var(--line), 0 30px 80px rgba(0, 0, 0, 0.55);
+}
+.stage canvas { position: absolute; inset: 0; z-index: 0; opacity: 0; transition: opacity 0.7s ease; }
+.stage.ready canvas { opacity: 1; }
+.sample {
+  z-index: 2;
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  padding: 0 24px 34px;
+  pointer-events: none;
+  display: grid;
+  gap: 4px;
+  transition: opacity 0.4s ease;
+}
+.sample .name { font: italic 500 30px/1.1 var(--font-display); letter-spacing: 0.01em; text-wrap: balance; }
+.sample .mix { font-size: 14px; color: rgba(255, 255, 255, 0.82); }
+.sample .bar {
+  margin-top: 14px;
+  height: 52px;
+  border-radius: 26px;
+  background: rgba(255, 255, 255, 0.10);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+.hide-sample .sample { opacity: 0; }
+.status {
+  z-index: 2;
+  position: absolute;
+  top: 14px; left: 16px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  font-variant-numeric: tabular-nums;
+}
+/* the panel */
+.panel {
+  align-self: center;
+  max-height: 100%;
+  overflow-y: auto;
+  box-sizing: border-box;
+  display: grid;
+  gap: 22px;
+  padding: 24px;
+  border-radius: var(--radius);
+  background: var(--glass);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.panel header { display: grid; gap: 6px; }
+.eyebrow { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+h1 { margin: 0; font: 500 32px/1.1 var(--font-display); text-wrap: balance; }
+.lede { margin: 0; color: var(--ink-soft); font-size: 14px; }
+h2 { margin: 0 0 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-faint); }
+.scenes { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.scene-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  font: 500 15px/1.3 var(--font-ui);
+  text-align: left;
+  cursor: pointer;
+}
+.scene-btn:hover { background: rgba(255, 255, 255, 0.05); }
+.scene-btn[aria-pressed="true"] { background: rgba(255, 255, 255, 0.10); box-shadow: inset 0 0 0 1px var(--line); }
+.tier { font-size: 11px; letter-spacing: 0.06em; color: var(--ink-faint); white-space: nowrap; }
+.tier.free { color: var(--accent); }
+.about { margin: 10px 2px 0; color: var(--ink-soft); font-size: 13px; min-height: 2.9em; }
+.sliders { display: grid; gap: 14px; }
+.slider { display: grid; gap: 6px; }
+.slider label { display: flex; justify-content: space-between; font-size: 14px; }
+.slider output { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+input[type="range"] { width: 100%; accent-color: var(--accent); margin: 0; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.pill {
+  padding: 9px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.10);
+  color: var(--ink);
+  font: 600 14px/1 var(--font-ui);
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.pill.primary { background: var(--accent); color: var(--accent-ink); box-shadow: none; }
+.pill:hover { filter: brightness(1.08); }
+.check { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--ink-soft); }
+.check input { accent-color: var(--accent); }
+.note { margin: 0; font-size: 12px; color: var(--ink-faint); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.exit {
+  position: fixed;
+  top: calc(14px + env(safe-area-inset-top, 0px));
+  right: calc(14px + env(safe-area-inset-right, 0px));
+  z-index: 5;
+}
+.error { margin: 0; padding: 10px 12px; border-radius: 10px; background: rgba(255, 120, 120, 0.12); color: #ffc9c9; font-size: 13px; }
+
+/* immersive: only the scene */
+.immersive .panel, .immersive .sample, .immersive .status { display: none; }
+.immersive .app { grid-template-columns: minmax(0, auto); padding: 0; }
+.immersive .stage { height: 100%; border-radius: 0; box-shadow: none; }
+
+/* phone: the scene fills the screen, the panel becomes a sheet at the bottom */
+@media (max-width: 760px) {
+  .app { display: block; padding: 0; }
+  .stage { position: fixed; inset: 0; height: 100%; width: 100%; aspect-ratio: auto; border-radius: 0; box-shadow: none; }
+  .panel {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    max-height: 52%;
+    border-radius: var(--radius) var(--radius) 0 0;
+    background: var(--glass-strong);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    padding: 18px max(16px, env(safe-area-inset-right, 0px)) calc(18px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px));
+    gap: 16px;
+  }
+  .panel.collapsed .collapsible { display: none; }
+  .lede, .note { display: none; }
+  .actions .pill { padding: 8px 13px; font-size: 13px; }
+  .sample .bar { display: none; }
+  h1 { font-size: 24px; }
+  .scenes { grid-template-columns: 1fr 1fr; }
+  .scene-btn { padding: 9px 10px; font-size: 14px; flex-direction: column; align-items: flex-start; gap: 2px; }
+  .status { top: calc(12px + env(safe-area-inset-top, 0px)); left: max(16px, env(safe-area-inset-left, 0px)); }
+}
+@media (min-width: 761px) { .sheet-toggle { display: none; } }
+@media (prefers-reduced-motion: reduce) { .stage canvas, .sample { transition: none; } }
+</style>
+
+<div class="app" id="app">
+  <div class="stage" id="stage" aria-label="Scène en direct">
+    <div class="status" id="status" aria-live="polite">Chargement…</div>
+    <div class="sample" aria-hidden="true">
+      <div class="name" id="sample-name">Forêt aux lucioles</div>
+      <div class="mix" id="sample-mix">Ruisseau · Vent · Nappes apaisantes</div>
+      <div class="bar"></div>
+    </div>
+  </div>
+
+  <aside class="panel" id="panel">
+    <header>
+      <div class="eyebrow">Eventide · Imaginaire</div>
+      <h1>Scènes Imaginaire</h1>
+      <p class="lede collapsible">Six décors en 3D, dessinés en direct. Chaque élément se règle de 0 à 100 ; la scène se répète exactement toutes les 30 secondes.</p>
+    </header>
+
+    <div class="actions">
+      <button class="pill primary" id="pause" type="button">Pause</button>
+      <button class="pill" id="immersive" type="button">Plein écran</button>
+      <button class="pill collapsible" id="defaults" type="button">Réglages d’origine</button>
+      <button class="pill sheet-toggle" id="sheet" type="button" aria-expanded="true">Masquer les réglages</button>
+    </div>
+
+    <section class="collapsible">
+      <h2>Scène</h2>
+      <ul class="scenes" id="scenes"></ul>
+      <p class="about collapsible" id="about"></p>
+    </section>
+
+    <section class="collapsible">
+      <h2>Éléments du décor</h2>
+      <div class="sliders" id="sliders"></div>
+    </section>
+
+
+    <label class="check collapsible" for="show-sample"><input type="checkbox" id="show-sample" checked> Afficher le texte de l’app par-dessus</label>
+    <p class="error" id="error" hidden></p>
+    <p class="note collapsible">Rendu WebGL en direct (three.js), 30 images par seconde au plus, comme dans l’app.</p>
+  </aside>
+</div>
+<button class="pill exit" id="exit" type="button" hidden>Quitter le plein écran</button>
+
+<script src="vendor/three.min.js"></script>
+<script>
+  // Messages of the runtime (ready, stats, errors), shown on the page instead of the app.
+  window.EventideScene = {
+    postMessage: function (text) {
+      try { window.onEventideMessage && window.onEventideMessage(JSON.parse(text)); } catch (e) { /* ignore */ }
+    },
+  };
+</script>
+<script src="runtime.js"></script>
+<script src="decors.js"></script>
+<script src="scenery.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var SCENES = [
+    { id: 'foret-lucioles', name: 'Forêt aux lucioles', free: true,
+      about: 'Une clairière dans une forêt de pins à l’heure bleue, des fougères, et des lucioles qui flottent dans la brume.',
+      mix: 'Ruisseau · Vent · Nappes apaisantes' },
+    { id: 'lac-lune', name: 'Lac sous la lune', free: false,
+      about: 'Un lac de montagne immobile ; la lune voilée de nuages fins y trace un chemin de reflets.',
+      mix: 'Ruisseau · Chouette · Harpe' },
+    { id: 'aurore', name: 'Aurore boréale', free: false,
+      about: 'Des voiles d’aurore se plient lentement au-dessus des montagnes enneigées et se reflètent dans le lac.',
+      mix: 'Vent · Nappes apaisantes' },
+    { id: 'jardin-zen', name: 'Jardin zen', free: false,
+      about: 'Un jardin sec au petit matin : gravier ratissé, pierres moussues, bambous dans la brume dorée, un cerisier en fleur.',
+      mix: 'Ruisseau · Bols tibétains' },
+    { id: 'mer-nuages', name: 'Mer de nuages', free: false,
+      about: 'Au-dessus d’une mer de nuages à l’aube : les sommets émergent dans une lumière rose et or.',
+      mix: 'Vent · Flûte' },
+    { id: 'ondes', name: 'Ondes lumineuses', free: false,
+      about: 'Un champ de points de lumière traversé de vagues lentes ; une onde part du centre, encore et encore.',
+      mix: 'Vagues · Nappes apaisantes' },
+  ];
+  var DECOR_NAMES = {
+    brume: 'Brume', lucioles: 'Lucioles', 'rayons-soleil': 'Rayons de soleil', feuilles: 'Feuilles qui tombent',
+    petales: 'Pétales', neige: 'Neige', pluie: 'Pluie', etoiles: 'Étoiles', 'etoiles-filantes': 'Étoiles filantes',
+    'oiseaux-vol': 'Oiseaux en vol',
+  };
+
+  var stage = document.getElementById('stage');
+  var statusEl = document.getElementById('status');
+  var errorEl = document.getElementById('error');
+  var slidersEl = document.getElementById('sliders');
+  var scenesEl = document.getElementById('scenes');
+  var aboutEl = document.getElementById('about');
+  var pauseBtn = document.getElementById('pause');
+  var paused = false;
+  var current = null;
+  var levels = {};
+
+  function store(key, value) {
+    try { localStorage.setItem('imaginaire.' + key, value); } catch (e) { /* private mode */ }
+  }
+  function recall(key) {
+    try { return localStorage.getItem('imaginaire.' + key); } catch (e) { return null; }
+  }
+
+  window.onEventideMessage = function (msg) {
+    if (msg.type === 'ready') {
+      stage.classList.add('ready');
+      statusEl.textContent = paused ? 'En pause' : 'En direct';
+    } else if (msg.type === 'stats') {
+      statusEl.textContent = (paused ? 'En pause' : 'En direct') + ' · ' + Math.round(msg.fps) + ' images/s';
+    } else if (msg.type === 'error') {
+      errorEl.hidden = false;
+      errorEl.textContent = msg.detail === 'webglcontextlost'
+        ? 'Le navigateur a interrompu le rendu 3D. Rechargez la page.'
+        : 'La scène n’a pas pu s’afficher : ' + msg.detail;
+    }
+  };
+
+  function buildSliders(describe) {
+    slidersEl.textContent = '';
+    describe.decors.forEach(function (id) {
+      var value = levels[id] || 0;
+      var row = document.createElement('div');
+      row.className = 'slider';
+      var label = document.createElement('label');
+      label.setAttribute('for', 'decor-' + id);
+      var name = document.createElement('span');
+      name.textContent = DECOR_NAMES[id] || id;
+      var out = document.createElement('output');
+      out.id = 'out-' + id;
+      out.textContent = value;
+      label.appendChild(name);
+      label.appendChild(out);
+      var input = document.createElement('input');
+      input.type = 'range';
+      input.min = '0';
+      input.max = '100';
+      input.step = '1';
+      input.value = String(value);
+      input.id = 'decor-' + id;
+      input.addEventListener('input', function () {
+        levels[id] = Number(input.value);
+        out.textContent = input.value;
+        window.eventide.setDecor(id, levels[id]);
+      });
+      row.appendChild(label);
+      row.appendChild(input);
+      slidersEl.appendChild(row);
+    });
+  }
+
+  function select(scene) {
+    current = scene;
+    store('scene', scene.id);
+    Array.prototype.forEach.call(scenesEl.querySelectorAll('button'), function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.id === scene.id));
+    });
+    aboutEl.textContent = scene.about;
+    document.getElementById('sample-name').textContent = scene.name;
+    document.getElementById('sample-mix').textContent = scene.mix;
+    errorEl.hidden = true;
+    stage.classList.remove('ready');
+    statusEl.textContent = 'Chargement…';
+    levels = {};
+    window.eventide.start(scene.id, { container: stage, quality: 'high', fps: 30, paused: false }).then(function () {
+      var d = window.eventide.describe();
+      if (!d || d.id !== scene.id) return; // another scene was chosen meanwhile
+      levels = Object.assign({}, d.defaults);
+      Object.keys(levels).forEach(function (id) { window.eventide.setDecor(id, levels[id]); });
+      buildSliders(d);
+      if (paused) window.eventide.setPaused(true);
+    }).catch(function () { /* shown by onEventideMessage */ });
+  }
+
+  SCENES.forEach(function (scene) {
+    var li = document.createElement('li');
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'scene-btn';
+    b.dataset.id = scene.id;
+    b.setAttribute('aria-pressed', 'false');
+    var n = document.createElement('span');
+    n.textContent = scene.name;
+    var t = document.createElement('span');
+    t.className = 'tier' + (scene.free ? ' free' : '');
+    t.textContent = scene.free ? 'Gratuit' : 'Premium';
+    b.appendChild(n);
+    b.appendChild(t);
+    b.addEventListener('click', function () { if (!current || current.id !== scene.id) select(scene); });
+    li.appendChild(b);
+    scenesEl.appendChild(li);
+  });
+
+  pauseBtn.addEventListener('click', function () {
+    paused = !paused;
+    window.eventide.setPaused(paused);
+    pauseBtn.textContent = paused ? 'Lecture' : 'Pause';
+    statusEl.textContent = paused ? 'En pause' : 'En direct';
+  });
+
+  document.getElementById('defaults').addEventListener('click', function () {
+    var d = window.eventide.describe();
+    if (!d) return;
+    d.decors.forEach(function (id) {
+      levels[id] = d.defaults[id] || 0;
+      window.eventide.setDecor(id, levels[id]);
+    });
+    buildSliders(d);
+  });
+
+  var exitBtn = document.getElementById('exit');
+  function setImmersive(on) {
+    document.body.classList.toggle('immersive', on);
+    exitBtn.hidden = !on;
+    if (on) {
+      try {
+        var req = stage.requestFullscreen || stage.webkitRequestFullscreen;
+        if (req) { var p = req.call(stage); if (p && p.catch) p.catch(function () {}); }
+      } catch (e) { /* the frame may refuse fullscreen: the page alone goes immersive */ }
+    } else if (document.fullscreenElement) {
+      try { document.exitFullscreen().catch(function () {}); } catch (e) { /* ignore */ }
+    }
+  }
+  document.getElementById('immersive').addEventListener('click', function () { setImmersive(true); });
+  exitBtn.addEventListener('click', function () { setImmersive(false); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setImmersive(false); });
+  document.addEventListener('fullscreenchange', function () {
+    if (!document.fullscreenElement && document.body.classList.contains('immersive')) setImmersive(false);
+  });
+
+  var sheetBtn = document.getElementById('sheet');
+  sheetBtn.addEventListener('click', function () {
+    var panel = document.getElementById('panel');
+    var collapsed = panel.classList.toggle('collapsed');
+    sheetBtn.textContent = collapsed ? 'Afficher les réglages' : 'Masquer les réglages';
+    sheetBtn.setAttribute('aria-expanded', String(!collapsed));
+  });
+
+  var sampleBox = document.getElementById('show-sample');
+  sampleBox.addEventListener('change', function () {
+    document.getElementById('app').classList.toggle('hide-sample', !sampleBox.checked);
+  });
+
+  var saved = recall('scene');
+  var first = SCENES.filter(function (s) { return s.id === saved; })[0] || SCENES[0];
+  select(first);
+})();
+</script>

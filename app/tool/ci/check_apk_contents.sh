@@ -5,6 +5,8 @@
 #               ambiances and the thunder variants tonnerre-NN included), no Premium landscape
 #               video or poster (content/videos, content/images: served by the API), and none of
 #               the third-party test-only media (medias-test/, non-distributable);
+#   both:       the Imaginaire 3D runtime and scenes (assets/imaginaire/) and the poster of every
+#               scene (assets/landscapes/<id>.jpg), with the free scene's loop (foret-lucioles.mp4);
 #   demo:       package be.cinaf.eventide.demo, label « Eventide Démo », every Premium sound and
 #               music of content/audio, every landscape video and poster of content/ and of
 #               medias-test/, and the test-only ambiances of medias-test/audio bundled.
@@ -95,10 +97,26 @@ fi
 
 # Living landscapes: assets/landscapes/<id>.mp4 (loop) and <id>.jpg (its frame 0).
 lprefix="assets/flutter_assets/assets/landscapes"
-for free in cascade-foret.mp4 cascade-foret.jpg remote.json; do
+for free in cascade-foret.mp4 cascade-foret.jpg foret-lucioles.mp4 foret-lucioles.jpg remote.json; do
   grep -qx "$lprefix/$free" <<<"$listing" || fail "free landscape media $free missing from the APK"
 done
 shopt -s nullglob
+
+# Imaginaire 3D scenes (contract § 12): the offline runtime and every scene, in every APK, and
+# the poster of every scene (free users see the Premium tiles too). Their Premium wallpaper loops
+# stay on the content server (content/videos, checked below).
+iprefix="assets/flutter_assets/assets/imaginaire"
+scenes=("$repo"/app/assets/imaginaire/scenes/*.js)
+[[ ${#scenes[@]} -gt 0 ]] || fail "no Imaginaire scene under app/assets/imaginaire/scenes"
+for file in index.html runtime.js decors.js scenery.js vendor/three.min.js vendor/LICENSE-three.txt; do
+  grep -qx "$iprefix/$file" <<<"$listing" || fail "Imaginaire runtime file $file missing from the APK"
+done
+for scene in "${scenes[@]}"; do
+  id="$(basename "$scene" .js)"
+  grep -qx "$iprefix/scenes/$id.js" <<<"$listing" || fail "Imaginaire scene $id.js missing from the APK"
+  grep -qx "$lprefix/$id.jpg" <<<"$listing" || fail "poster of the Imaginaire scene $id ($id.jpg) missing from the APK"
+done
+echo "  Imaginaire scenes and posters bundled: ${#scenes[@]}"
 check_media() {
   local label="$1"
   shift
