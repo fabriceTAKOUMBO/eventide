@@ -139,11 +139,17 @@ Future<DemoFlowResult> runDemoFlow(
   // ---- 4. Paysages: a Premium landscape.
   await tapWhenPresent(tester, find.bySemanticsLabel('Choisir un paysage'), 'Paysages');
   await pumpUntil(tester, () => present(find.byType(LandscapesSheet)), what: 'the landscapes sheet');
-  await tapWhenPresent(tester, find.bySemanticsLabel(RegExp(r'^Torrent de montagne')), 'Torrent de montagne');
-  await pumpUntil(tester, () => model.scene.landscapeId == 'torrent-montagne', what: 'the Premium landscape');
+  // Nature has one (free) landscape: the Premium one is in « Urbain » (a filmed storm).
+  await tapWhenPresent(
+    tester,
+    find.descendant(of: find.byType(LandscapesSheet), matching: find.bySemanticsLabel('Urbain')),
+    'the Urbain tab',
+  );
+  await tapWhenPresent(tester, find.bySemanticsLabel(RegExp(r'^Pluie sur la ville')), 'Pluie sur la ville');
+  await pumpUntil(tester, () => model.scene.landscapeId == 'pluie-ville', what: 'the Premium landscape');
   expect(present(find.byType(PremiumScreen)), isFalse);
   await pumpUntil(tester, () => !present(find.byType(LandscapesSheet)), what: 'the sheet to close');
-  report('premium_landscape=torrent-montagne');
+  report('premium_landscape=pluie-ville');
 
   // ---- 5. Réglages → Programmations: a new schedule, then moved two to three minutes ahead
   // (the editor moves by 5 minutes).
@@ -165,7 +171,7 @@ Future<DemoFlowResult> runDemoFlow(
   final now = DateTime.now();
   final at = DateTime(now.year, now.month, now.day, now.hour, now.minute).add(const Duration(minutes: 3));
   final draft = model.schedules.last;
-  expect(draft.landscapeId, 'torrent-montagne', reason: 'a new schedule starts on the current landscape');
+  expect(draft.landscapeId, 'pluie-ville', reason: 'a new schedule starts on the current landscape');
   final schedule = draft.copyWith(hour: at.hour, minute: at.minute, days: Schedule.everyDay, rampMinutes: 5);
   expect(await model.saveSchedule(schedule), isTrue);
   await settle(tester);

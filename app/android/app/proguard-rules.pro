@@ -25,3 +25,10 @@
     private static android.app.PendingIntent contentIntent;
     private android.support.v4.media.session.MediaSessionCompat mediaSession;
 }
+
+# « Imaginaire » (3D scenes in a WebView, webview_flutter_android): the JavaScript channel
+# EventideScene is a @JavascriptInterface method called by name from the page. Already kept by
+# proguard-android-optimize.txt; stated here so that the scenes never go silent in a release.
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}

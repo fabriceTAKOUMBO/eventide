@@ -119,7 +119,7 @@ void main() {
 
     test('lenient parsing with defaults', () {
       final scene = Scene.fromJson({
-        'paysage': 'sous-bois',
+        'paysage': 'foret-lucioles',
         'sons': [
           {'id': 'vent', 'niveau': 140},
           {'id': 'vent', 'niveau': 10},
@@ -145,7 +145,11 @@ void main() {
       expect(scene.moment, Moment.jour);
       expect(scene.sounds.map((l) => l.id), ['ambiance-cascade-foret', 'oiseaux', 'vent']);
       expect(scene.music, const [Layer(id: 'piano-doux', level: 20)]);
-      expect(scene.decor, const [Layer(id: 'brume', level: 30)]);
+      expect(scene.decor, isEmpty, reason: 'a filmed landscape has no decor');
+      expect(Scene.fromLandscape(catalog.landscape('foret-lucioles')!).decor, const [
+        Layer(id: 'lucioles', level: 60),
+        Layer(id: 'brume', level: 30),
+      ]);
       expect(scene.timer, const TimerDuration(60));
       expect(scene.sleepTracking, isFalse);
       expect(scene.audioLayerCount, 4);
@@ -154,16 +158,16 @@ void main() {
 
     test('options and withLandscape keep moment, timer, tracking and mute', () {
       final scene = Scene.fromLandscape(
-        catalog.landscape('cafe-nuit')!,
+        catalog.landscape('pluie-ville')!,
         moment: Moment.nuit,
         timer: const TimerNight(),
       );
       expect(scene.moment, Moment.nuit);
-      expect(scene.music, const [Layer(id: 'piano-doux', level: 25)]);
+      expect(scene.music, const [Layer(id: 'piano-doux', level: 20)]);
       final moved = scene
           .copyWith(sleepTracking: true, mutedMusic: true)
-          .withLandscape(catalog.landscape('lune-lac')!);
-      expect(moved.landscapeId, 'lune-lac');
+          .withLandscape(catalog.landscape('lac-lune')!);
+      expect(moved.landscapeId, 'lac-lune');
       expect(moved.moment, Moment.nuit);
       expect(moved.timer, const TimerNight());
       expect(moved.sleepTracking, isTrue);
@@ -220,7 +224,7 @@ void main() {
       );
       // Decor is not an audio layer.
       final decor = scene.withLevel(LayerKind.decor, 'lucioles', 40);
-      expect(decor.decor.map((l) => l.id), ['brume', 'lucioles']);
+      expect(decor.decor.map((l) => l.id), ['lucioles']);
       // A custom maximum.
       expect(
         base.withLevel(LayerKind.son, 'pluie-douce', 50, maxAudioLayers: 3),
@@ -302,7 +306,7 @@ void main() {
 
   test('immutable lists and value equality', () {
     final scene = Scene(
-      landscapeId: 'sous-bois',
+      landscapeId: 'foret-lucioles',
       sounds: [const Layer(id: 'vent', level: 30)],
     );
     expect(
@@ -310,7 +314,7 @@ void main() {
       throwsUnsupportedError,
     );
     final same = Scene(
-      landscapeId: 'sous-bois',
+      landscapeId: 'foret-lucioles',
       sounds: [const Layer(id: 'vent', level: 30)],
     );
     expect(scene, same);

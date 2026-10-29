@@ -51,7 +51,7 @@ def test_free_content_is_signed_for_everyone(api, cloudfront_key):
 
 @pytest.mark.django_db
 def test_free_landscape_video_is_signed_for_everyone(api, cloudfront_key):
-    keys = ["videos/paysages/cascade-foret.mp4", "videos/paysages/sous-bois.mp4"]
+    keys = ["videos/paysages/cascade-foret.mp4", "videos/paysages/foret-lucioles.mp4"]
     response = api.post("/v1/content/urls", {"keys": keys}, format="json")
     assert response.status_code == 200
     urls = response.json()["urls"]
@@ -92,8 +92,8 @@ def test_premium_content_requires_premium(api, installation, cloudfront_key):
     "keys",
     [
         ["videos/paysages/pluie-ville.mp4"],
-        ["images/paysages/aurore-boreale.jpg"],
-        ["videos/paysages/cascade-foret.mp4", "videos/paysages/aurore-boreale.mp4"],
+        ["images/paysages/aurore.jpg"],
+        ["videos/paysages/cascade-foret.mp4", "videos/paysages/aurore.mp4"],
     ],
 )
 def test_premium_landscape_media_requires_premium(api, installation, cloudfront_key, keys):

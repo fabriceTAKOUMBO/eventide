@@ -1,7 +1,6 @@
 // Bottom glass menu of the home screen, expanded (~300 px) or collapsed (~100 px).
 import 'package:flutter/material.dart';
 
-import '../../landscape/landscape_painter.dart';
 import '../../landscape/landscape_image.dart';
 import '../../theme/vitre.dart';
 import '../../widgets/glass.dart';
@@ -11,7 +10,6 @@ import '../../widgets/vicons.dart';
 class HomeMenuData {
   const HomeMenuData({
     required this.landscapeId,
-    required this.style,
     required this.name,
     required this.subtitle,
     required this.locked,
@@ -23,7 +21,6 @@ class HomeMenuData {
   });
 
   final String landscapeId;
-  final String style;
   final String name;
 
   /// Active sounds (« Eau vive · Oiseaux »), or a loading message.
@@ -285,10 +282,7 @@ class HomeMenu extends StatelessWidget {
                         borderRadius: BorderRadius.circular(12),
                         child: SizedBox.square(
                           dimension: 38,
-                          child: LandscapeThumbnail(
-                            landscapeId: data.landscapeId,
-                            style: data.style,
-                          ),
+                          child: LandscapeThumbnail(landscapeId: data.landscapeId),
                         ),
                       ),
                     ),
@@ -456,26 +450,11 @@ class _Tile extends StatelessWidget {
 
 /// Small landscape picture (menu tile, schedule rows, grid).
 class LandscapeThumbnail extends StatelessWidget {
-  const LandscapeThumbnail({
-    super.key,
-    required this.landscapeId,
-    required this.style,
-  });
+  const LandscapeThumbnail({super.key, required this.landscapeId});
 
   final String landscapeId;
-  final String style;
 
   @override
-  Widget build(BuildContext context) {
-    final provider = LandscapeImages.thumbnailFor(landscapeId);
-    if (provider != null) {
-      return Image(
-        image: provider,
-        fit: BoxFit.cover,
-        alignment: Alignment(0, landscapeFocusY(style) * 2 - 1),
-        errorBuilder: (c, e, s) => ProceduralLandscape(style: style),
-      );
-    }
-    return ProceduralLandscape(style: style);
-  }
+  Widget build(BuildContext context) =>
+      LandscapePoster(landscapeId: landscapeId, thumbnail: true);
 }

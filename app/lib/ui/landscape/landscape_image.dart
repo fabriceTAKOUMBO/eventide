@@ -1,35 +1,37 @@
-// Landscape picture used everywhere (home, sheets backgrounds, thumbnails).
-// Prefers a real photo when one is available, otherwise the procedural painter. The full-screen
-// landscape (home, welcome, offline) is LandscapeBackground, which adds the looping video.
+// Landscape picture used everywhere (sheets backgrounds, thumbnails): the landscape's poster.
+// Every landscape has one (contract § 12): the first frame of a filmed landscape's video, or the
+// frame at t = 0 of a 3D scene. Bundled (free landscapes, demo build) or downloaded (Premium);
+// until it is on the phone, a plain dark picture. Nothing is drawn by the app any more (the 2D
+// procedural landscapes are gone). The full-screen landscape (home, welcome, offline) is
+// LandscapeBackground, which adds the looping video or the live 3D scene.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
-import '../../core/crash_guard.dart';
 import '../../core/landscape_media.dart';
-import '../../core/scene.dart' show Moment;
 import '../theme/vitre.dart';
-import 'landscape_painter.dart';
 
-/// Returns a real photo for a landscape id, or null to use the procedural painter.
+/// Returns a real photo for a landscape id, or null when none is on the phone.
 typedef LandscapeImageResolver = ImageProvider? Function(String landscapeId);
 
-/// Where real photos come from: bundled `assets/landscapes/<id>.jpg` files (posters of the
-/// looping videos, found by [discoverAssets]), then [resolver] (set by the app to the posters
-/// downloaded for Premium).
+/// Where the posters come from: bundled `assets/landscapes/<id>.jpg` files (found by
+/// [discoverAssets]), then [resolver] (set by the app to the posters downloaded for Premium).
 abstract final class LandscapeImages {
   static LandscapeImageResolver? resolver;
   static final Set<String> _bundled = {};
   static final Set<String> _bundledVideos = {};
   static final Set<String> _remoteVideos = {};
+  static bool _sceneRuntime = false;
   static final ValueNotifier<String?> brandLogo = ValueNotifier<String?>(null);
 
   /// Bumped when [discoverAssets] has found the bundled media (pictures may change).
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
+
+  /// Entry page of the 3D scenes' runtime (`assets/imaginaire/`, contract § 12).
+  static const String sceneRuntimeIndex = 'assets/imaginaire/index.html';
 
   static ImageProvider? providerFor(String landscapeId) {
     if (_bundled.contains(landscapeId)) {
@@ -39,7 +41,7 @@ abstract final class LandscapeImages {
   }
 
   /// The poster decoded at thumbnail size (menu tile, grid, schedules): one small copy
-  /// (480 px wide) per landscape instead of the full 720 × 1280 picture.
+  /// (480 px wide) per landscape instead of the full picture.
   static ImageProvider? thumbnailFor(String landscapeId) {
     final provider = providerFor(landscapeId);
     return provider == null
@@ -58,6 +60,10 @@ abstract final class LandscapeImages {
       _bundledVideos.contains(landscapeId) ||
       _remoteVideos.contains(landscapeId);
 
+  /// The runtime of the 3D scenes is bundled (`assets/imaginaire/index.html`). Without it a 3D
+  /// scene shows its poster only.
+  static bool get hasSceneRuntime => _sceneRuntime;
+
   @visibleForTesting
   static void debugSetVideos({Set<String> bundled = const {}, Set<String> remote = const {}}) {
     _bundledVideos
@@ -69,7 +75,14 @@ abstract final class LandscapeImages {
     revision.value++;
   }
 
-  /// Reads the asset manifest once to find bundled photos, videos and the brand logo.
+  @visibleForTesting
+  static void debugSetSceneRuntime(bool available) {
+    _sceneRuntime = available;
+    revision.value++;
+  }
+
+  /// Reads the asset manifest once to find bundled photos, videos, the 3D runtime and the brand
+  /// logo.
   static Future<void> discoverAssets([AssetBundle? bundle]) async {
     try {
       final assetBundle = bundle ?? rootBundle;
@@ -81,6 +94,7 @@ abstract final class LandscapeImages {
         if (m == null) continue;
         (m.group(2) == 'jpg' ? _bundled : _bundledVideos).add(m.group(1)!);
       }
+      _sceneRuntime = assets.contains(sceneRuntimeIndex);
       if (assets.contains(LandscapeMediaKeys.remoteManifest)) {
         try {
           // Not cached by the bundle: read once here, and a cached future would outlive
@@ -106,22 +120,11 @@ abstract final class LandscapeImages {
         }
       }
     } catch (_) {
-      // No manifest (tests, previews): procedural pictures only.
+      // No manifest (tests, previews): plain pictures only.
     }
     revision.value++;
   }
 }
-
-/// Colour matrix giving the light of a moment of the day.
-List<double> momentMatrix(Moment moment) => switch (moment) {
-  Moment.aube => _compose(
-    _gains(1.04, 0.9, 0.95, 12, 2, 10),
-    _saturation(0.92),
-  ),
-  Moment.jour => _identity,
-  Moment.soir => _compose(_gains(1.02, 0.8, 0.56, 8, 0, 0), _saturation(1.1)),
-  Moment.nuit => _compose(_gains(0.3, 0.38, 0.6, 0, 3, 12), _saturation(0.45)),
-};
 
 const List<double> _identity = [
   1, 0, 0, 0, 0, //
@@ -170,13 +173,11 @@ List<double> _compose(List<double> a, List<double> b) {
   return out;
 }
 
-/// Combined filter: moment light, then brightness and saturation adjustments.
-List<double> landscapeMatrix({
-  Moment moment = Moment.jour,
-  double brightness = 1,
-  double saturation = 1,
-}) {
-  var m = momentMatrix(moment);
+/// Brightness and saturation adjustments of a background (sheets, offline screen). A filmed
+/// landscape is never recoloured by the moment of the day (contract § 12: a real video is shown
+/// as it is); the moment only reaches the 3D scenes.
+List<double> landscapeMatrix({double brightness = 1, double saturation = 1}) {
+  var m = _identity;
   if (saturation != 1) m = _compose(_saturation(saturation), m);
   if (brightness != 1) {
     m = _compose(_gains(brightness, brightness, brightness, 0, 0, 0), m);
@@ -184,14 +185,58 @@ List<double> landscapeMatrix({
   return m;
 }
 
-/// Full-bleed landscape: real photo or procedural picture, moment light, optional
-/// blur and slow Ken Burns motion (disabled with reduced motion).
+/// The poster of a landscape, cropped like `cover` (the dark placeholder until it is on the
+/// phone).
+class LandscapePoster extends StatelessWidget {
+  const LandscapePoster({super.key, required this.landscapeId, this.thumbnail = false});
+
+  final String landscapeId;
+
+  /// Decoded at thumbnail size ([LandscapeImages.thumbnailFor]).
+  final bool thumbnail;
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = thumbnail
+        ? LandscapeImages.thumbnailFor(landscapeId)
+        : LandscapeImages.providerFor(landscapeId);
+    if (provider == null) return const LandscapePlaceholder();
+    return Image(
+      image: provider,
+      fit: BoxFit.cover,
+      gaplessPlayback: true,
+      filterQuality: FilterQuality.medium,
+      errorBuilder: (context, error, stack) => const LandscapePlaceholder(),
+    );
+  }
+}
+
+/// A landscape without its poster on the phone yet (Premium, not downloaded): a plain, dark
+/// gradient. Drawn directly, nothing offscreen.
+class LandscapePlaceholder extends StatelessWidget {
+  const LandscapePlaceholder({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color(0xFF243530), Color(0xFF0E1714)],
+        ),
+      ),
+      child: SizedBox.expand(),
+    );
+  }
+}
+
+/// Full-bleed landscape poster, with optional blur, dimming and slow Ken Burns motion (disabled
+/// with reduced motion).
 class LandscapeImage extends StatelessWidget {
   const LandscapeImage({
     super.key,
     required this.landscapeId,
-    required this.style,
-    this.moment = Moment.jour,
     this.kenBurns = false,
     this.blurSigma = 0,
     this.brightness = 1,
@@ -199,8 +244,6 @@ class LandscapeImage extends StatelessWidget {
   });
 
   final String landscapeId;
-  final String style;
-  final Moment moment;
   final bool kenBurns;
   final double blurSigma;
   final double brightness;
@@ -208,24 +251,8 @@ class LandscapeImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final provider = LandscapeImages.providerFor(landscapeId);
-    final focus = Alignment(0, landscapeFocusY(style) * 2 - 1);
-    Widget picture = provider != null
-        ? Image(
-            image: provider,
-            fit: BoxFit.cover,
-            alignment: focus,
-            gaplessPlayback: true,
-            filterQuality: FilterQuality.medium,
-            errorBuilder: (context, error, stack) =>
-                ProceduralLandscape(style: style),
-          )
-        : ProceduralLandscape(style: style);
-    final matrix = landscapeMatrix(
-      moment: moment,
-      brightness: brightness,
-      saturation: saturation,
-    );
+    Widget picture = LandscapePoster(landscapeId: landscapeId);
+    final matrix = landscapeMatrix(brightness: brightness, saturation: saturation);
     if (!identical(matrix, _identity)) {
       picture = ColorFiltered(
         colorFilter: ColorFilter.matrix(matrix),
@@ -252,127 +279,6 @@ class LandscapeImage extends StatelessWidget {
       );
     }
     return ClipRect(child: SizedBox.expand(child: picture));
-  }
-}
-
-/// Procedural picture rasterised once per size and reused (cheap to animate). A style whose
-/// drawing was interrupted by a crash (crash guard, docs/app/architecture.md § 19) is shown
-/// simplified, drawn directly (three gradients, nothing offscreen).
-class ProceduralLandscape extends StatelessWidget {
-  const ProceduralLandscape({super.key, required this.style});
-
-  final String style;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final size = constraints.biggest;
-        if (!size.isFinite || size.isEmpty) return const SizedBox.shrink();
-        if (CrashGuard.current.isDead(style)) {
-          return CustomPaint(
-            size: size,
-            painter: SimplifiedLandscapePainter(style: style),
-          );
-        }
-        final ratio = (MediaQuery.maybeDevicePixelRatioOf(context) ?? 2).clamp(
-          1.0,
-          1.75,
-        );
-        final image = LandscapeRasterCache.obtain(style, size, ratio);
-        if (image == null) {
-          return RepaintBoundary(
-            child: CustomPaint(
-              size: size,
-              painter: LandscapePainter(style: style),
-            ),
-          );
-        }
-        return RawImage(
-          image: image,
-          width: size.width,
-          height: size.height,
-          fit: BoxFit.fill,
-          filterQuality: FilterQuality.medium,
-        );
-      },
-    );
-  }
-}
-
-/// LRU cache of rasterised procedural landscapes.
-///
-/// Each new picture is drawn offscreen on the GPU (`toImageSync`, on the raster thread). The
-/// crash guard marks it before (style and size, also written to the problem report's log) and
-/// clears the mark once it is surely done: after the next frame, which the raster thread draws
-/// after it, plus [settleDelay]. A process killed natively meanwhile leaves the mark, and the
-/// style is drawn simplified from the next start on.
-abstract final class LandscapeRasterCache {
-  static final Map<String, ui.Image> _images = {};
-  static int _pixels = 0;
-  static const int _budget = 14 * 1000 * 1000;
-  static bool _unsupported = false;
-
-  /// Margin after the next frame before the drawing counts as done.
-  static Duration settleDelay = const Duration(seconds: 2);
-
-  static bool contains(String style, Size size, double ratio) =>
-      _images.containsKey(_key(style, size, ratio));
-
-  static String _key(String style, Size size, double ratio) =>
-      '$style@${(size.width * ratio).ceil()}x${(size.height * ratio).ceil()}';
-
-  static ui.Image? obtain(String style, Size size, double ratio) {
-    if (_unsupported) return null;
-    final w = (size.width * ratio).ceil();
-    final h = (size.height * ratio).ceil();
-    final key = _key(style, size, ratio);
-    final hit = _images.remove(key);
-    if (hit != null) {
-      _images[key] = hit;
-      return hit;
-    }
-    final guard = CrashGuard.current;
-    final token = guard.beginDrawing('paysage', style, '$w×$h');
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    canvas.scale(ratio);
-    paintLandscapeCover(canvas, size, style);
-    final picture = recorder.endRecording();
-    try {
-      final image = picture.toImageSync(w, h);
-      picture.dispose();
-      _settle(guard, token);
-      _images[key] = image;
-      _pixels += w * h;
-      while (_pixels > _budget && _images.length > 1) {
-        final oldest = _images.keys.first;
-        final img = _images.remove(oldest)!;
-        _pixels -= img.width * img.height;
-        // Not disposed: a RawImage may still show it; the GC releases it.
-      }
-      return image;
-    } catch (_) {
-      picture.dispose();
-      guard.endDrawing(token);
-      _unsupported = true;
-      return null;
-    }
-  }
-
-  static void _settle(CrashGuard guard, int token) {
-    if (!guard.enabled) return;
-    final scheduler = SchedulerBinding.instance;
-    scheduler.addPostFrameCallback((_) {
-      Timer(settleDelay, () => guard.endDrawing(token));
-    });
-    scheduler.ensureVisualUpdate();
-  }
-
-  @visibleForTesting
-  static void clear() {
-    _images.clear();
-    _pixels = 0;
   }
 }
 

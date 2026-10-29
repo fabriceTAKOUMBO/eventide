@@ -4,13 +4,15 @@
 // trace it can leave is what was written *before* the risky work. Two sentinels, written
 // synchronously to a small file:
 //
-// - start: set just before the first landscape is drawn, cleared once the app has run stably
+// - start: set just before the first landscape is shown, cleared once the app has run stably
 //   ([CrashGuard.stableAfter] in the foreground) or went to the background normally. Still set at
 //   the next start: the previous start died, so this one is a safe start (the controller goes
 //   back to the default free landscape and forgets the landscapes being browsed).
-// - drawing: set before an offscreen drawing of a procedural landscape (full screen, thumbnail,
-//   media card picture), cleared once done. Still set at the next start: that style is drawn
-//   with the simplified picture from then on (until the app or the painter changes).
+// - live work ([beginLive]): set while a 3D scene renders live in its WebView (Android
+//   WebView runs its GPU work, WebGL included, in the app's own process: a GPU driver crash
+//   there kills the app), cleared when it pauses or goes. Still set at the next start: that
+//   scene is shown as its still picture from then on (until the app or the scene runtime
+//   changes). The 2D procedural landscapes that used it before are gone (contract § 12).
 //
 // Pure Dart: the storage is given ([GuardStore]); tests use [MemoryGuardStore].
 import 'dart:async';
@@ -39,8 +41,9 @@ class MemoryGuardStore implements GuardStore {
   }
 }
 
-/// An offscreen drawing in progress.
-typedef GuardedDrawing = ({String what, String style, String detail});
+/// Risky native work in progress (a live 3D scene): what it is, its subject (the scene id) and
+/// a detail for the log (quality).
+typedef GuardedWork = ({String what, String subject, String detail});
 
 class CrashGuard {
   CrashGuard({
@@ -56,7 +59,7 @@ class CrashGuard {
 
   final GuardStore? store;
 
-  /// App version and painter version: a new build tries every style again.
+  /// App version and scene runtime version: a new build tries every scene live again.
   final String build;
 
   /// Breadcrumbs of the problem report (written durably by the app: they must survive the crash).
@@ -69,8 +72,8 @@ class CrashGuard {
   int _unfinishedStarts = 0;
   bool _safeStart = false;
   final Set<String> _dead = {};
-  final List<GuardedDrawing> _interrupted = [];
-  final Map<int, GuardedDrawing> _drawings = {};
+  final List<GuardedWork> _interrupted = [];
+  final Map<int, GuardedWork> _live = {};
   int _nextToken = 1;
   bool _uiStarted = false;
   bool _stable = false;
@@ -79,15 +82,16 @@ class CrashGuard {
   /// The previous start died before running stably: start on the default landscape.
   bool get safeStart => _safeStart;
 
-  /// Styles whose drawing was interrupted by a crash: drawn simplified.
-  Set<String> get deadStyles => Set.unmodifiable(_dead);
+  /// Subjects (3D scene ids) whose live work was interrupted by a crash: shown as their still
+  /// picture.
+  Set<String> get deadSubjects => Set.unmodifiable(_dead);
 
-  bool isDead(String style) => _dead.contains(style);
+  bool isDead(String subject) => _dead.contains(subject);
 
-  /// Drawings in progress when the previous run died (oldest first).
-  List<GuardedDrawing> get interrupted => List.unmodifiable(_interrupted);
+  /// Live work in progress when the previous run died (oldest first).
+  List<GuardedWork> get interrupted => List.unmodifiable(_interrupted);
 
-  /// Starts that began drawing and were not yet confirmed stable (this one included).
+  /// Starts that showed a landscape and were not yet confirmed stable (this one included).
   int get unfinishedStarts => _unfinishedStarts;
 
   /// Reads what the previous run left. Call once, before the scene is loaded.
@@ -106,13 +110,13 @@ class CrashGuard {
       _unfinishedStarts = starts is int && starts > 0 ? starts : 0;
       final dead = state['dead'];
       if (dead is List) _dead.addAll(dead.whereType<String>());
-      final drawing = state['drawing'];
-      if (drawing is List) {
-        for (final d in drawing) {
-          if (d is! Map || d['style'] is! String) continue;
-          final entry = (what: '${d['what'] ?? ''}', style: d['style'] as String, detail: '${d['detail'] ?? ''}');
+      final live = state['live'];
+      if (live is List) {
+        for (final d in live) {
+          if (d is! Map || d['subject'] is! String) continue;
+          final entry = (what: '${d['what'] ?? ''}', subject: d['subject'] as String, detail: '${d['detail'] ?? ''}');
           _interrupted.add(entry);
-          _dead.add(entry.style);
+          _dead.add(entry.subject);
         }
       }
     }
@@ -125,14 +129,14 @@ class CrashGuard {
     }
     for (final d in _interrupted) {
       log?.call(
-        'lancement précédent arrêté pendant : ${d.what} ${d.style} ${d.detail} ; '
-        'ce paysage sera dessiné en version simplifiée',
+        'lancement précédent arrêté pendant : ${d.what} ${d.subject} ${d.detail} ; '
+        'ce paysage sera montré en image fixe',
       );
     }
     _save();
   }
 
-  /// The first landscape is about to be drawn: this start counts as unfinished until
+  /// The first landscape is about to be shown: this start counts as unfinished until
   /// [markStable] (called by itself after [stableAfter]).
   void uiStarting() {
     if (!enabled || _uiStarted) return;
@@ -152,19 +156,19 @@ class CrashGuard {
     _save();
   }
 
-  /// Marks an offscreen drawing as in progress (and notes it in the log). Returns the token
-  /// for [endDrawing].
-  int beginDrawing(String what, String style, String detail) {
-    log?.call('dessin : $what $style $detail');
+  /// Marks risky live work as in progress (and notes it in the log). Returns the token for
+  /// [endLive].
+  int beginLive(String what, String subject, String detail) {
+    log?.call('en direct : $what $subject $detail');
     if (!enabled) return 0;
     final token = _nextToken++;
-    _drawings[token] = (what: what, style: style, detail: detail);
+    _live[token] = (what: what, subject: subject, detail: detail);
     _save();
     return token;
   }
 
-  void endDrawing(int token) {
-    if (_drawings.remove(token) != null) _save();
+  void endLive(int token) {
+    if (_live.remove(token) != null) _save();
   }
 
   /// Stops the timer (tests).
@@ -178,12 +182,12 @@ class CrashGuard {
     if (store == null) return;
     try {
       store.write(jsonEncode({
-        'version': 1,
+        'version': 2,
         'build': build,
         'starts': _unfinishedStarts,
         'dead': [..._dead],
-        'drawing': [
-          for (final d in _drawings.values) {'what': d.what, 'style': d.style, 'detail': d.detail},
+        'live': [
+          for (final d in _live.values) {'what': d.what, 'subject': d.subject, 'detail': d.detail},
         ],
       }));
     } catch (_) {

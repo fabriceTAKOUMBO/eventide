@@ -291,7 +291,7 @@ abstract class AppModel extends ChangeNotifier {
 
   // ---- Storm (contract § 11)
 
-  /// A lightning flash announced just before each thunder of the mix: the `eclairs` decor draws
+  /// A lightning flash announced just before each thunder of the mix: a filmed storm (`eclairs`) shows
   /// it when the landscape is visible, the thunder follows [LightningStrike.thunderDelay] later.
   /// Concrete default (no thunder) so that fakes and previews need not implement it.
   Stream<LightningStrike> get lightningStrikes => const Stream.empty();

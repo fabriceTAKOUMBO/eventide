@@ -140,8 +140,8 @@ void main() {
       usePhoneView(tester);
       final model = _Model(plan: Plan.annual);
       await pumpApp(tester, model);
-      // berge-mousseuse: no video and no poster on this test setup.
-      await openRoute(tester, WallpaperSheet.routeName, (_) => const WallpaperSheet(landscapeId: 'berge-mousseuse'));
+      // ciel-etoile: test material (demo build only), no video and no poster here.
+      await openRoute(tester, WallpaperSheet.routeName, (_) => const WallpaperSheet(landscapeId: 'ciel-etoile'));
       expect(find.text(WallpaperMessages.liveTitle), findsNothing);
       expect(find.text(WallpaperMessages.nothingText), findsOneWidget);
       await tearDownApp(tester);

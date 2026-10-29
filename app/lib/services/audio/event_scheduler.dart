@@ -1,7 +1,7 @@
 // Sounds played by events (API contract § 11): instead of a loop, short sounds now and then,
 // never twice the same (a thunder every 2 to 5 minutes, each one different). Owned by the
 // PlaybackHandler, so it lives in the background audio service and keeps going with the screen
-// off. Pure timing: the engine plays, the decor draws the flash announced on [strikes].
+// off. Pure timing: the engine plays, the home screen draws the flash announced on [strikes].
 //
 // Rules applied (contract § 11):
 //   * first event `premier_s` after the start of the listening, a resume after a pause, or the
@@ -95,7 +95,7 @@ class EventSoundScheduler {
   /// End of the event sounding now (any layer): no other event before it.
   DateTime? _busyUntil;
 
-  /// A flash just before each thunder (contract § 11): the `eclairs` decor draws it.
+  /// A flash just before each thunder (contract § 11): drawn over a filmed storm (`eclairs`).
   Stream<LightningStrike> get strikes => _strikes.stream;
 
   bool get running => _running;

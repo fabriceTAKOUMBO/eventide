@@ -11,7 +11,7 @@ void main() {
   late List<String> log;
 
   /// A new process on the same phone (same file).
-  CrashGuard start({String build = '1.0.0+p2'}) =>
+  CrashGuard start({String build = '1.0.0+s1'}) =>
       CrashGuard(store: store, build: build, log: log.add)..load();
 
   setUp(() {
@@ -19,10 +19,10 @@ void main() {
     log = [];
   });
 
-  test('first start: nothing to report, nothing drawn simplified', () {
+  test('first start: nothing to report, no scene marked', () {
     final guard = start();
     expect(guard.safeStart, isFalse);
-    expect(guard.deadStyles, isEmpty);
+    expect(guard.deadSubjects, isEmpty);
     expect(guard.interrupted, isEmpty);
     expect(log, isEmpty);
   });
@@ -74,45 +74,44 @@ void main() {
     expect(start().safeStart, isFalse);
   });
 
-  test('a drawing interrupted by a crash: its style is drawn simplified from then on, and said in the log', () {
+  test('a live 3D scene interrupted by a crash: shown as its poster from then on, and said in the log', () {
     final first = start()..uiStarting();
-    final done = first.beginDrawing('paysage', 'pierres', '672×1456');
-    first.endDrawing(done);
-    first.beginDrawing('paysage', 'lisiere', '672×1456');
-    expect(log, ['dessin : paysage pierres 672×1456', 'dessin : paysage lisiere 672×1456']);
-    expect(jsonDecode(store.content!)['drawing'], [
-      {'what': 'paysage', 'style': 'lisiere', 'detail': '672×1456'},
+    final done = first.beginLive('scène 3D', 'jardin-zen', 'high');
+    first.endLive(done); // paused or released normally
+    first.beginLive('scène 3D', 'ondes', 'high');
+    expect(log, ['en direct : scène 3D jardin-zen high', 'en direct : scène 3D ondes high']);
+    expect(jsonDecode(store.content!)['live'], [
+      {'what': 'scène 3D', 'subject': 'ondes', 'detail': 'high'},
     ]);
-    first.dispose();
+    first.dispose(); // killed natively while the scene ran
 
     log.clear();
     final second = start();
-    expect(second.isDead('lisiere'), isTrue);
-    expect(second.isDead('pierres'), isFalse);
-    expect(second.interrupted.single.style, 'lisiere');
-    expect(log, contains(contains('lancement précédent arrêté pendant : paysage lisiere 672×1456')));
+    expect(second.isDead('ondes'), isTrue);
+    expect(second.isDead('jardin-zen'), isFalse);
+    expect(second.interrupted.single.subject, 'ondes');
+    expect(log, contains(contains('lancement précédent arrêté pendant : scène 3D ondes high ; ce paysage sera montré en image fixe')));
     second.markStable();
 
-    // Still simplified at the following starts, until the build changes.
-    expect(start().isDead('lisiere'), isTrue);
-    expect(start(build: '1.0.1+p2').isDead('lisiere'), isFalse);
+    // Still a poster at the following starts, until the build (app or runtime) changes.
+    expect(start().isDead('ondes'), isTrue);
+    expect(start(build: '1.0.1+s1').isDead('ondes'), isFalse);
   });
 
-  test('a drawing that ends normally leaves nothing', () {
+  test('live work that ends normally leaves nothing', () {
     final guard = start();
-    final token = guard.beginDrawing('image de la carte', 'berge', '720×720 nuit');
-    guard.endDrawing(token);
-    guard.endDrawing(token);
-    expect(start().deadStyles, isEmpty);
+    final token = guard.beginLive('scène 3D', 'aurore', 'low');
+    guard.endLive(token);
+    guard.endLive(token);
+    expect(start().deadSubjects, isEmpty);
   });
-
   test('an unreadable or foreign file is ignored', () {
     store.content = '{not json';
     expect(start().safeStart, isFalse);
-    store.content = jsonEncode({'build': 'other', 'starts': 3, 'dead': ['cafe'], 'drawing': []});
+    store.content = jsonEncode({'build': 'other', 'starts': 3, 'dead': ['ondes'], 'live': []});
     final guard = start();
     expect(guard.safeStart, isFalse);
-    expect(guard.deadStyles, isEmpty);
+    expect(guard.deadSubjects, isEmpty);
   });
 
   test('the default guard (tests, previews) stores nothing and never marks anything', () {
@@ -121,8 +120,8 @@ void main() {
     guard
       ..load()
       ..uiStarting();
-    expect(guard.beginDrawing('paysage', 'lisiere', '1×1'), 0);
-    expect(guard.isDead('lisiere'), isFalse);
+    expect(guard.beginLive('scène 3D', 'ondes', 'high'), 0);
+    expect(guard.isDead('ondes'), isFalse);
     expect(guard.safeStart, isFalse);
   });
 }

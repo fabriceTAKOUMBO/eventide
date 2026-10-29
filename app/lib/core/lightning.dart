@@ -1,9 +1,9 @@
 // Storm rules of the API contract § 11: how each event of a sound played by events is drawn
 // (variant, gain, speed, stereo position) and the lightning flash that comes before a thunder.
-// Pure Dart: the scheduler (services/audio/event_scheduler.dart) and the decor use them.
+// Pure Dart: the scheduler (services/audio/event_scheduler.dart) and the lightning layer use them.
 import 'dart:math' as math;
 
-/// A lightning strike announced by the thunder of the mix: the `eclairs` decor draws a flash at
+/// A lightning strike announced by the thunder of the mix: a filmed storm (`eclairs`) shows a flash at
 /// [at], the thunder follows [thunderDelay] later. [intensity] (0..1) is higher when the delay
 /// is shorter (a close strike is brighter and louder).
 class LightningStrike {
@@ -57,7 +57,7 @@ abstract final class StormRules {
   static const Duration minThunderDelay = Duration(milliseconds: 400);
   static const Duration maxThunderDelay = Duration(milliseconds: 3500);
 
-  /// Silent flashes of the `eclairs` decor when the mix has no thunder: one every 2 to 5 min.
+  /// Silent flashes of a filmed storm (`eclairs`) when the mix has no thunder: one every 2 to 5 min.
   static const Duration minSilentFlashGap = Duration(minutes: 2);
   static const Duration maxSilentFlashGap = Duration(minutes: 5);
 
@@ -103,7 +103,7 @@ abstract final class StormRules {
     return 1.0 - 0.65 * u;
   }
 
-  /// Gap before the next silent flash of the decor (no thunder in the mix).
+  /// Gap before the next silent flash of a filmed storm (no thunder in the mix).
   static Duration silentFlashGap(math.Random random) {
     final lo = minSilentFlashGap.inMilliseconds;
     final hi = maxSilentFlashGap.inMilliseconds;

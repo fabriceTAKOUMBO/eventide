@@ -144,8 +144,6 @@ class _VitreSheetState extends State<VitreSheet> {
                 widget.background ??
                 LandscapeImage(
                   landscapeId: landscape.id,
-                  style: landscape.style,
-                  moment: model.scene.moment,
                   brightness: widget.backgroundBrightness,
                   saturation: widget.backgroundSaturation,
                   blurSigma: widget.backgroundBlur,

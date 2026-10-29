@@ -291,6 +291,8 @@ class FakeAppModel extends AppModel {
   @override
   void setLayerLevel(LayerKind kind, String id, int level) {
     _log('setLayerLevel:${kind.name}:$id:$level');
+    // Like the real model: decor only on a 3D scene that can show it (contract § 12).
+    if (kind == LayerKind.decor && level > 0 && !catalog.decorApplies(_scene.landscapeId, id)) return;
     if (level > 0 && !rules.canUseItem(plan, kind, id)) {
       _events.add(const OpenPremiumEvent());
       return;

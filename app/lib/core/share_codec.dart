@@ -29,8 +29,10 @@ String encodeSceneForLink(Scene scene) {
 }
 
 /// Decodes a link payload. Returns null when the payload is not a scene or
-/// its landscape is unknown; unknown or duplicate items are dropped, levels
-/// clamped, and audio layers capped at `couches_max`. Never throws.
+/// its landscape is unknown; a retired landscape opens on the default one
+/// (contract § 12); unknown or duplicate items and decor that does not apply to
+/// the landscape are dropped, levels clamped, and audio layers capped at
+/// `couches_max`. Never throws.
 ///
 /// The recipient gets the default timer, no sleep tracking and nothing muted.
 Scene? decodeSceneFromLink(String data, Catalog catalog) {
@@ -61,9 +63,9 @@ Scene? sceneFromSharedJson(Object? json, Catalog catalog) {
 
 Scene? _sceneFromShared(Map<dynamic, dynamic> json, Catalog catalog) {
   final landscapeId = json['paysage'];
-  if (landscapeId is! String || catalog.landscape(landscapeId) == null) {
-    return null;
-  }
+  // A retired landscape opens on the default one, sounds and music kept (contract § 12).
+  final landscape = landscapeId is String ? catalog.landscapeFor(landscapeId) : null;
+  if (landscape == null) return null;
   var audio = 0;
   List<Layer> layers(LayerKind kind) {
     final list = json[kind.sceneKey];
@@ -75,6 +77,8 @@ Scene? _sceneFromShared(Map<dynamic, dynamic> json, Catalog catalog) {
       final id = entry['id'];
       final level = entry['niveau'];
       if (id is! String || catalog.item(kind, id) == null) continue;
+      // Decor only where it applies: a 3D scene that can show it (contract § 12).
+      if (kind == LayerKind.decor && !landscape.allowsDecor(id)) continue;
       if (level is! num || !level.isFinite) continue;
       final clamped = level.round().clamp(0, 100);
       if (clamped == 0 || !seen.add(id)) continue;
@@ -88,7 +92,7 @@ Scene? _sceneFromShared(Map<dynamic, dynamic> json, Catalog catalog) {
   }
 
   return Scene(
-    landscapeId: landscapeId,
+    landscapeId: landscape.id,
     moment: Moment.fromName(json['moment']) ?? Moment.jour,
     sounds: layers(LayerKind.son),
     music: layers(LayerKind.musique),

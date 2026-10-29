@@ -33,8 +33,7 @@ import '../services/permissions_service.dart';
 import '../services/storage.dart';
 import '../services/wallpaper_service.dart';
 
-import '../ui/landscape/landscape_artwork.dart';
-import '../ui/landscape/landscape_painter.dart' show kLandscapePainterVersion;
+import '../ui/landscape/imaginaire_view.dart' show Imaginaire, kImaginaireRuntimeVersion;
 import '../ui/landscape/landscape_video.dart' show LandscapeVideos;
 import 'app_controller.dart';
 import 'demo_mode.dart';
@@ -88,11 +87,32 @@ Future<Set<String>> _bundledAssets() async {
     final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
     return manifest
         .listAssets()
-        .where((k) => k.startsWith('assets/audio/') || k.startsWith('assets/landscapes/'))
+        .where((k) =>
+            k.startsWith('assets/audio/') || k.startsWith('assets/landscapes/') || k == _sceneRuntime)
         .toSet();
   } catch (_) {
     return const {};
   }
+}
+
+/// Entry page of the 3D scenes' runtime (contract § 12).
+const String _sceneRuntime = 'assets/imaginaire/index.html';
+
+/// The catalog without the landscapes this phone can never show (contract § 12): a filmed
+/// landscape needs its video or its poster, bundled or on the content server (`remote.json`);
+/// a 3D scene needs the bundled runtime or its poster. In production, the landscapes made
+/// from test material (demo build only) are left out, and a theme left empty is hidden.
+Future<Catalog> _showableCatalog(Catalog catalog, Future<Set<String>> bundled) async {
+  final assets = await bundled;
+  final remote = await _remoteLandscapeMedia();
+  final runtime = assets.contains(_sceneRuntime);
+  return catalog.showing((l) {
+    final media = assets.contains(LandscapeMediaKeys.bundledVideo(l.id)) ||
+        assets.contains(LandscapeMediaKeys.bundledImage(l.id)) ||
+        remote.videos.contains(l.id) ||
+        remote.images.contains(l.id);
+    return media || (l.is3d && runtime);
+  });
 }
 
 /// Which Premium landscapes have a video or a poster on the content server (generated file).
@@ -132,6 +152,7 @@ Future<({PlaybackHandler handler, RealAppModel model})> startEventide() async {
 /// Breadcrumbs of the problem report: sound state, landscape, memory every 5 minutes.
 SessionBreadcrumbs _watchSession(PlaybackHandler handler, RealAppModel model) {
   LandscapeVideos.log = Breadcrumbs.add;
+  Imaginaire.log = Breadcrumbs.add;
   final crumbs = SessionBreadcrumbs(log: Breadcrumbs.log, liveVideos: () => LandscapeVideos.hub.liveCount)
     ..start();
   void onStatus() {
@@ -153,17 +174,18 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
     nativeDemoBuild: Env.demoModeRequested && await native.isDemoBuild(),
   );
   if (Env.demoModeRequested) debugPrint('Eventide: demo mode ${demo ? 'on' : 'off (not the demo package)'}');
-  final catalog = await loadCatalog();
+  final bundled = _bundledAssets();
+  final catalog = await _showableCatalog(await loadCatalog(), bundled);
   final support = await getApplicationSupportDirectory();
   // Problem report: the log file survives a crash; the exits recorded by Android are read once.
   unawaited(Breadcrumbs.log.attach(Directory('${support.path}/diagnostics')));
   Breadcrumbs.add('démarrage : Eventide ${Env.appVersion}${demo ? ' (version démo)' : ''}');
   // Crash guard (docs/app/architecture.md § 19): what the previous run left decides a safe start
-  // and which styles are drawn simplified. Its breadcrumbs are written before returning: they
-  // must be on the phone if a native crash follows.
+  // and which 3D scenes are shown as their poster. Its breadcrumbs are written before returning:
+  // they must be on the phone if a native crash follows.
   final guard = CrashGuard(
     store: FileGuardStore(File('${support.path}/diagnostics/guard.json')),
-    build: '${Env.appVersion}+p$kLandscapePainterVersion',
+    build: '${Env.appVersion}+s$kImaginaireRuntimeVersion',
     log: Breadcrumbs.log.addDurable,
   )..load();
   CrashGuard.current = guard;
@@ -184,7 +206,6 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
     cloudProjectNumber: Env.playCloudProjectNumber,
   );
   final connectivity = HttpConnectivityChecker(client: client, apiBaseUrl: Env.apiBaseUrl, native: native);
-  final bundled = _bundledAssets();
   final content = ContentRepository(
     directory: Directory('${support.path}/content'),
     client: client,
@@ -204,8 +225,6 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
       return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
     },
     downloadedPoster: (id) => content.cachedPath(LandscapeMediaKeys.image(id)),
-    render: renderGuardedLandscapeArtwork,
-    simplified: guard.isDead,
   );
   // Live wallpaper of the landscape videos (files the wallpaper process reads).
   final wallpaper = LandscapeWallpaper(

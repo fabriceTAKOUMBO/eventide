@@ -27,6 +27,9 @@ Future<void> pumpApp(
   final context = tester.element(find.byType(Navigator).first);
   await tester.runAsync(() async {
     await LandscapeImages.discoverAssets();
+    // No WebView in widget tests: the 3D scenes show their poster (imaginaire_view_test.dart
+    // drives them with a fake surface).
+    LandscapeImages.debugSetSceneRuntime(false);
     final logo = LandscapeImages.brandLogo.value;
     if (logo != null && context.mounted) {
       await precacheImage(AssetImage(logo), context);

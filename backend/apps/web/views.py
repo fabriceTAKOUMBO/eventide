@@ -18,7 +18,7 @@ from django.shortcuts import render
 from django.views.decorators.cache import cache_control
 from django.views.decorators.http import require_GET
 
-from apps.core.catalog import SCENE_SECTIONS, get_catalog
+from apps.core.catalog import DEFAULT_LANDSCAPE, SCENE_SECTIONS, get_catalog
 from apps.shares.models import Share
 from apps.shares.views import CODE_RE
 
@@ -44,8 +44,11 @@ def _common() -> dict[str, Any]:
 
 
 def describe_scene(scene: dict) -> dict:
+    """The mix of a stored share, as the app opens it (contract § 12): a retired landscape is
+    shown as the default free landscape, and only the decor that applies to it is listed."""
     catalog = get_catalog()
-    paysage = scene["paysage"]
+    paysage = catalog.landscape_or_default(scene.get("paysage")) or DEFAULT_LANDSCAPE
+    decors = catalog.decors_of(paysage)
     layers = []
     for key, section in SCENE_SECTIONS.items():
         items = [
@@ -55,7 +58,7 @@ def describe_scene(scene: dict) -> dict:
                 "premium": not catalog.is_free(section, item["id"]),
             }
             for item in scene.get(key, [])
-            if catalog.has(section, item.get("id"))
+            if catalog.has(section, item.get("id")) and (key != "decor" or item["id"] in decors)
         ]
         if items:
             layers.append({"titre": LAYER_TITLES[key], "elements": items})

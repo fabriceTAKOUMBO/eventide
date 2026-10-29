@@ -14,7 +14,7 @@ void main() {
       base64Url.encode(utf8.encode(jsonEncode(json))).replaceAll('=', '');
 
   final scene = Scene(
-    landscapeId: 'lune-lac',
+    landscapeId: 'lac-lune',
     moment: Moment.nuit,
     sounds: const [
       Layer(id: 'ruisseau', level: 25),
@@ -29,7 +29,7 @@ void main() {
   test('round trip keeps landscape, layers and moment only', () {
     final data = encodeSceneForLink(scene);
     final decoded = decodeSceneFromLink(data, catalog)!;
-    expect(decoded.landscapeId, 'lune-lac');
+    expect(decoded.landscapeId, 'lac-lune');
     expect(decoded.moment, Moment.nuit);
     expect(decoded.sounds, scene.sounds);
     expect(decoded.music, scene.music);
@@ -105,10 +105,51 @@ void main() {
     }
   });
 
+  test('a retired landscape opens on Cascade en forêt, sounds and music kept, decor dropped (contract § 12)', () {
+    final data = encodeJson({
+      'version': 1,
+      'paysage': 'berge-mousseuse',
+      'moment': 'soir',
+      'sons': [
+        {'id': 'ruisseau', 'niveau': 55},
+      ],
+      'musique': [
+        {'id': 'harpe', 'niveau': 20},
+      ],
+      'decor': [
+        {'id': 'lucioles', 'niveau': 30},
+      ],
+    });
+    final decoded = decodeSceneFromLink(data, catalog)!;
+    expect(decoded.landscapeId, 'cascade-foret');
+    expect(decoded.moment, Moment.soir);
+    expect(decoded.sounds, const [Layer(id: 'ruisseau', level: 55)]);
+    expect(decoded.music, const [Layer(id: 'harpe', level: 20)]);
+    expect(decoded.decor, isEmpty);
+  });
+
+  test('decor only where it applies: a 3D scene and its own elements (contract § 12)', () {
+    Scene? decode(String landscape) => decodeSceneFromLink(
+      encodeJson({
+        'version': 1,
+        'paysage': landscape,
+        'decor': [
+          {'id': 'etoiles', 'niveau': 40},
+          {'id': 'petales', 'niveau': 30},
+          {'id': 'eclairs', 'niveau': 50},
+        ],
+      }),
+      catalog,
+    );
+    expect(decode('ondes')!.decor, const [Layer(id: 'etoiles', level: 40)]);
+    expect(decode('jardin-zen')!.decor, const [Layer(id: 'petales', level: 30)]);
+    expect(decode('pluie-ville')!.decor, isEmpty);
+  });
+
   test('unknown items are dropped, levels clamped, duplicates removed', () {
     final data = encodeJson({
       'version': 1,
-      'paysage': 'cascade-foret',
+      'paysage': 'foret-lucioles',
       'moment': 'crepuscule',
       'sons': [
         {'id': 'eau-vive', 'niveau': 150},
@@ -198,7 +239,7 @@ void main() {
   test('sceneFromSharedJson validates a server scene', () {
     expect(
       sceneFromSharedJson(scene.toJson(), catalog)!.landscapeId,
-      'lune-lac',
+      'lac-lune',
     );
     expect(sceneFromSharedJson({'paysage': 'x'}, catalog), isNull);
     expect(sceneFromSharedJson(null, catalog), isNull);
@@ -209,7 +250,7 @@ void main() {
       final uri = shareLinkFor(scene, 'eventide.example');
       expect(uri.toString(), startsWith('https://eventide.example/s#'));
       final parsed = Uri.parse(uri.toString());
-      expect(sceneFromShareUri(parsed, catalog)!.landscapeId, 'lune-lac');
+      expect(sceneFromShareUri(parsed, catalog)!.landscapeId, 'lac-lune');
       expect(
         sceneFromShareUri(
           Uri.parse('https://eventide.example/s/#${encodeSceneForLink(scene)}'),

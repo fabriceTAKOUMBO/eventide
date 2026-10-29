@@ -1,6 +1,8 @@
 // Renders every screen to PNG (scratchpad/screens) with the real fonts, to compare with
 // the mockup. Also fails on any layout overflow or exception.
+import 'package:eventide/core/catalog.dart';
 import 'package:eventide/core/plan.dart';
+import 'package:eventide/core/scene.dart';
 import 'package:eventide/core/schedule.dart';
 import 'package:eventide/core/settings.dart';
 import 'package:eventide/core/sleep.dart';
@@ -111,11 +113,16 @@ void main() {
 
     await openRoute(tester, Routes.mix, (_) => const MixSheet());
     await shot(tester, '04_mon_mix');
-    await tester.tap(find.text('Décor'));
+    navigatorOf(tester).pop();
     await settle(tester);
+    // Décor: a 3D scene of « Imaginaire » only (contract § 12).
+    final filmed = model.scene;
+    model.scene = Scene.fromLandscape(model.catalog.landscape('foret-lucioles')!);
+    await openRoute(tester, Routes.mix, (_) => const MixSheet(initialKind: LayerKind.decor));
     await shot(tester, '04b_mon_mix_decor');
     navigatorOf(tester).pop();
     await settle(tester);
+    model.scene = filmed;
 
     await openRoute(tester, Routes.share, (_) => const ShareScreen());
     await shot(tester, '06_partage');

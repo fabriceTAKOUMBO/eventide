@@ -133,8 +133,8 @@ class _PremiumScreenState extends State<PremiumScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          for (final text in const [
-            'Tous les paysages et leurs ambiances (2 en gratuit)',
+          for (final text in [
+            'Tous les paysages et leurs ambiances (${model.catalog.freeLandscapeCount} en gratuit)',
             'Toutes les mélodies et tous les sons',
             'Favoris et programmations sans limite',
             'Écoute sans connexion',

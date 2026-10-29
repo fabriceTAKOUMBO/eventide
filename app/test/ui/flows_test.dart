@@ -15,7 +15,7 @@ import 'package:eventide/ui/screens/settings_screen.dart';
 import 'package:eventide/ui/screens/standby_screen.dart';
 import 'package:eventide/ui/screens/landscapes_sheet.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart' show Opacity;
+import 'package:flutter/widgets.dart' show Opacity, Size;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'app_harness.dart';
@@ -34,6 +34,14 @@ Future<void> tapLabel(WidgetTester tester, Pattern text) async {
 
 Future<void> tapText(WidgetTester tester, String text) async {
   final finder = find.text(text);
+  await tester.ensureVisible(finder.first);
+  await tester.tap(finder.first);
+  await settle(tester);
+}
+
+/// Taps a text of the Paysages sheet (a theme tab: the home screen has the same names).
+Future<void> tapInSheet(WidgetTester tester, String text) async {
+  final finder = find.descendant(of: find.byType(LandscapesSheet), matching: find.text(text));
   await tester.ensureVisible(finder.first);
   await tester.tap(finder.first);
   await settle(tester);
@@ -132,27 +140,27 @@ void main() {
       'vertical swipe changes landscape within the theme, without wrap',
       (tester) async {
         usePhoneView(tester);
-        final model = FakeAppModel();
+        final model = FakeAppModel()..selectLandscape('foret-lucioles');
         await pumpApp(tester, model);
-        expect(model.browsedLandscapeId, 'cascade-foret');
-        // Swipe down on the first landscape: nothing before it (no wrap).
+        expect(model.browsedLandscapeId, 'foret-lucioles');
+        // Swipe down on the first landscape of « Imaginaire »: nothing before it (no wrap).
         await swipe(tester, const Offset(0, 220));
-        expect(model.browsedLandscapeId, 'cascade-foret');
+        expect(model.browsedLandscapeId, 'foret-lucioles');
         // Swipe up: next landscape.
         await swipe(tester, const Offset(0, -220));
-        expect(model.browsedLandscapeId, 'sous-bois');
-        expect(find.text('Sous-bois ensoleillé'), findsOneWidget);
+        expect(model.browsedLandscapeId, 'lac-lune');
+        expect(find.text('Lac sous la lune'), findsOneWidget);
         // Too short (< 50 px): ignored.
         await swipe(tester, const Offset(0, -40));
-        expect(model.browsedLandscapeId, 'sous-bois');
+        expect(model.browsedLandscapeId, 'lac-lune');
         // Diagonal (no dominant axis): ignored.
         await swipe(tester, const Offset(110, -120));
-        expect(model.browsedLandscapeId, 'sous-bois');
+        expect(model.browsedLandscapeId, 'lac-lune');
         // Back with the arrow button.
         await tapLabel(tester, 'Paysage précédent');
-        expect(model.browsedLandscapeId, 'cascade-foret');
+        expect(model.browsedLandscapeId, 'foret-lucioles');
         await tapLabel(tester, 'Paysage suivant');
-        expect(model.browsedLandscapeId, 'sous-bois');
+        expect(model.browsedLandscapeId, 'lac-lune');
         await tearDownApp(tester);
       },
     );
@@ -203,11 +211,10 @@ void main() {
       tester,
     ) async {
       usePhoneView(tester);
-      final model = FakeAppModel();
+      final model = FakeAppModel()..selectLandscape('foret-lucioles');
       await pumpApp(tester, model);
       await tapLabel(tester, 'Paysage suivant');
-      await tapLabel(tester, 'Paysage suivant');
-      expect(model.browsedLandscapeId, 'berge-mousseuse');
+      expect(model.browsedLandscapeId, 'lac-lune');
       expect(model.browsedLandscapeLocked, isTrue);
       expect(find.text('Avec Premium'), findsOneWidget);
       expect(label('Lancer la lecture'), findsNothing);
@@ -215,7 +222,7 @@ void main() {
       expect(find.byType(PremiumScreen), findsOneWidget);
       await tapLabel(tester, 'Fermer');
       expect(find.byType(PremiumScreen), findsNothing);
-      expect(find.text('Berge mousseuse'), findsOneWidget);
+      expect(find.text('Lac sous la lune'), findsOneWidget);
       await tearDownApp(tester);
     });
 
@@ -290,13 +297,14 @@ void main() {
       await tapLabel(tester, 'Choisir un paysage');
       expect(find.byType(LandscapesSheet), findsOneWidget);
       expect(find.text('Version gratuite : 2 paysages'), findsOneWidget);
-      await tapLabel(tester, RegExp('^Torrent de montagne, Premium'));
+      await tapInSheet(tester, 'Imaginaire');
+      await tapLabel(tester, RegExp('^Aurore boréale, Premium'));
       expect(find.byType(PremiumScreen), findsOneWidget);
       navigatorOf(tester).pop();
       await settle(tester);
-      await tapLabel(tester, 'Sous-bois ensoleillé');
-      expect(model.calls, contains('selectLandscape:sous-bois'));
-      expect(model.scene.landscapeId, 'sous-bois');
+      await tapLabel(tester, 'Forêt aux lucioles');
+      expect(model.calls, contains('selectLandscape:foret-lucioles'));
+      expect(model.scene.landscapeId, 'foret-lucioles');
       expect(find.byType(LandscapesSheet), findsNothing);
       await tearDownApp(tester);
     });
@@ -314,10 +322,10 @@ void main() {
         );
         await tapLabel(tester, RegExp('^Ambiance : Cascade en forêt'));
         expect(find.text('Ambiance'), findsWidgets);
-        await tapText(tester, 'Astral');
-        await tapLabel(tester, 'Lune sur le lac');
+        await tapInSheet(tester, 'Imaginaire');
+        await tapLabel(tester, 'Lac sous la lune');
         expect(find.byType(LandscapesSheet), findsNothing);
-        expect(label(RegExp('^Ambiance : Lune sur le lac')), findsOneWidget);
+        expect(label(RegExp('^Ambiance : Lac sous la lune')), findsOneWidget);
         await tearDownApp(tester);
       },
     );
@@ -417,9 +425,8 @@ void main() {
         expect(model.musicMuted, isFalse);
         expect(model.scene.levelOf(LayerKind.musique, 'piano-doux'), 20);
 
-        // The decor has no mute switch.
-        await tapText(tester, 'Décor');
-        expect(label(RegExp('sourdine|activée|activés')), findsNothing);
+        // A filmed landscape has no Décor tab (contract § 12).
+        expect(find.text('Décor'), findsNothing);
         await tearDownApp(tester);
       },
     );
@@ -444,7 +451,7 @@ void main() {
       'locked item asks the model (Premium opens), moment changes light',
       (tester) async {
         usePhoneView(tester);
-        final model = FakeAppModel();
+        final model = FakeAppModel()..selectLandscape('foret-lucioles');
         await pumpApp(tester, model);
         await openRoute(tester, Routes.mix, (_) => const MixSheet());
         await tapLabel(tester, 'Ajouter tonnerre, avec Premium');
@@ -460,6 +467,43 @@ void main() {
         await tearDownApp(tester);
       },
     );
+
+    testWidgets('Décor only for a 3D scene, with the elements it can show (contract § 12)', (tester) async {
+      // A very tall screen: every row of the list is built.
+      tester.view.physicalSize = const Size(390 * 3, 3200 * 3);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      final model = FakeAppModel(plan: Plan.annual);
+      await pumpApp(tester, model);
+      await openRoute(tester, Routes.mix, (_) => const MixSheet(initialKind: LayerKind.decor));
+      // A filmed landscape: Sons and Musique only, even when asked for the decor.
+      expect(find.text('Décor'), findsNothing);
+      expect(find.text('Sons'), findsOneWidget);
+      expect(find.text('Ajouter un son'), findsOneWidget);
+
+      // Mer de nuages: its own five elements, the two of its default mix in the list.
+      model.selectLandscape('mer-nuages');
+      await settle(tester);
+      await tapText(tester, 'Décor');
+      expect(find.text('Moment de la journée'), findsOneWidget);
+      expect(find.text('Oiseaux en vol'), findsOneWidget);
+      expect(find.text('Rayons de soleil'), findsOneWidget);
+      for (final offered in ['étoiles', 'étoiles filantes', 'brume']) {
+        expect(label('Ajouter $offered'), findsOneWidget, reason: offered);
+      }
+      for (final other in ['lucioles', 'neige', 'pétales', 'pluie', 'feuilles qui tombent']) {
+        expect(label(RegExp('^Ajouter $other')), findsNothing, reason: other);
+      }
+      await tapLabel(tester, 'Ajouter brume');
+      expect(model.scene.levelOf(LayerKind.decor, 'brume'), 30);
+
+      // Back on a filmed landscape: the Décor tab goes, the sheet shows the sounds.
+      model.selectLandscape('pluie-ville');
+      await settle(tester);
+      expect(find.text('Décor'), findsNothing);
+      expect(find.text('Ambiance de la ville'), findsOneWidget);
+      await tearDownApp(tester);
+    });
 
     testWidgets('share icon opens Partage; copy changes the label', (
       tester,

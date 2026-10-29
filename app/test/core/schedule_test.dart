@@ -45,7 +45,7 @@ void main() {
         minute: 5,
         days: {5, 1, 3},
         rampMinutes: 25,
-        landscapeId: 'sous-bois',
+        landscapeId: 'foret-lucioles',
         reminder: Reminder.detente,
         active: false,
       );
@@ -54,7 +54,7 @@ void main() {
         'heure': '07:05',
         'jours': [1, 3, 5],
         'montee_minutes': 25,
-        'paysage': 'sous-bois',
+        'paysage': 'foret-lucioles',
         'rappel': 'detente',
         'actif': false,
       });

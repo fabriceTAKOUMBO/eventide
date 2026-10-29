@@ -92,7 +92,7 @@ class _WallpaperSheetState extends State<WallpaperSheet> {
             child: SizedBox(
               width: 64,
               height: 88,
-              child: LandscapeThumbnail(landscapeId: landscape.id, style: landscape.style),
+              child: LandscapeThumbnail(landscapeId: landscape.id),
             ),
           ),
           const SizedBox(width: 14),

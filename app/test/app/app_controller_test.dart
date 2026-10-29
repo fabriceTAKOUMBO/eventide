@@ -200,39 +200,39 @@ void main() {
     test('browsing: image at once, sound after the pause, locked landscapes only seen', () async {
       final model = await h.start();
       await model.play();
-      model.browseLandscape('sous-bois');
-      expect(model.browsedLandscapeId, 'sous-bois');
+      model.browseLandscape('foret-lucioles');
+      expect(model.browsedLandscapeId, 'foret-lucioles');
       expect(model.scene.landscapeId, 'cascade-foret');
       await settle(150);
-      expect(model.scene.landscapeId, 'sous-bois');
-      expect(h.engine.activeKeys, {'son:vent', 'son:oiseaux', 'musique:nappes-apaisantes'});
+      expect(model.scene.landscapeId, 'foret-lucioles');
+      expect(h.engine.activeKeys, {'son:ruisseau', 'son:vent', 'musique:nappes-apaisantes'});
       expect(h.engine.lastFade, MixRules.crossFade);
-      expect(model.lastLandscapeOfTheme('nature'), 'sous-bois');
+      expect(model.lastLandscapeOfTheme('imaginaire'), 'foret-lucioles');
 
-      model.browseLandscape('berge-mousseuse');
+      model.browseLandscape('lac-lune');
       expect(model.browsedLandscapeLocked, isTrue);
       await settle(150);
-      expect(model.scene.landscapeId, 'sous-bois', reason: 'the current sound keeps playing');
+      expect(model.scene.landscapeId, 'foret-lucioles', reason: 'the current sound keeps playing');
       expect(model.playing, isTrue);
     });
 
     test('quick successive swipes load only the last landscape', () async {
       final model = await h.start(plan: Plan.annual);
-      model.browseLandscape('berge-mousseuse');
+      model.browseLandscape('lac-lune');
       await settle(20);
-      model.browseLandscape('torrent-montagne');
+      model.browseLandscape('aurore');
       await settle(150);
-      expect(model.scene.landscapeId, 'torrent-montagne');
+      expect(model.scene.landscapeId, 'aurore');
     });
 
     test('choosing a locked landscape opens Premium', () async {
       final model = await h.start();
-      model.selectLandscape('aurore-boreale');
+      model.selectLandscape('aurore');
       expect((await h.got<OpenPremiumEvent>()), hasLength(1));
       expect(model.scene.landscapeId, 'cascade-foret');
-      model.selectLandscape('sous-bois');
-      expect(model.scene.landscapeId, 'sous-bois');
-      expect(model.scene.sounds.map((l) => l.id), ['vent', 'oiseaux']);
+      model.selectLandscape('foret-lucioles');
+      expect(model.scene.landscapeId, 'foret-lucioles');
+      expect(model.scene.sounds.map((l) => l.id), ['ruisseau', 'vent']);
       expect(model.lastLandscapeOfTheme('astral'), 'ciel-etoile');
     });
 
@@ -254,10 +254,33 @@ void main() {
       model.setLayerLevel(LayerKind.son, 'ambiance-cascade-foret', 0);
       await settle();
       expect(h.engine.activeKeys.contains('son:ambiance-cascade-foret'), isFalse);
-      // Decor is visual only.
+      // Decor never applies to a filmed landscape (contract § 12).
       model.setLayerLevel(LayerKind.decor, 'lucioles', 50);
+      expect(model.scene.decor, isEmpty);
+      // On a 3D scene: its own decor only, and it is visual only.
+      model.selectLandscape('foret-lucioles');
+      model.setLayerLevel(LayerKind.decor, 'lucioles', 50);
+      model.setLayerLevel(LayerKind.decor, 'neige', 50);
+      expect(model.scene.decor, [const Layer(id: 'lucioles', level: 50), const Layer(id: 'brume', level: 30)]);
       await settle();
       expect(h.engine.activeKeys.any((k) => k.startsWith('decor:')), isFalse);
+    });
+
+    test('decor applies to a 3D scene only, for its own elements (contract § 12)', () async {
+      final model = await h.start(plan: Plan.annual);
+      model.selectLandscape('jardin-zen');
+      expect(model.scene.decor.map((l) => l.id), ['petales', 'rayons-soleil']);
+      model.setLayerLevel(LayerKind.decor, 'pluie', 40);
+      model.setLayerLevel(LayerKind.decor, 'etoiles', 40); // not in this scene
+      expect(model.scene.decor.map((l) => l.id), ['petales', 'rayons-soleil', 'pluie']);
+      // A filmed landscape loads no decor; the mix keeps its sounds.
+      model.selectLandscape('pluie-ville');
+      expect(model.scene.decor, isEmpty);
+      model.setLayerLevel(LayerKind.decor, 'brume', 40);
+      expect(model.scene.decor, isEmpty);
+      // Back to a 3D scene: its default decor.
+      model.selectLandscape('aurore');
+      expect(model.scene.decor.map((l) => l.id), ['etoiles', 'neige']);
     });
   });
 
@@ -360,7 +383,7 @@ void main() {
     test('the mute stays across a landscape change; favorites and shares never carry it', () async {
       final model = await h.start();
       model.setCategoryMuted(LayerKind.musique, true);
-      model.selectLandscape('sous-bois');
+      model.selectLandscape('foret-lucioles');
       expect(model.scene.music, const [Layer(id: 'nappes-apaisantes', level: 20)]);
       expect(model.musicMuted, isTrue);
       await model.toggleFavorite();
@@ -390,11 +413,11 @@ void main() {
       expect(music.resumeFade, MixRules.musicResume);
       expect(sound.resumeFade, isNull);
 
-      model.selectLandscape('sous-bois');
+      model.selectLandscape('foret-lucioles');
       await settle();
       expect(h.engine.entryFades['musique:nappes-apaisantes'], MixRules.musicEntry);
       expect(h.engine.lastFade, MixRules.crossFade);
-      // « vent » and « oiseaux » were already playing: they only glide.
+      // « vent » was already playing: it only glides.
       expect(h.engine.entryFades['son:vent'], const Duration(seconds: 2));
 
       // A melody added by hand comes in at once (1 s), not over 20 s.
@@ -407,7 +430,7 @@ void main() {
       final model = await h.start();
       model.setCategoryMuted(LayerKind.son, true);
       model.setCategoryMuted(LayerKind.musique, true);
-      final schedule = model.newScheduleDraft().copyWith(landscapeId: 'sous-bois', rampMinutes: 15);
+      final schedule = model.newScheduleDraft().copyWith(landscapeId: 'foret-lucioles', rampMinutes: 15);
       await model.saveSchedule(schedule);
       h.native.pendingStart = schedule.id;
       await h.handler.click();
@@ -422,7 +445,7 @@ void main() {
     test('a scheduled start keeps a partial mute (music off at night stays off)', () async {
       final model = await h.start();
       model.setCategoryMuted(LayerKind.musique, true);
-      final schedule = model.newScheduleDraft().copyWith(landscapeId: 'sous-bois');
+      final schedule = model.newScheduleDraft().copyWith(landscapeId: 'foret-lucioles');
       await model.saveSchedule(schedule);
       h.native.pendingStart = schedule.id;
       await h.handler.click();
@@ -493,21 +516,21 @@ void main() {
 
     test('scheduled start: the landscape of the schedule ramps up with the reminder text', () async {
       final model = await h.start();
-      final schedule = model.newScheduleDraft().copyWith(landscapeId: 'sous-bois', rampMinutes: 15);
+      final schedule = model.newScheduleDraft().copyWith(landscapeId: 'foret-lucioles', rampMinutes: 15);
       await model.saveSchedule(schedule);
       h.native.pendingStart = schedule.id;
       await h.handler.click();
       await settle();
       expect(model.playing, isTrue);
-      expect(model.scene.landscapeId, 'sous-bois');
+      expect(model.scene.landscapeId, 'foret-lucioles');
       expect(h.engine.lastRampUp, const Duration(minutes: 15));
       final item = h.handler.mediaItem.value!;
-      expect(item.title, 'Sous-bois ensoleillé');
+      expect(item.title, 'Forêt aux lucioles');
       // The card's subtitle is the audible mix; the reminder is the notification's third line.
-      expect(item.artist, 'Vent · Oiseaux · Nappes apaisantes');
+      expect(item.artist, 'Ruisseau · Vent · Nappes apaisantes');
       expect(item.displayDescription, 'C’est l’heure d’aller dormir');
-      expect(item.displayTitle, 'Sous-bois ensoleillé');
-      expect(item.displaySubtitle, 'Vent · Oiseaux · Nappes apaisantes');
+      expect(item.displayTitle, 'Forêt aux lucioles');
+      expect(item.displaySubtitle, 'Ruisseau · Vent · Nappes apaisantes');
     });
 
     test('scheduled start of a free user without network: « Pas de connexion » notification', () async {
@@ -576,12 +599,46 @@ void main() {
       await model.play();
       expect(h.engine.activeKeys, {'son:eau-vive'});
 
-      final lockedLandscape = Scene(landscapeId: 'aurore-boreale');
+      final lockedLandscape = Scene(landscapeId: 'aurore');
       h.links.open(shareLinkFor(lockedLandscape, 'eventide.app'));
       await settle();
-      expect(model.browsedLandscapeId, 'aurore-boreale');
+      expect(model.browsedLandscapeId, 'aurore');
       expect(model.browsedLandscapeLocked, isTrue);
       expect(model.scene.landscapeId, 'cascade-foret');
+    });
+
+    test('a link naming a retired landscape opens on Cascade en forêt, sounds and music kept', () async {
+      final model = await h.start(plan: Plan.annual);
+      model.setTimer(const TimerDuration(30));
+      h.links.open(Uri.parse(
+        'https://eventide.app/s#${base64Url.encode(utf8.encode(jsonEncode({
+          'version': 1,
+          'paysage': 'lisiere-verte',
+          'moment': 'soir',
+          'sons': [{'id': 'vent', 'niveau': 40}],
+          'musique': [{'id': 'guitare-douce', 'niveau': 20}],
+          'decor': [{'id': 'feuilles', 'niveau': 30}],
+        }))).replaceAll('=', '')}',
+      ));
+      await settle();
+      expect(model.scene.landscapeId, 'cascade-foret');
+      expect(model.scene.sounds, const [Layer(id: 'vent', level: 40)]);
+      expect(model.scene.music, const [Layer(id: 'guitare-douce', level: 20)]);
+      expect(model.scene.decor, isEmpty, reason: 'a filmed landscape has no decor');
+      expect(model.scene.timer, const TimerDuration(30), reason: 'the recipient keeps their timer');
+    });
+
+    test('a shared 3D scene keeps only the decor it can show', () async {
+      final model = await h.start(plan: Plan.annual);
+      final shared = Scene(
+        landscapeId: 'ondes',
+        sounds: const [Layer(id: 'vagues', level: 30)],
+        decor: const [Layer(id: 'etoiles', level: 40), Layer(id: 'neige', level: 50)],
+      );
+      h.links.open(shareLinkFor(shared, 'eventide.app'));
+      await settle();
+      expect(model.scene.landscapeId, 'ondes');
+      expect(model.scene.decor, const [Layer(id: 'etoiles', level: 40)]);
     });
   });
 
@@ -671,7 +728,7 @@ void main() {
 
     test('data stays on the phone and survives a restart', () async {
       final model = await h.start();
-      model.selectLandscape('sous-bois');
+      model.selectLandscape('foret-lucioles');
       await model.toggleFavorite();
       await model.saveSchedule(model.newScheduleDraft());
       await model.updateSettings(model.settings.copyWith(highContrast: true));
@@ -680,7 +737,7 @@ void main() {
       final store = h.store;
       h = Harness()..store = store;
       final again = await h.start();
-      expect(again.scene.landscapeId, 'sous-bois');
+      expect(again.scene.landscapeId, 'foret-lucioles');
       expect(again.favorites, hasLength(1));
       expect(again.schedules, hasLength(1));
       expect(again.settings.highContrast, isTrue);
@@ -723,17 +780,18 @@ void main() {
   });
 
   group('crash guard (docs/app/architecture.md § 19)', () {
-    /// A session that ends on lisiere-verte (Nature) after visiting lune-lac (Astral), with a
-    /// favourite, a schedule and a setting, all saved; then the app is started again.
-    Future<RealAppModel> restartAfterLisiere({required bool safeStart}) async {
+    /// A session that ends on a 3D scene (ondes, Imaginaire) after visiting pluie-ville
+    /// (Urbain), with a favourite, a schedule and a setting, all saved; then the app is started
+    /// again.
+    Future<RealAppModel> restartAfterOndes({required bool safeStart}) async {
       final model = await h.start(plan: Plan.annual);
       await model.toggleFavorite();
-      await model.saveSchedule(model.newScheduleDraft().copyWith(landscapeId: 'sous-bois'));
+      await model.saveSchedule(model.newScheduleDraft().copyWith(landscapeId: 'foret-lucioles'));
       await model.updateSettings(model.settings.copyWith(wifiOnly: true, textSize: 2));
-      model.selectLandscape('lune-lac');
-      model.browseLandscape('lisiere-verte');
+      model.selectLandscape('pluie-ville');
+      model.browseLandscape('ondes');
       await settle(600);
-      expect(model.scene.landscapeId, 'lisiere-verte');
+      expect(model.scene.landscapeId, 'ondes');
       model.dispose();
       final store = h.store;
       h = Harness()..store = store;
@@ -741,56 +799,104 @@ void main() {
     }
 
     test('without a crash, the app opens where it was left', () async {
-      final again = await restartAfterLisiere(safeStart: false);
-      expect(again.scene.landscapeId, 'lisiere-verte');
-      expect(again.lastLandscapeOfTheme('nature'), 'lisiere-verte');
-      expect(again.lastLandscapeOfTheme('astral'), 'lune-lac');
+      final again = await restartAfterOndes(safeStart: false);
+      expect(again.scene.landscapeId, 'ondes');
+      expect(again.lastLandscapeOfTheme('imaginaire'), 'ondes');
+      expect(again.lastLandscapeOfTheme('urbain'), 'pluie-ville');
     });
 
     test('safe start: back on Cascade en forêt, landscapes per theme forgotten; favourites, schedules and settings kept', () async {
-      final again = await restartAfterLisiere(safeStart: true);
+      final again = await restartAfterOndes(safeStart: true);
       expect(again.scene.landscapeId, 'cascade-foret');
       expect(again.browsedLandscapeId, 'cascade-foret');
       expect(again.scene.sounds.map((l) => l.id), contains('ambiance-cascade-foret'));
+      expect(again.scene.decor, isEmpty);
       expect(again.lastLandscapeOfTheme('nature'), 'cascade-foret');
-      expect(again.lastLandscapeOfTheme('astral'), 'ciel-etoile');
+      expect(again.lastLandscapeOfTheme('imaginaire'), 'foret-lucioles');
       expect(again.favorites, hasLength(1));
-      expect(again.schedules.single.landscapeId, 'sous-bois');
+      expect(again.schedules.single.landscapeId, 'foret-lucioles');
       expect(again.settings.wifiOnly, isTrue);
       expect(again.settings.textSize, 2);
-      // Written at once: a new crash right away does not bring lisiere-verte back.
+      // Written at once: a new crash right away does not bring the 3D scene back.
       expect(jsonDecode(h.store.files[StoreKeys.scene]!)['data']['paysage'], 'cascade-foret');
       expect(jsonDecode(h.store.files[StoreKeys.appState]!)['data']['last_landscape_by_theme'], isEmpty);
     });
 
-    test('the card picture is drawn for the landscape the sound follows, not for each one swiped past', () async {
-      final renders = <String>[];
+    test('the card picture is looked up for the landscape the sound follows, not for each one swiped past', () async {
+      final lookups = <String>[];
+      final files = MemoryArtworkFiles()..files['/content/images/paysages/mer-nuages.jpg'] = Uint8List(1);
       final artwork = MediaArtwork(
-        files: MemoryArtworkFiles(),
-        bundledAssets: () async => const {},
-        loadAsset: (asset) async => Uint8List(0),
-        downloadedPoster: (id) => '/content/images/paysages/$id.jpg',
-        render: ({required String style, required Moment moment, required int size}) async {
-          renders.add(style);
+        files: files,
+        bundledAssets: () async => const {'assets/landscapes/foret-lucioles.jpg'},
+        loadAsset: (asset) async {
+          lookups.add(asset);
           return Uint8List.fromList([1]);
+        },
+        downloadedPoster: (id) {
+          lookups.add(id);
+          return '/content/images/paysages/$id.jpg';
         },
       );
       final model = await h.start(plan: Plan.annual, artwork: artwork);
-      model.selectLandscape('sous-bois');
+      model.selectLandscape('foret-lucioles');
       await model.play();
       await settle(150);
-      expect(renders, ['sous-bois']);
-      // Swiping down Nature quickly: berge, torrent, pierres, then lisière where the user stays.
-      for (final id in ['berge-mousseuse', 'torrent-montagne', 'pierres-eau', 'lisiere-verte']) {
+      expect(lookups, ['assets/landscapes/foret-lucioles.jpg']);
+      expect(h.handler.mediaItem.value!.artUri!.toFilePath(), startsWith('/cache/media_art/foret-lucioles-'));
+      // Swiping down Imaginaire quickly, to Mer de nuages where the user stays.
+      for (final id in ['lac-lune', 'aurore', 'jardin-zen', 'mer-nuages']) {
         model.browseLandscape(id);
         expect(h.handler.mediaItem.value!.title, model.catalog.landscape(id)!.name, reason: 'the card follows at once');
         await settle(20);
       }
-      expect(renders, ['sous-bois'], reason: 'no picture drawn while swiping');
+      expect(lookups, hasLength(1), reason: 'no picture looked up while swiping');
       await settle(200);
-      expect(model.scene.landscapeId, 'lisiere-verte');
-      expect(renders, ['sous-bois', 'lisiere']);
-      expect(h.handler.mediaItem.value!.artUri.toString(), endsWith('lisiere-verte-${model.scene.moment.name}-v${MediaArtwork.renderVersion}.png'));
+      expect(model.scene.landscapeId, 'mer-nuages');
+      expect(lookups.last, 'mer-nuages');
+      expect(h.handler.mediaItem.value!.artUri, Uri.file('/content/images/paysages/mer-nuages.jpg'));
+    });
+
+    test('saved data naming a retired landscape opens on Cascade en forêt (contract § 12)', () async {
+      final retired = Scene(
+        landscapeId: 'lisiere-verte',
+        moment: Moment.soir,
+        sounds: const [Layer(id: 'vent', level: 40)],
+        music: const [Layer(id: 'guitare-douce', level: 20)],
+        decor: const [Layer(id: 'feuilles', level: 30)],
+        timer: const TimerDuration(45),
+      );
+      h.store.files[StoreKeys.scene] = jsonEncode({'version': 1, 'data': retired.toJson()});
+      h.store.files[StoreKeys.favorites] = jsonEncode({
+        'version': 1,
+        'data': [Favorite(id: 'f1', scene: retired.copyWith(landscapeId: 'aurore-boreale'), createdAt: h.now).toJson()],
+      });
+      final schedule = Schedule(
+        id: 's1',
+        hour: 22,
+        minute: 0,
+        days: Schedule.everyDay,
+        rampMinutes: 10,
+        landscapeId: 'lune-lac',
+        reminder: Reminder.dormir,
+        active: true,
+      );
+      h.store.files[StoreKeys.schedules] = jsonEncode({'version': 1, 'data': [schedule.toJson()]});
+      final model = await h.start(plan: Plan.annual);
+      expect(model.scene.landscapeId, 'cascade-foret');
+      expect(model.scene.sounds, const [Layer(id: 'vent', level: 40)]);
+      expect(model.scene.music, const [Layer(id: 'guitare-douce', level: 20)]);
+      expect(model.scene.decor, isEmpty);
+      expect(model.scene.timer, const TimerDuration(45));
+      expect(model.scene.moment, Moment.soir);
+      expect(model.favorites.single.landscapeId, 'cascade-foret');
+      expect(model.favorites.single.scene.decor, isEmpty);
+      expect(model.schedules.single.landscapeId, 'cascade-foret');
+      expect(model.nextScheduledStart, isNotNull, reason: 'the schedule is still armed');
+      // Applying the favourite loads its sounds on the default landscape.
+      model.selectLandscape('ondes');
+      model.applyFavorite(model.favorites.single);
+      expect(model.scene.landscapeId, 'cascade-foret');
+      expect(model.scene.sounds, const [Layer(id: 'vent', level: 40)]);
     });
   });
 
@@ -941,8 +1047,8 @@ void main() {
     test('Premium landscapes and sounds play offline from bundled audio', () async {
       h.connectivity.online = false;
       final model = await h.start(demo: true);
-      model.selectLandscape('torrent-montagne');
-      expect(model.scene.landscapeId, 'torrent-montagne');
+      model.selectLandscape('aurore');
+      expect(model.scene.landscapeId, 'aurore');
       model.setLayerLevel(LayerKind.son, 'vagues', 40);
       expect(model.scene.hasLayer(LayerKind.son, 'vagues'), isTrue);
       await model.play();
@@ -974,13 +1080,13 @@ void main() {
     MediaCardInfo card() => h.model.mediaCard.value!;
     List<MediaAction> actions() => [for (final c in h.handler.playbackState.value.controls) c.action];
 
-    test('free plan: landscape, audible mix (mute included), neighbours of the theme', () async {
+    test('free plan: landscape, audible mix (mute included), no neighbour in its theme', () async {
       final model = await h.start();
       expect(card().landscapeId, 'cascade-foret');
       expect(card().title, 'Cascade en forêt');
       expect(card().artist, 'Ambiance de la cascade · Oiseaux · Vent · Piano doux');
       expect(card().previousId, isNull);
-      expect(card().nextId, 'sous-bois');
+      expect(card().nextId, isNull, reason: 'Cascade en forêt is alone in Nature');
       expect(card().favorite, isFalse);
       await model.play();
       final item = h.handler.mediaItem.value!;
@@ -988,8 +1094,8 @@ void main() {
       expect(item.artist, 'Ambiance de la cascade · Oiseaux · Vent · Piano doux');
       expect(item.album, 'Eventide');
       expect(item.duration, const Duration(hours: 1));
-      expect(actions(), [MediaAction.pause, MediaAction.skipToNext, MediaAction.custom, MediaAction.custom]);
-      expect(h.handler.playbackState.value.androidCompactActionIndices, [0, 1]);
+      expect(actions(), [MediaAction.pause, MediaAction.custom, MediaAction.custom]);
+      expect(h.handler.playbackState.value.androidCompactActionIndices, [0]);
       model.setCategoryMuted(LayerKind.son, true);
       await settle();
       expect(h.handler.mediaItem.value!.artist, 'Piano doux');
@@ -1000,71 +1106,76 @@ void main() {
 
     test('free plan at the edge of what it can use: next omitted, a next tap does nothing', () async {
       final model = await h.start();
-      model.selectLandscape('sous-bois');
+      model.selectLandscape('foret-lucioles');
       await model.play();
       await settle();
-      expect(card().previousId, 'cascade-foret');
-      expect(card().nextId, isNull, reason: 'the other Nature landscapes are Premium');
-      expect(actions(), [MediaAction.skipToPrevious, MediaAction.pause, MediaAction.custom, MediaAction.custom]);
-      expect(h.handler.playbackState.value.androidCompactActionIndices, [1]);
+      expect(card().previousId, isNull);
+      expect(card().nextId, isNull, reason: 'the other Imaginaire scenes are Premium');
+      expect(actions(), [MediaAction.pause, MediaAction.custom, MediaAction.custom]);
+      expect(h.handler.playbackState.value.androidCompactActionIndices, [0]);
       await h.handler.skipToNext();
       await settle(150);
-      expect(model.scene.landscapeId, 'sous-bois');
-      expect(model.browsedLandscapeId, 'sous-bois');
+      expect(model.scene.landscapeId, 'foret-lucioles');
+      expect(model.browsedLandscapeId, 'foret-lucioles');
     });
 
     for (final demo in [false, true]) {
       test('${demo ? 'demo build' : 'Premium'}: every landscape of the theme, no wrap', () async {
         final model = await h.start(plan: demo ? null : Plan.annual, demo: demo);
-        model.selectLandscape('sous-bois');
+        model.selectLandscape('foret-lucioles');
         await settle();
-        expect(card().previousId, 'cascade-foret');
-        expect(card().nextId, 'berge-mousseuse');
-        model.selectLandscape('lisiere-verte');
+        expect(card().previousId, isNull);
+        expect(card().nextId, 'lac-lune');
+        model.selectLandscape('ondes');
         await model.play();
         await settle();
-        expect(card().previousId, 'pierres-eau');
+        expect(card().previousId, 'mer-nuages');
         expect(card().nextId, isNull);
         expect(actions(), [MediaAction.skipToPrevious, MediaAction.pause, MediaAction.custom, MediaAction.custom]);
         expect(h.handler.playbackState.value.androidCompactActionIndices, [1]);
         model.selectLandscape('pluie-ville');
         await settle();
         expect(card().previousId, isNull);
-        expect(card().nextId, 'cafe-nuit');
+        expect(card().nextId, 'toits-pluie');
         expect(actions(), [MediaAction.pause, MediaAction.skipToNext, MediaAction.custom, MediaAction.custom]);
       });
     }
 
     test('next from the card: shown at once, the sound follows after the browse pause (home swipe path)', () async {
-      final model = await h.start();
+      final model = await h.start(plan: Plan.annual);
+      model.selectLandscape('foret-lucioles');
       await model.play();
+      await settle();
       await h.handler.skipToNext();
-      expect(model.browsedLandscapeId, 'sous-bois', reason: 'the home screen (and its video) follows');
-      expect(h.handler.mediaItem.value!.title, 'Sous-bois ensoleillé');
-      expect(h.handler.mediaItem.value!.artist, 'Vent · Oiseaux · Nappes apaisantes');
-      expect(model.scene.landscapeId, 'cascade-foret', reason: 'the sound waits for the browse pause');
-      expect(h.engine.activeKeys, contains('son:ambiance-cascade-foret'));
+      expect(model.browsedLandscapeId, 'lac-lune', reason: 'the home screen (and its scene) follows');
+      expect(h.handler.mediaItem.value!.title, 'Lac sous la lune');
+      expect(h.handler.mediaItem.value!.artist, 'Ruisseau · Chouette · Harpe');
+      expect(model.scene.landscapeId, 'foret-lucioles', reason: 'the sound waits for the browse pause');
+      expect(h.engine.activeKeys, contains('son:vent'));
       await settle(150);
-      expect(model.scene.landscapeId, 'sous-bois');
-      expect(h.engine.activeKeys, {'son:vent', 'son:oiseaux', 'musique:nappes-apaisantes'});
+      expect(model.scene.landscapeId, 'lac-lune');
+      expect(h.engine.activeKeys, {'son:ruisseau', 'son:chouette', 'musique:harpe'});
       expect(h.engine.lastFade, MixRules.crossFade);
-      expect(h.engine.entryFades['musique:nappes-apaisantes'], MixRules.musicEntry);
-      expect(card().previousId, 'cascade-foret');
+      expect(h.engine.entryFades['musique:harpe'], MixRules.musicEntry);
+      expect(card().previousId, 'foret-lucioles');
       await h.handler.skipToPrevious();
       await settle(150);
-      expect(model.scene.landscapeId, 'cascade-foret');
+      expect(model.scene.landscapeId, 'foret-lucioles');
       expect(model.playing, isTrue);
     });
 
     test('quick taps: the card moves at each tap, the sound loads only the last landscape', () async {
       final model = await h.start(plan: Plan.annual);
+      model.selectLandscape('foret-lucioles');
       await model.play();
+      await settle();
+      final updates = h.engine.calls.where((c) => c == 'update').length;
       await h.handler.skipToNext();
       await h.handler.skipToNext();
-      expect(h.handler.mediaItem.value!.title, 'Berge mousseuse');
+      expect(h.handler.mediaItem.value!.title, 'Aurore boréale');
       await settle(150);
-      expect(model.scene.landscapeId, 'berge-mousseuse');
-      expect(h.engine.calls.where((c) => c == 'update'), hasLength(1));
+      expect(model.scene.landscapeId, 'aurore');
+      expect(h.engine.calls.where((c) => c == 'update'), hasLength(updates + 1));
     });
 
     test('heart from the card: quiet toggle; at the free limit nothing happens', () async {
@@ -1074,7 +1185,7 @@ void main() {
       await h.handler.customAction(MediaCardActions.favorite);
       expect(model.favorites, hasLength(1));
       expect(card().favorite, isTrue);
-      expect(h.handler.playbackState.value.controls[2].androidIcon, MediaCardIcons.favorite);
+      expect(h.handler.playbackState.value.controls[1].androidIcon, MediaCardIcons.favorite);
       await h.handler.customAction(MediaCardActions.favorite);
       expect(model.favorites, isEmpty);
       expect(card().favorite, isFalse);
@@ -1097,11 +1208,13 @@ void main() {
 
     test('heart during a pending next: for the landscape the card shows', () async {
       final model = await h.start(plan: Plan.annual);
+      model.selectLandscape('foret-lucioles');
       await model.play();
+      await settle();
       await h.handler.skipToNext();
       await h.handler.customAction(MediaCardActions.favorite);
-      expect(model.scene.landscapeId, 'sous-bois');
-      expect(model.favorites.single.landscapeId, 'sous-bois');
+      expect(model.scene.landscapeId, 'lac-lune');
+      expect(model.favorites.single.landscapeId, 'lac-lune');
       expect(card().favorite, isTrue);
     });
 
@@ -1138,9 +1251,8 @@ void main() {
       expect(seen[2].$3, isNull);
     });
 
-    test('picture: card first without it, then the landscape picture; never made while silent', () async {
+    test('picture: card first without it, then the landscape poster; never made while silent', () async {
       final files = MemoryArtworkFiles();
-      final renders = <(String, Moment)>[];
       final slowAsset = Completer<void>();
       final artwork = MediaArtwork(
         files: files,
@@ -1150,10 +1262,6 @@ void main() {
           return Uint8List.fromList([1, 2, 3]);
         },
         downloadedPoster: (id) => '/content/images/paysages/$id.jpg',
-        render: ({required String style, required Moment moment, required int size}) async {
-          renders.add((style, moment));
-          return Uint8List.fromList([4, 5, 6]);
-        },
       );
       final model = await h.start(plan: Plan.annual, artwork: artwork);
       model.setMoment(Moment.soir);
@@ -1172,16 +1280,19 @@ void main() {
       final poster = items.last.artUri!;
       expect(poster.scheme, 'file');
       expect(poster.path, startsWith('/cache/media_art/cascade-foret-'));
-      expect(renders, isEmpty);
-      // A landscape without a poster: the procedural picture at the moment of the day.
-      model.selectLandscape('berge-mousseuse');
+      // A landscape whose poster is not on the phone yet: no picture (nothing is drawn).
+      model.selectLandscape('jardin-zen');
       await settle();
-      expect(renders, [('berge', Moment.soir)]);
-      expect(h.handler.mediaItem.value!.artUri, Uri.file('/cache/media_art/berge-mousseuse-soir-v${MediaArtwork.renderVersion}.png'));
-      model.setMoment(Moment.nuit);
+      expect(h.handler.mediaItem.value!.title, 'Jardin zen');
+      expect(h.handler.mediaItem.value!.artUri, isNull);
+      // Downloaded since (Premium): it comes with the next session.
+      files.files['/content/images/paysages/jardin-zen.jpg'] = Uint8List(1);
+      await model.pause();
+      await h.handler.stop();
       await settle();
-      expect(renders.last, ('berge', Moment.nuit));
-      expect(h.handler.mediaItem.value!.artUri, Uri.file('/cache/media_art/berge-mousseuse-nuit-v${MediaArtwork.renderVersion}.png'));
+      await model.play();
+      await settle();
+      expect(h.handler.mediaItem.value!.artUri, Uri.file('/content/images/paysages/jardin-zen.jpg'));
       await sub.cancel();
     });
 

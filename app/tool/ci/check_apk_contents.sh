@@ -95,9 +95,13 @@ fi
 
 # Living landscapes: assets/landscapes/<id>.mp4 (loop) and <id>.jpg (its frame 0).
 lprefix="assets/flutter_assets/assets/landscapes"
-for free in cascade-foret.mp4 cascade-foret.jpg remote.json; do
+# The free 3D scene (contract § 12) has its poster and its wallpaper video bundled too.
+for free in cascade-foret.mp4 cascade-foret.jpg foret-lucioles.mp4 foret-lucioles.jpg remote.json; do
   grep -qx "$lprefix/$free" <<<"$listing" || fail "free landscape media $free missing from the APK"
 done
+# « Imaginaire »: the offline runtime of the 3D scenes (every APK).
+grep -qx "assets/flutter_assets/assets/imaginaire/index.html" <<<"$listing" \
+  || fail "the 3D scenes runtime (assets/imaginaire/index.html) is missing from the APK"
 shopt -s nullglob
 check_media() {
   local label="$1"

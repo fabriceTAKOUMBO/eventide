@@ -5,7 +5,6 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../landscape/landscape_image.dart';
-import '../landscape/landscape_painter.dart';
 import '../theme/vitre.dart';
 import 'vicons.dart';
 
@@ -64,6 +63,31 @@ class BrandLogo extends StatelessWidget {
   );
 }
 
+/// The landscape held by the drop (fallback logo only: the bundled logo is a picture): a soft
+/// forest light, drawn directly (the 2D procedural landscapes are gone).
+void _paintBackdrop(Canvas canvas, Size size) {
+  final rect = Offset.zero & size;
+  canvas.drawRect(
+    rect,
+    Paint()
+      ..shader = ui.Gradient.linear(
+        rect.topCenter,
+        rect.bottomCenter,
+        const [Color(0xFF9CC9B4), Color(0xFF3F7461), Color(0xFF16302A)],
+        const [0, 0.55, 1],
+      ),
+  );
+  canvas.drawRect(
+    rect,
+    Paint()
+      ..shader = ui.Gradient.radial(
+        Offset(size.width * 0.5, size.height * 0.3),
+        size.width * 0.6,
+        const [Color(0x66F2E6C4), Color(0x00F2E6C4)],
+      ),
+  );
+}
+
 const String _dropPath =
     'M256 108 C259 108 262 112 266 118 C300 170 368 244 368 318 C368 380 318 412 256 412 '
     'C194 412 144 380 144 318 C144 244 212 170 246 118 C250 112 253 108 256 108 Z';
@@ -119,7 +143,7 @@ class BrandDropPainter extends CustomPainter {
           tileMode: TileMode.clamp,
         ),
     );
-    paintLandscapeCover(canvas, const Size(512, 512), 'cascade');
+    _paintBackdrop(canvas, const Size(512, 512));
     canvas.restore();
     canvas.drawRect(full, Paint()..color = const Color(0xBD04140F));
     canvas.drawRect(
@@ -206,7 +230,7 @@ class BrandDropPainter extends CustomPainter {
     canvas.rotate(3.14159265);
     canvas.translate(-256, -259);
     canvas.translate(91, 42);
-    paintLandscapeCover(canvas, const Size(330, 586), 'cascade');
+    _paintBackdrop(canvas, const Size(330, 586));
     canvas.restore();
     canvas.drawRect(
       const Rect.fromLTWH(120, 90, 280, 340),

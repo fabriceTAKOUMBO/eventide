@@ -5,7 +5,14 @@ from pathlib import Path
 
 from django.conf import settings
 
-from apps.core.catalog import CATALOG_PATH, get_catalog
+from apps.core.catalog import (
+    CATALOG_PATH,
+    DEFAULT_LANDSCAPE,
+    RENDER_3D,
+    RENDER_VIDEO,
+    RETIRED_LANDSCAPES,
+    get_catalog,
+)
 
 APP_CATALOG = Path(settings.BASE_DIR).parent / "app" / "assets" / "catalog.json"
 
@@ -58,3 +65,44 @@ def test_ambiances_and_event_sounds_follow_contract_section_11(catalog):
         own = [s["id"] for s in catalog.raw["sons"] if s.get("paysage") == landscape["id"]]
         if own:
             assert landscape["mix"]["sons"][0]["id"] == own[0], landscape["id"]
+
+
+def test_filmed_and_3d_landscapes_follow_contract_section_12(catalog):
+    assert [t["id"] for t in catalog.raw["themes"]] == ["nature", "urbain", "astral", "imaginaire"]
+    decor_ids = set(catalog.sections["decors"])
+    assert "eclairs" not in decor_ids and "pluie-ecran" not in decor_ids
+    assert {"petales", "pluie", "etoiles-filantes"} <= decor_ids
+    scenes = []
+    for landscape in catalog.raw["paysages"]:
+        lid = landscape["id"]
+        assert catalog.rendering(lid) in (RENDER_VIDEO, RENDER_3D), lid
+        default_decor = [layer["id"] for layer in landscape["mix"]["decor"]]
+        if catalog.rendering(lid) == RENDER_VIDEO:
+            # A filmed landscape: its decor is not editable, so none by default.
+            assert default_decor == [], lid
+            assert "decors" not in landscape and "periode_s" not in landscape, lid
+            assert isinstance(landscape.get("eclairs", False), bool), lid
+            assert catalog.decors_of(lid) == frozenset(), lid
+        else:
+            scenes.append(lid)
+            assert landscape["theme"] == "imaginaire", lid
+            assert "eclairs" not in landscape, lid
+            assert isinstance(landscape["periode_s"], int) and landscape["periode_s"] > 0, lid
+            allowed = landscape["decors"]
+            assert allowed and len(set(allowed)) == len(allowed), lid
+            assert set(allowed) <= decor_ids, lid
+            assert set(default_decor) <= set(allowed), lid
+            assert catalog.decors_of(lid) == frozenset(allowed), lid
+    assert scenes == ["foret-lucioles", "lac-lune", "aurore", "jardin-zen", "mer-nuages", "ondes"]
+    assert catalog.is_free("paysages", "foret-lucioles")
+    assert [p["id"] for p in catalog.raw["paysages"] if p.get("eclairs")] == [
+        "pluie-ville",
+        "toits-pluie",
+    ]
+    # The retired 2D landscapes are gone; a stored scene naming one opens on the default.
+    assert not RETIRED_LANDSCAPES & set(catalog.sections["paysages"])
+    assert catalog.is_free("paysages", DEFAULT_LANDSCAPE)
+    assert catalog.landscape_or_default("sous-bois") == DEFAULT_LANDSCAPE
+    assert catalog.landscape_or_default("aurore") == "aurore"
+    assert catalog.landscape_or_default("nulle-part") is None
+    assert catalog.landscape_or_default(None) is None

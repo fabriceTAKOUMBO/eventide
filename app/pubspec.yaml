@@ -51,6 +51,10 @@ dependencies:
   url_launcher: ^6.3.2
   # Living landscapes: looping muted video backgrounds (ExoPlayer on Android).
   video_player: ^2.14.1
+  # « Imaginaire »: the live 3D scenes run offline in a WebView (assets/imaginaire/). The Android
+  # implementation is used directly (renderer guard, locked-down settings).
+  webview_flutter: ^4.14.1
+  webview_flutter_android: ^4.14.1
 
 dev_dependencies:
   flutter_test:
@@ -83,6 +87,11 @@ flutter:
     # landscapes, remote.json (what the content server has). The demo build copies the Premium
     # and test videos here before building (CI), never the production build.
     - assets/landscapes/
+    # « Imaginaire »: the offline runtime of the 3D scenes (index.html, runtime.js, scenes/<id>.js,
+    # vendor/three.min.js with its licence), loaded by the WebView (contract § 12).
+    - assets/imaginaire/
+    - assets/imaginaire/scenes/
+    - assets/imaginaire/vendor/
     # Only what the UI loads (LandscapeImages.discoverAssets): the store icons
     # (logo_1024.png, SVG sources, wordmark) stay out of the APK.
     - assets/brand/logo_512.png

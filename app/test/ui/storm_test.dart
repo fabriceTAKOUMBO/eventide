@@ -1,5 +1,5 @@
 // Contract § 11 in the interface: a landscape's ambiance is offered in « Mon mix » with that
-// landscape only; the `eclairs` decor draws a flash for each strike announced before a thunder
+// landscape only; a filmed storm (`eclairs`) shows a flash for each strike announced before a thunder
 // (soft glow with reduced motion), or rare silent flashes when the mix has no thunder.
 import 'dart:async';
 import 'dart:math';
@@ -7,7 +7,7 @@ import 'dart:math';
 import 'package:eventide/core/catalog.dart';
 import 'package:eventide/core/lightning.dart';
 import 'package:eventide/core/plan.dart';
-import 'package:eventide/ui/landscape/decor_layer.dart';
+import 'package:eventide/ui/landscape/lightning_layer.dart';
 import 'package:eventide/ui/navigation.dart';
 import 'package:eventide/ui/screens/mix_sheet.dart';
 import 'package:flutter/widgets.dart';
@@ -15,6 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'app_harness.dart';
 import 'fake_app_model.dart';
+import 'ui_test_utils.dart';
 
 Finder _label(Pattern text) => find.bySemanticsLabel(text);
 
@@ -52,21 +53,23 @@ void main() {
     });
   });
 
-  group('lightning of the decor', () {
-    Future<DecorPainter Function()> pump(
+  group('lightning of a filmed storm', () {
+    Future<LightningPainter Function()> pump(
       WidgetTester tester, {
       required Stream<LightningStrike> strikes,
       bool thunderInMix = true,
       bool reduced = false,
-      List<DecorEffect> effects = const [DecorEffect('eclairs', 50)],
+      bool enabled = true,
+      bool active = true,
       int seed = 7,
     }) async {
       await tester.pumpWidget(MediaQuery(
         data: MediaQueryData(disableAnimations: reduced),
         child: Directionality(
           textDirection: TextDirection.ltr,
-          child: DecorLayer(
-            effects: effects,
+          child: LightningLayer(
+            enabled: enabled,
+            active: active,
             lightningStrikes: strikes,
             thunderInMix: thunderInMix,
             random: Random(seed),
@@ -74,8 +77,8 @@ void main() {
         ),
       ));
       return () => tester
-          .widget<CustomPaint>(find.descendant(of: find.byType(DecorLayer), matching: find.byType(CustomPaint)))
-          .painter! as DecorPainter;
+          .widget<CustomPaint>(find.descendant(of: find.byType(LightningLayer), matching: find.byType(CustomPaint)))
+          .painter! as LightningPainter;
     }
 
     testWidgets('a flash for each strike: bright, then gone within 0.6 s', (tester) async {
@@ -84,7 +87,8 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
       expect(painter().flashLevel, 0);
       strikes.add(_strike(0.9));
-      await tester.pump(); // the flash starts at the next frame
+      await tester.pump(); // the idle layer wakes its ticker
+      await tester.pump(const Duration(milliseconds: 16)); // the flash starts at this frame
       await tester.pump(const Duration(milliseconds: 40));
       expect(painter().flashLevel, greaterThan(0.5));
       await tester.pump(const Duration(milliseconds: 700));
@@ -94,32 +98,21 @@ void main() {
       await strikes.close();
     });
 
-    testWidgets('no flash without the eclairs decor; none while hidden', (tester) async {
+    testWidgets('nothing on a landscape that is not a filmed storm; no flash while hidden', (tester) async {
       final strikes = StreamController<LightningStrike>.broadcast();
-      final painter = await pump(tester, strikes: strikes.stream, effects: const [DecorEffect('brume', 30)]);
+      await pump(tester, strikes: strikes.stream, enabled: false);
+      expect(find.byType(CustomPaint), findsNothing, reason: 'nothing drawn at all');
+      strikes.add(_strike(1));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 40));
+      expect(find.byType(CustomPaint), findsNothing);
+      await tester.pumpWidget(const SizedBox());
+
+      final painter = await pump(tester, strikes: strikes.stream, active: false);
       strikes.add(_strike(1));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 40));
       expect(painter().flashLevel, 0);
-      await tester.pumpWidget(const SizedBox());
-
-      final painter2 = await pump(tester, strikes: strikes.stream);
-      await tester.pumpWidget(MediaQuery(
-        data: const MediaQueryData(),
-        child: Directionality(
-          textDirection: TextDirection.ltr,
-          child: DecorLayer(
-            effects: const [DecorEffect('eclairs', 50)],
-            active: false,
-            lightningStrikes: strikes.stream,
-            thunderInMix: true,
-          ),
-        ),
-      ));
-      strikes.add(_strike(1));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 40));
-      expect(painter2().flashLevel, 0);
       await tester.pumpWidget(const SizedBox());
       await strikes.close();
     });
@@ -162,8 +155,22 @@ void main() {
       }
       await tester.pumpWidget(const SizedBox());
     });
-  });
 
+    testWidgets('the home screen draws it only on a filmed storm that is playing', (tester) async {
+      usePhoneView(tester);
+      final model = FakeAppModel(plan: Plan.annual);
+      await pumpApp(tester, model);
+      expect(tester.widget<LightningLayer>(find.byType(LightningLayer)).enabled, isFalse);
+      model.selectLandscape('pluie-ville');
+      await settle(tester);
+      expect(tester.widget<LightningLayer>(find.byType(LightningLayer)).enabled, isTrue);
+      expect(tester.widget<LightningLayer>(find.byType(LightningLayer)).thunderInMix, isTrue);
+      model.selectLandscape('ondes');
+      await settle(tester);
+      expect(tester.widget<LightningLayer>(find.byType(LightningLayer)).enabled, isFalse);
+      await tearDownApp(tester);
+    });
+  });
   group('flash envelope', () {
     test('one main flash and one fainter re-flash, nothing after 0.6 s', () {
       expect(lightningFlashLevel(-0.01), 0);

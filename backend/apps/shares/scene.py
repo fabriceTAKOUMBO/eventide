@@ -4,6 +4,11 @@ Only the mix is shared (dossier § 6 « Partage »): version, paysage, moment, s
 decor. ``minuteur``, ``sommeil``, ``sourdine`` (mute: never shared, the recipient hears the mix)
 and any unknown field are dropped whatever their shape; a layer at ``niveau`` 0 is dropped (0
 removes the element). Premium items are kept: a free recipient sees them locked.
+
+Decor (contract § 12): it only applies to a 3D scene (``rendu: 3d``) and only for the ids of its
+``decors``. A well-formed decor element that does not apply (a filmed landscape, an id the scene
+cannot show, an id no longer in the catalog such as ``eclairs``) is dropped without an error,
+like a level 0. A malformed one (not an object, no id, bad level, duplicate) is still refused.
 """
 
 from __future__ import annotations
@@ -38,6 +43,7 @@ def normalise_scene(scene: Any) -> dict:
         "paysage": scene["paysage"],
         "moment": scene["moment"],
     }
+    decors = catalog.decors_of(scene["paysage"])
     for key, section in SCENE_SECTIONS.items():
         items = scene.get(key, [])
         if not isinstance(items, list) or len(items) > len(catalog.sections[section]):
@@ -45,14 +51,20 @@ def normalise_scene(scene: Any) -> dict:
         layer = []
         seen = set()
         for item in items:
-            if not isinstance(item, dict) or not catalog.has(section, item.get("id")):
+            if not isinstance(item, dict):
                 raise InvalidScene
-            if item["id"] in seen:
+            item_id = item.get("id")
+            if key == "decor":
+                if not isinstance(item_id, str) or not item_id:
+                    raise InvalidScene
+            elif not catalog.has(section, item_id):
                 raise InvalidScene
-            seen.add(item["id"])
+            if item_id in seen:
+                raise InvalidScene
+            seen.add(item_id)
             level = _level(item.get("niveau"))
-            if level > 0:
-                layer.append({"id": item["id"], "niveau": level})
+            if level > 0 and (key != "decor" or item_id in decors):
+                layer.append({"id": item_id, "niveau": level})
         out[key] = layer
     if len(out["sons"]) + len(out["musique"]) > catalog.limits["couches_max"]:
         raise InvalidScene
