@@ -222,6 +222,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
     } catch (e) {
       debugPrint('RealAppModel: load failed ($e)');
     }
+    unawaited(_store.deleteLegacy().catchError((Object e) => debugPrint('RealAppModel: legacy cleanup failed ($e)')));
     _handler.nightMaxHours = _catalog.limits.nightMaxHours;
     _handler.status.addListener(_onPlaybackStatus);
     // The media card follows every change of the model (cheap when nothing it shows moved).

@@ -53,4 +53,13 @@ void main() {
     expect(await store.read(StoreKeys.installation), isNull);
     expect(await store.read(StoreKeys.favorites), isNull);
   });
+
+  test('files of removed features are deleted at start and with the data', () async {
+    await store.write('voice_trial', {'remaining': 3});
+    await store.deleteLegacy();
+    expect(await store.read('voice_trial'), isNull);
+    await store.write('voice_trial', {'remaining': 3});
+    await store.deleteAll();
+    expect(await store.read('voice_trial'), isNull);
+  });
 }

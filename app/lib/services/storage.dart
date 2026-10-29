@@ -21,6 +21,10 @@ abstract final class StoreKeys {
   static const appState = 'app_state';
 
   static const all = [scene, schedules, favorites, settings, nights, entitlements, installation, appState];
+
+  /// Files of removed features, deleted at start and with the data: `voice_trial` (voice
+  /// assistant, removed on 29 Oct 2026).
+  static const legacy = ['voice_trial'];
 }
 
 class LocalStore {
@@ -90,7 +94,14 @@ class LocalStore {
 
   /// Deletes every file of the store (account and data deletion).
   Future<void> deleteAll() async {
-    for (final name in StoreKeys.all) {
+    for (final name in [...StoreKeys.all, ...StoreKeys.legacy]) {
+      await delete(name);
+    }
+  }
+
+  /// Deletes the files of removed features ([StoreKeys.legacy]).
+  Future<void> deleteLegacy() async {
+    for (final name in StoreKeys.legacy) {
       await delete(name);
     }
   }
