@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Checks what a release APK is, so that the demo build can never pass for production:
-#   production: package be.cinaf.eventide, label « Eventide », free audio and free landscape
-#               videos only: no Premium audio, no Premium landscape video or poster
-#               (content/videos, content/images: served by the API), and none of the
-#               third-party test-only media (medias-test/, non-distributable);
+#   production: package be.cinaf.eventide, label « Eventide », free audio (with the free
+#               landscape ambiance) and free landscape videos only: no Premium audio (the Premium
+#               ambiances and the thunder variants tonnerre-NN included), no Premium landscape
+#               video or poster (content/videos, content/images: served by the API), and none of
+#               the third-party test-only media (medias-test/, non-distributable);
 #   demo:       package be.cinaf.eventide.demo, label « Eventide Démo », every Premium sound and
 #               music of content/audio, every landscape video and poster of content/ and of
-#               medias-test/ bundled.
+#               medias-test/, and the test-only ambiances of medias-test/audio bundled.
 #
 # Usage: check_apk_contents.sh production|demo <apk> [content-audio-dir]
 # Needs unzip and aapt2 (newest Android build-tools under ANDROID_HOME, or AAPT2=...).
@@ -69,6 +70,9 @@ echo "  DEMO_BUILD meta-data: ${demo_flag:-not found}"
 listing="$(unzip -Z1 "$apk")"
 prefix="assets/flutter_assets/assets/audio"
 grep -qx "$prefix/sons/eau-vive.ogg" <<<"$listing" || fail "free sound eau-vive.ogg missing from the APK"
+# The ambiance of the free landscape (the sound of its video, contract § 11) is bundled.
+grep -qx "$prefix/sons/ambiance-cascade-foret.ogg" <<<"$listing" \
+  || fail "free landscape ambiance ambiance-cascade-foret.ogg missing from the APK"
 premium=0
 missing=()
 for file in "$content"/sons/*.ogg "$content"/musiques/*.ogg; do
@@ -114,4 +118,18 @@ check_media "Premium landscape videos/posters (content/)" \
   "$repo"/content/videos/paysages/*.mp4 "$repo"/content/images/paysages/*.jpg
 check_media "test-only third-party videos/posters (medias-test/, non-distributable)" \
   "$repo"/medias-test/videos/paysages/*.mp4 "$repo"/medias-test/images/paysages/*.jpg
+
+# Test-only ambiances (the soundtrack of the third-party test videos): demo only.
+test_audio=()
+for file in "$repo"/medias-test/audio/sons/*.ogg; do
+  entry="$prefix/sons/$(basename "$file")"
+  grep -qx "$entry" <<<"$listing" && test_audio+=("$entry")
+done
+total_test_audio=$(( $(find "$repo/medias-test/audio/sons" -name '*.ogg' 2>/dev/null | wc -l) ))
+echo "  test-only ambiances (medias-test/audio, non-distributable) bundled: ${#test_audio[@]} / $total_test_audio"
+if [[ "$kind" == "production" ]]; then
+  [[ ${#test_audio[@]} -eq 0 ]] || fail "the production APK contains test-only audio: ${test_audio[*]}"
+else
+  [[ ${#test_audio[@]} -eq $total_test_audio ]] || fail "the demo APK lacks test-only ambiances (${#test_audio[@]} / $total_test_audio)"
+fi
 echo "  OK"

@@ -167,5 +167,24 @@ abstract class AudioEngine {
   /// Lowers the output while another app needs it briefly.
   Future<void> setDucked(bool ducked);
 
+  /// Plays [source] once, on top of the loops: one event of a sound played by events (a thunder,
+  /// contract § 11), filed under its layer [key] (e.g. `son:tonnerre`). It sounds at
+  /// [volume] × [gain] (the layer's volume, and the event's own random gain), at [speed] times
+  /// its normal speed, at [pan] (−1 left to 1 right), and follows the master volume (ramp, duck,
+  /// end-of-timer fade). A pause or a stop ends it. Returns how long it sounds (the file's
+  /// length / [speed]), or null when nothing is playing (paused, stopped) or it cannot be played.
+  Future<Duration?> playEvent(
+    String key,
+    AudioSourceRef source, {
+    required double volume,
+    double gain = 1.0,
+    double speed = 1.0,
+    double pan = 0.0,
+  });
+
+  /// Brings the events of [key] still sounding to the layer volume [volume] (each keeps its own
+  /// gain) over [fade]; at 0 (sound removed or muted) they fade out, then stop.
+  Future<void> setEventVolume(String key, double volume, {Duration fade = MixRules.levelFade});
+
   Future<void> dispose();
 }

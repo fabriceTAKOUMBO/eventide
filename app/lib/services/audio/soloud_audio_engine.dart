@@ -38,6 +38,21 @@ class _Voice {
   DateTime steadyAt = DateTime.fromMillisecondsSinceEpoch(0);
 }
 
+/// One event sounding over the loops (a thunder, contract § 11): a non-looping voice.
+class _Event {
+  _Event(this.key, this.source, this.handle, this.gain);
+
+  final String key;
+  final AudioSourceRef source;
+  final SoundHandle handle;
+
+  /// The event's own random gain (its volume is the layer volume × this).
+  final double gain;
+
+  /// Stops the voice and releases its file when it is over.
+  Timer? end;
+}
+
 bool _silent(double volume) => volume <= 0.0005;
 
 class SoLoudAudioEngine implements AudioEngine {
@@ -49,6 +64,7 @@ class SoLoudAudioEngine implements AudioEngine {
   final Random _random;
 
   final Map<String, _Voice> _voices = {};
+  final List<_Event> _events = [];
   final Map<String, AudioSource> _sources = {};
   final Map<String, int> _sourceUsers = {};
 
@@ -342,6 +358,8 @@ class SoLoudAudioEngine implements AudioEngine {
       for (final v in _voices.values) {
         _safe(() => _soloud.setPause(v.handle, true));
       }
+      // No event during a pause (contract § 11): a thunder still sounding ends here.
+      await _stopEvents((_) => true);
     });
   }
 
@@ -399,6 +417,7 @@ class SoLoudAudioEngine implements AudioEngine {
     _rampResume?.cancel();
     _rampStart = null;
     _rampEnd = null;
+    await _stopEvents((_) => true);
     final voices = _voices.values.toList();
     _voices.clear();
     _paused = false;
@@ -420,6 +439,75 @@ class SoLoudAudioEngine implements AudioEngine {
     _ducked = ducked;
     if (_voices.isNotEmpty && !_paused && _soloud.isInitialized) {
       _applyMaster(const Duration(milliseconds: 500));
+    }
+  }
+
+  // ---- Events (sounds played by events, contract § 11)
+
+  @override
+  Future<Duration?> playEvent(
+    String key,
+    AudioSourceRef source, {
+    required double volume,
+    double gain = 1.0,
+    double speed = 1.0,
+    double pan = 0.0,
+  }) {
+    return _serial(() async {
+      // Only within a session that is playing: never during a pause or after a stop.
+      if (!_soloud.isInitialized || _voices.isEmpty || _paused) return null;
+      AudioSource? loaded;
+      try {
+        loaded = await _acquire(source);
+        final length = _soloud.getLength(loaded);
+        final rate = speed.clamp(0.5, 2.0);
+        final handle = _soloud.play(loaded, volume: (volume * gain).clamp(0.0, 1.0), pan: pan.clamp(-1.0, 1.0));
+        _safe(() => _soloud.setRelativePlaySpeed(handle, rate));
+        final event = _Event(key, source, handle, gain);
+        _events.add(event);
+        final duration = Duration(microseconds: (length.inMicroseconds / rate).round());
+        // The voice frees itself at its end; then its file is released.
+        event.end = Timer(duration + const Duration(milliseconds: 300), () {
+          _serial(() => _stopEvents((e) => identical(e, event)));
+        });
+        return duration;
+      } catch (e) {
+        debugPrint('SoLoudAudioEngine: cannot play event $key ($e)');
+        if (loaded != null) await _release(source);
+        return null;
+      }
+    });
+  }
+
+  @override
+  Future<void> setEventVolume(String key, double volume, {Duration fade = MixRules.levelFade}) {
+    return _serial(() async {
+      final mine = [for (final e in _events) if (e.key == key) e];
+      if (mine.isEmpty) return;
+      for (final e in mine) {
+        _safe(() => _soloud.fadeVolume(e.handle, (volume * e.gain).clamp(0.0, 1.0), fade));
+      }
+      if (!_silent(volume)) return;
+      // Removed or muted: faded out, then stopped.
+      for (final e in mine) {
+        e.end?.cancel();
+        e.end = Timer(fade + const Duration(milliseconds: 50), () {
+          _serial(() => _stopEvents((x) => identical(x, e)));
+        });
+      }
+    });
+  }
+
+  /// Stops the events matching [which] and releases their files. Runs inside the queue.
+  Future<void> _stopEvents(bool Function(_Event) which) async {
+    final done = [for (final e in _events) if (which(e)) e];
+    _events.removeWhere(which);
+    for (final e in done) {
+      e.end?.cancel();
+      try {
+        await _soloud.stop(e.handle);
+      } catch (_) {}
+      await _release(e.source);
     }
   }
 

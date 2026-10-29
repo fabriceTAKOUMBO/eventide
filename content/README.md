@@ -16,7 +16,7 @@ Le chemin d'un fichier sous `content/` est sa clé S3 :
 
 | Clé S3 | Contenu |
 |---|---|
-| `audio/sons/<id>.ogg` | boucle de son de nature Premium |
+| `audio/sons/<id>.ogg` | boucle de son de nature Premium, ambiance d'un paysage Premium (`ambiance-<paysage>`), ou variante d'un son à événements (`tonnerre-01`…, contrat § 11) |
 | `audio/musiques/<id>.ogg` | boucle musicale Premium |
 | `images/paysages/<id>.jpg` | image fixe d'un paysage Premium : exactement la première image de sa vidéo (veille, vignettes, « réduire les animations », chargement) |
 | `videos/paysages/<id>.mp4` | vidéo d'un paysage Premium : boucle sans raccord, H.264, sans son, 2,5 Mo au plus |
@@ -27,13 +27,17 @@ l'application (`app/assets/audio/...`, `app/assets/landscapes/<id>.mp4` et
 `<id>.jpg`). L'application ne demande une vidéo ou une image de paysage que si
 son identifiant figure dans `app/assets/landscapes/remote.json`, réécrit par
 `tools/media/process_video.py` d'après ce dossier : ajouter un fichier ici sans
-relancer le script ne le rend pas visible dans l'application.
+relancer le script ne le rend pas visible dans l'application. Le même fichier liste
+aussi les sons et musiques présents ici (`sons`, `musiques`) : l'application ne
+demande jamais un son absent (par exemple l'ambiance de test `ambiance-toits-pluie`,
+démo seulement). Il est réécrit par chaque outil qui écrit ici (`process_video.py`,
+`make_ambiance.py`, `generate_audio.py`).
 
 ## Fichiers présents
 
 | Clé | Durée de boucle |
 |---|---|
-| `audio/sons/tonnerre.ogg` | 47 s |
+| `audio/sons/ambiance-pluie-ville.ogg` | 67 s (ambiance de `pluie-ville`, tirée de sa vidéo) |
 | `audio/sons/vagues.ogg` | 43 s |
 | `audio/sons/feu-de-camp.ogg` | 26 s |
 | `audio/sons/grillons.ogg` | 23 s |
@@ -47,8 +51,12 @@ relancer le script ne le rend pas visible dans l'application.
 
 | Clé | Contenu |
 |---|---|
+| `audio/sons/tonnerre-01.ogg` à `tonnerre-10.ogg` | variantes du son à événements `tonnerre` (6 à 20 s chacune, joués de temps en temps, jamais en boucle) : substituts synthétiques |
+
+| Clé | Contenu |
+|---|---|
 | `images/paysages/pluie-ville.jpg` | image fixe (720 × 1280, 69 ko) |
-| `videos/paysages/pluie-ville.mp4` | 7,6 s, 24 i/s, 720 × 1280, 2,28 Mo |
+| `videos/paysages/pluie-ville.mp4` | 7,6 s, 24 i/s, 720 × 1280, 1,73 Mo (éclairs effacés) |
 
 Provenance et droits de chaque fichier : [`LICENCES.md`](LICENCES.md). Les
 vidéos de tiers de `medias-test/` (tests internes, non diffusables) ne vont
@@ -56,8 +64,10 @@ vidéos de tiers de `medias-test/` (tests internes, non diffusables) ne vont
 
 ## Format audio
 
-Les fichiers sont en Ogg Opus, 48 kHz stéréo, 64 kbit/s, à environ −23 LUFS,
-avec une crête vraie ≤ −1 dBTP. Ce sont des boucles parfaites : chaque fichier
+Les fichiers sont en Ogg Opus, 48 kHz stéréo, 64 kbit/s (96 kbit/s pour les
+ambiances, enregistrements réels), à environ −23 LUFS, avec une crête vraie ≤ −1 dBTP.
+Les variantes d'un son à événements ne sont pas des boucles : un seul coup, du
+silence au silence, au même niveau (−23 LUFS intégrés). Ce sont des boucles parfaites : chaque fichier
 se décode en exactement le nombre d'échantillons de la boucle (pre-skip de
 15 360 échantillons, sans coupe de fin). Les fichiers sous licence devront
 respecter les mêmes contraintes pour boucler sans couture. La méthode est
@@ -78,6 +88,7 @@ acceptées par `POST /content/urls`, contrat § 8.)
 ## Régénération
 
 ```sh
-python3 tools/media/generate_audio.py     # sons et musiques
+python3 tools/media/generate_audio.py     # sons, musiques et variantes du tonnerre (substituts)
 python3 tools/media/process_video.py      # vidéos et images de paysages (depuis medias-bruts/)
+python3 tools/media/make_ambiance.py      # ambiances des paysages (bande son des vidéos)
 ```

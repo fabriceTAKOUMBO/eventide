@@ -10,6 +10,7 @@ import 'package:flutter/widgets.dart' show AppLifecycleState;
 
 import '../core/catalog.dart';
 import '../core/landscape_media.dart';
+import '../core/lightning.dart';
 import '../core/media_card.dart';
 import '../core/ops.dart';
 import '../core/plan.dart';
@@ -22,6 +23,7 @@ import '../services/account_service.dart';
 import '../services/ads_service.dart';
 import '../services/api_client.dart';
 import '../services/audio/audio_engine.dart';
+import '../services/audio/event_scheduler.dart';
 import '../services/audio/media_artwork.dart';
 import '../services/audio/playback_handler.dart';
 import '../services/billing_service.dart';
@@ -623,6 +625,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
     bool progressive = false,
   }) async {
     final layers = <EngineLayer>[];
+    final events = <EventLayer>[];
     var failed = false;
     var offline = false;
     for (final kind in const [LayerKind.son, LayerKind.musique]) {
@@ -630,6 +633,28 @@ class RealAppModel extends AppModel implements PlaybackHost {
         // Locked items of a shared mix stay visible but muted for a free user.
         if (layer.level <= 0 || !_rules.canUseItem(_plan, kind, layer.id)) continue;
         final key = MixRules.layerKey(kind, layer.id);
+        final item = _catalog.item(kind, layer.id);
+        final eventSound = item?.events;
+        if (eventSound != null) {
+          // Played by events (thunder, contract § 11): each variant is found or downloaded when
+          // an event needs it, never all of them before the sound starts.
+          final variants = [
+            for (final id in eventSound.variants)
+              if (await _content.isPublished(kind, id)) EventVariant(id, () => _resolveVariant(kind, id)),
+          ];
+          if (variants.isEmpty) continue;
+          events.add(EventLayer(
+            key: key,
+            variants: variants,
+            volume: MixRules.layerVolume(kind, scene.effectiveLevel(kind, layer.level)),
+            interval: eventSound.interval,
+            firstDelay: eventSound.firstDelay,
+          ));
+          continue;
+        }
+        // An ambiance neither bundled nor on the content server (test material, demo build
+        // only) is left out without a message.
+        if (item != null && item.isAmbiance && !await _content.isPublished(kind, layer.id)) continue;
         try {
           final source = _sources[key] ??= await _content.resolve(kind, layer.id, allowNetwork: true);
           layers.add(EngineLayer(
@@ -645,6 +670,12 @@ class RealAppModel extends AppModel implements PlaybackHost {
         }
       }
     }
+    if (layers.isEmpty && events.isNotEmpty) {
+      // Only event sounds (thunder alone): a parked, silent voice carries the session, so that
+      // pause, timer and media card work as with any mix (a parked voice is not decoded).
+      final carrier = _carrierSource();
+      if (carrier != null) layers.add(EngineLayer(key: _carrierKey, source: carrier, volume: 0));
+    }
     final landscape = _catalog.landscape(scene.landscapeId);
     return _Prepared(
       PlayRequest(
@@ -655,10 +686,26 @@ class RealAppModel extends AppModel implements PlaybackHost {
         timer: scene.timer,
         rampUp: rampUp,
         scheduleId: scheduleId,
+        events: events,
       ),
       failed: failed,
       offline: offline,
     );
+  }
+
+  Future<AudioSourceRef> _resolveVariant(LayerKind kind, String id) async =>
+      _sources[MixRules.layerKey(kind, id)] ??= await _content.resolve(kind, id, allowNetwork: true);
+
+  static const String _carrierKey = 'carrier';
+
+  /// A free, bundled loop (never heard: parked at volume 0) for a mix of event sounds only.
+  AudioSourceRef? _carrierSource() {
+    for (final s in _catalog.sounds) {
+      if (s.free && s.events == null && !s.isAmbiance) {
+        return AssetAudioSource(ContentRepository.assetKey(LayerKind.son, s.id));
+      }
+    }
+    return null;
   }
 
   void _reportContentFailure(_Prepared prepared) {
@@ -1392,6 +1439,9 @@ class RealAppModel extends AppModel implements PlaybackHost {
   @override
   String? landscapePosterFile(String landscapeId) =>
       _posterIds.contains(landscapeId) ? _content.cachedPath(LandscapeMediaKeys.image(landscapeId)) : null;
+
+  @override
+  Stream<LightningStrike> get lightningStrikes => _handler.lightningStrikes;
 
   @override
   Future<LandscapeVideoSource?> landscapeVideo(String landscapeId) async {

@@ -5,6 +5,7 @@ import 'package:eventide/core/media_card.dart';
 import 'package:eventide/core/scene.dart';
 import 'package:eventide/services/audio/audio_engine.dart';
 import 'package:eventide/services/audio/audio_focus.dart';
+import 'package:eventide/services/audio/event_scheduler.dart';
 import 'package:eventide/services/audio/fake_audio_engine.dart';
 import 'package:eventide/services/audio/media_card_controls.dart';
 import 'package:eventide/services/audio/playback_handler.dart';
@@ -618,6 +619,105 @@ void main() {
       expect(failing.attempts, 2);
       expect(handler.status.value.loading, isFalse);
       expect(handler.status.value.playing, isFalse);
+    });
+  });
+
+  group('thunder (sounds played by events, contract § 11)', () {
+    final thunder = EventLayer(
+      key: 'son:tonnerre',
+      variants: [
+        for (var i = 1; i <= 10; i++)
+          EventVariant('tonnerre-$i', () async => AssetAudioSource('assets/audio/sons/tonnerre-$i.ogg')),
+      ],
+      volume: 0.5,
+    );
+
+    PlayRequest storm({TimerSetting timer = const TimerDuration(60)}) => PlayRequest(
+          landscapeId: 'pluie-ville',
+          title: 'Pluie sur la ville',
+          layers: _request().layers,
+          timer: timer,
+          events: [thunder],
+        );
+
+    test('events in the background service: after the first delay, with a flash before', () {
+      fakeAsync((async) {
+        final handler = build(async, t0);
+        final strikes = <Duration>[];
+        handler.lightningStrikes.listen((_) => strikes.add(async.elapsed));
+        handler.start(storm());
+        async.flushMicrotasks();
+        async.elapse(const Duration(seconds: 44));
+        expect(engine.events, isEmpty);
+        async.elapse(const Duration(seconds: 77));
+        expect(engine.events, hasLength(1));
+        expect(strikes, hasLength(1));
+        async.elapse(const Duration(minutes: 30));
+        expect(engine.events.length, greaterThan(5));
+        expect(strikes.length - engine.events.length, inInclusiveRange(0, 1));
+      });
+    });
+
+    test('a pause stops them, a resume starts over with a first delay', () {
+      fakeAsync((async) {
+        final handler = build(async, t0);
+        handler.start(storm());
+        async.flushMicrotasks();
+        handler.pause();
+        async.flushMicrotasks();
+        async.elapse(const Duration(hours: 1));
+        expect(engine.events, isEmpty);
+        handler.play();
+        async.flushMicrotasks();
+        async.elapse(const Duration(seconds: 44));
+        expect(engine.events, isEmpty);
+        async.elapse(const Duration(seconds: 77));
+        expect(engine.events, hasLength(1));
+      });
+    });
+
+    test('none during the end-of-timer fade, nor after the stop', () {
+      fakeAsync((async) {
+        final engine = _SlowFadeEngine();
+        final handler = PlaybackHandler(engine: engine, focus: FakeFocus(), native: FakeNativeBridge(), now: () => t0.add(async.elapsed))
+          ..attachHost(_Host());
+        handler.start(storm(timer: const TimerDuration(15)));
+        async.flushMicrotasks();
+        async.elapse(const Duration(minutes: 15));
+        final before = engine.events.length;
+        expect(handler.status.value.playing, isTrue, reason: 'fading out');
+        async.elapse(const Duration(minutes: 10));
+        expect(engine.events.length, before);
+        engine.fade.complete();
+        async.flushMicrotasks();
+        async.elapse(const Duration(hours: 1));
+        expect(engine.events.length, before);
+      });
+    });
+
+    test('a mix change goes to the scheduler (level 0: the event sounding fades out)', () {
+      fakeAsync((async) {
+        final handler = build(async, t0);
+        handler.start(storm());
+        async.flushMicrotasks();
+        async.elapse(const Duration(minutes: 3));
+        expect(engine.events, isNotEmpty);
+        final silent = EventLayer(key: thunder.key, variants: thunder.variants, volume: 0);
+        handler.updateLayers(PlayRequest(
+          landscapeId: 'pluie-ville',
+          title: 'Pluie sur la ville',
+          layers: _request().layers,
+          timer: const TimerDuration(60),
+          events: [silent],
+        ));
+        async.flushMicrotasks();
+        expect(engine.calls, contains('eventVolume:son:tonnerre:0.00'));
+        final count = engine.events.length;
+        async.elapse(const Duration(hours: 1));
+        expect(engine.events.length, count);
+        handler.stop();
+        async.flushMicrotasks();
+      });
     });
   });
 }

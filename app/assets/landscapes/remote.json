@@ -5,5 +5,30 @@
   ],
   "images": [
     "pluie-ville"
+  ],
+  "sons": [
+    "ambiance-pluie-ville",
+    "chouette",
+    "feu-de-camp",
+    "grillons",
+    "tonnerre-01",
+    "tonnerre-02",
+    "tonnerre-03",
+    "tonnerre-04",
+    "tonnerre-05",
+    "tonnerre-06",
+    "tonnerre-07",
+    "tonnerre-08",
+    "tonnerre-09",
+    "tonnerre-10",
+    "vagues"
+  ],
+  "musiques": [
+    "boite-a-musique",
+    "bols-tibetains",
+    "cordes-lentes",
+    "flute",
+    "guitare-douce",
+    "harpe"
   ]
 }

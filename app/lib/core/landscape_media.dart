@@ -57,16 +57,25 @@ abstract final class LandscapeMediaKeys {
   static const String remoteManifest = 'assets/landscapes/remote.json';
 }
 
-/// Contents of [LandscapeMediaKeys.remoteManifest] (`{"version": 1, "videos": [...], "images": [...]}`).
+/// Contents of [LandscapeMediaKeys.remoteManifest]: `{"version": 1, "videos": [...],
+/// "images": [...], "sons": [...], "musiques": [...]}` (written by tools/media/remote_manifest.py
+/// from `content/`).
 class RemoteLandscapeMedia {
-  const RemoteLandscapeMedia({this.videos = const {}, this.images = const {}});
+  const RemoteLandscapeMedia({this.videos = const {}, this.images = const {}, this.sounds, this.music});
 
   final Set<String> videos;
   final Set<String> images;
 
+  /// `audio/sons/<id>.ogg` on the content server (sounds, landscape ambiances, variants of the
+  /// event sounds). Null when the manifest has no such list: every catalog sound is assumed there.
+  final Set<String>? sounds;
+
+  /// `audio/musiques/<id>.ogg` on the content server; null: every catalog music is assumed there.
+  final Set<String>? music;
+
   static const RemoteLandscapeMedia none = RemoteLandscapeMedia();
 
-  /// Lenient: anything unexpected means « nothing on the server ».
+  /// Lenient: anything unexpected means « nothing on the server » (and no list of audio files).
   factory RemoteLandscapeMedia.fromJson(Object? json) {
     if (json is! Map) return none;
     Set<String> ids(Object? list) => {
@@ -74,9 +83,12 @@ class RemoteLandscapeMedia {
         for (final id in list)
           if (id is String && RegExp(r'^[a-z0-9-]{1,64}$').hasMatch(id)) id,
     };
+    Set<String>? audio(Object? list) => list is List ? ids(list) : null;
     return RemoteLandscapeMedia(
       videos: ids(json['videos']),
       images: ids(json['images']),
+      sounds: audio(json['sons']),
+      music: audio(json['musiques']),
     );
   }
 }

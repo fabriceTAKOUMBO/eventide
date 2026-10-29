@@ -9,11 +9,14 @@ import 'package:flutter_soloud/flutter_soloud.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _Voice {
-  _Voice(this.source, {required this.volume, required this.paused});
+  _Voice(this.source, {required this.volume, required this.paused, this.looping = false, this.pan = 0});
 
   final String source;
   double volume;
   bool paused;
+  final bool looping;
+  final double pan;
+  double speed = 1;
 
   /// Every fade asked for this voice: (target, duration).
   final List<(double, Duration)> fades = [];
@@ -52,8 +55,13 @@ class _FakeSoLoud implements SoLoud {
           (args[0] as AudioSource).soundPath,
           volume: (named[#volume] as double?) ?? 1,
           paused: (named[#paused] as bool?) ?? false,
+          looping: (named[#looping] as bool?) ?? false,
+          pan: (named[#pan] as double?) ?? 0,
         );
         return handle;
+      case #setRelativePlaySpeed:
+        voices[(args[0] as SoundHandle).id]?.speed = args[1] as double;
+        return null;
       case #getLength:
         return const Duration(seconds: 30);
       case #seek:
@@ -270,4 +278,79 @@ void main() {
       });
     },
   );
+
+  group('events (sounds played by events, contract § 11)', () {
+    const thunder = AssetAudioSource('assets/audio/sons/tonnerre-03.ogg');
+
+    _Voice event() => soloud.voice(thunder.assetKey);
+
+    test('an event plays once over the loops, with its gain, speed and pan', () {
+      fake((async) {
+        engine.start([_sound(0.6)]);
+        async.flushMicrotasks();
+        Duration? length;
+        engine.playEvent('son:tonnerre', thunder, volume: 0.5, gain: 0.8, speed: 1.05, pan: -0.3).then((d) => length = d);
+        async.flushMicrotasks();
+        expect(event().looping, isFalse);
+        expect(event().volume, closeTo(0.4, 1e-9));
+        expect(event().pan, -0.3);
+        expect(event().speed, 1.05);
+        expect(length!.inMilliseconds, (30000 / 1.05).round());
+        expect(rain().paused, isFalse, reason: 'the loops go on');
+        // Over: its voice is stopped and its file released.
+        async.elapse(length! + const Duration(seconds: 1));
+        expect(soloud.voices.values.where((v) => v.source == thunder.assetKey), isEmpty);
+      });
+    });
+
+    test('nothing while paused or stopped; a pause ends the event sounding', () {
+      fake((async) {
+        Duration? length = Duration.zero;
+        engine.playEvent('son:tonnerre', thunder, volume: 0.5).then((d) => length = d);
+        async.flushMicrotasks();
+        expect(length, isNull, reason: 'no session');
+        engine.start([_sound(0.6)]);
+        async.flushMicrotasks();
+        engine.playEvent('son:tonnerre', thunder, volume: 0.5);
+        async.flushMicrotasks();
+        expect(soloud.voices.values.where((v) => v.source == thunder.assetKey), hasLength(1));
+        engine.pause();
+        async.elapse(MixRules.pauseFade + const Duration(milliseconds: 50));
+        expect(soloud.voices.values.where((v) => v.source == thunder.assetKey), isEmpty);
+        length = Duration.zero;
+        engine.playEvent('son:tonnerre', thunder, volume: 0.5).then((d) => length = d);
+        async.flushMicrotasks();
+        expect(length, isNull, reason: 'paused');
+      });
+    });
+
+    test('level change and mute: the event sounding follows, then stops at 0', () {
+      fake((async) {
+        engine.start([_sound(0.6)]);
+        async.flushMicrotasks();
+        engine.playEvent('son:tonnerre', thunder, volume: 0.5, gain: 0.5);
+        async.flushMicrotasks();
+        engine.setEventVolume('son:tonnerre', 0.8);
+        async.flushMicrotasks();
+        expect(event().lastFade, (0.4, MixRules.levelFade), reason: 'its own gain is kept');
+        engine.setEventVolume('son:tonnerre', 0, fade: MixRules.muteFade);
+        async.flushMicrotasks();
+        expect(event().lastFade, (0.0, MixRules.muteFade));
+        async.elapse(MixRules.muteFade + const Duration(milliseconds: 100));
+        expect(soloud.voices.values.where((v) => v.source == thunder.assetKey), isEmpty);
+      });
+    });
+
+    test('stop ends the events with the loops', () {
+      fake((async) {
+        engine.start([_sound(0.6)]);
+        async.flushMicrotasks();
+        engine.playEvent('son:tonnerre', thunder, volume: 0.5);
+        async.flushMicrotasks();
+        engine.stop();
+        async.flushMicrotasks();
+        expect(soloud.voices, isEmpty);
+      });
+    });
+  });
 }

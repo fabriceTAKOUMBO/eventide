@@ -68,15 +68,15 @@ void main() {
     });
 
     test('ajouter an element already playing never lowers it', () {
-      // Cascade en forêt: eau-vive 60, vent 30.
+      // Cascade en forêt: its ambiance 60, vent 30.
       final r = apply(snapshot(), [
-        {'op': 'ajouter', 'cible': 'son', 'id': 'eau-vive', 'niveau': 50},
+        {'op': 'ajouter', 'cible': 'son', 'id': 'ambiance-cascade-foret', 'niveau': 50},
         {'op': 'ajouter', 'cible': 'son', 'id': 'vent', 'niveau': 50},
       ]);
-      expect(r.snapshot.scene.levelOf(LayerKind.son, 'eau-vive'), 60);
+      expect(r.snapshot.scene.levelOf(LayerKind.son, 'ambiance-cascade-foret'), 60);
       expect(r.snapshot.scene.levelOf(LayerKind.son, 'vent'), 50);
       expect(r.changes, const [
-        ChangeLine('Eau vive', '60 %'),
+        ChangeLine('Ambiance de la cascade', '60 %'),
         ChangeLine('Vent', '50 %'),
       ]);
       final r2 = apply(snapshot(), [
@@ -97,18 +97,18 @@ void main() {
 
     test('ajuster clamps, removes at 0 and adds an absent element at 50', () {
       final r = apply(snapshot(), [
-        {'op': 'ajuster', 'cible': 'son', 'id': 'eau-vive', 'delta': 60},
+        {'op': 'ajuster', 'cible': 'son', 'id': 'ambiance-cascade-foret', 'delta': 60},
         {'op': 'ajuster', 'cible': 'son', 'id': 'vent', 'delta': -40},
         {'op': 'ajuster', 'cible': 'son', 'id': 'pluie-douce', 'delta': 20},
         {'op': 'ajuster', 'cible': 'son', 'id': 'ruisseau', 'delta': -20},
       ]);
       final scene = r.snapshot.scene;
-      expect(scene.levelOf(LayerKind.son, 'eau-vive'), 100);
+      expect(scene.levelOf(LayerKind.son, 'ambiance-cascade-foret'), 100);
       expect(scene.hasLayer(LayerKind.son, 'vent'), isFalse);
       expect(scene.levelOf(LayerKind.son, 'pluie-douce'), 50);
       expect(scene.hasLayer(LayerKind.son, 'ruisseau'), isFalse);
       expect(r.changes, const [
-        ChangeLine('Eau vive', '100 %'),
+        ChangeLine('Ambiance de la cascade', '100 %'),
         ChangeLine('Vent', 'Hors du mix'),
         ChangeLine('Pluie douce', '50 %'),
       ]);

@@ -110,11 +110,65 @@ def test_premium_landscape_media_requires_premium(api, installation, cloudfront_
 
 
 @pytest.mark.django_db
+def test_free_landscape_ambiance_is_signed_for_everyone(api, cloudfront_key):
+    # Contract § 11: an ambiance is a catalog sound; this one is free (cascade-foret).
+    key = "audio/sons/ambiance-cascade-foret.ogg"
+    response = api.post("/v1/content/urls", {"keys": [key]}, format="json")
+    assert response.status_code == 200
+    verify(cloudfront_key, response.json()["urls"][key])
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(
+    "keys",
+    [
+        ["audio/sons/ambiance-pluie-ville.ogg"],
+        # Variants of the event sound « tonnerre » (Premium): the sound's own rule.
+        ["audio/sons/tonnerre-01.ogg"],
+        ["audio/sons/tonnerre-10.ogg", "audio/sons/eau-vive.ogg"],
+        ["audio/sons/ambiance-cascade-foret.ogg", "audio/sons/tonnerre-03.ogg"],
+    ],
+)
+def test_premium_ambiance_and_event_variants_require_premium(
+    api, installation, cloudfront_key, keys
+):
+    response = api.post("/v1/content/urls", {"keys": keys}, format="json")
+    assert response.status_code == 403
+    assert response.json()["error"] == "premium_required"
+    make_purchase(installation=installation[0])
+    response = api.post("/v1/content/urls", {"keys": keys}, format="json")
+    assert response.status_code == 200
+    urls = response.json()["urls"]
+    assert set(urls) == set(keys)
+    for key, url in urls.items():
+        assert url.startswith(f"https://cdn.eventide.test/{key}?Expires=")
+        verify(cloudfront_key, url)
+
+
+def test_every_variant_of_an_event_sound_is_a_sound_file(catalog):
+    for sound in catalog.raw["sons"]:
+        for variant in sound.get("variantes", []):
+            assert catalog.sound_of_file(variant) == sound["id"]
+    assert catalog.sound_of_file("vent") == "vent"
+    assert catalog.sound_of_file("tonnerre-99") is None
+    assert catalog.sound_of_file("harpe") is None
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize(
     "keys",
     [
         [],
         ["audio/sons/klaxon.ogg"],
+        # Event variants: only under audio/sons, only the listed ones.
+        ["audio/sons/tonnerre-99.ogg"],
+        ["audio/sons/tonnerre-1.ogg"],
+        ["audio/musiques/tonnerre-01.ogg"],
+        ["images/paysages/tonnerre-01.jpg"],
+        ["videos/paysages/tonnerre-01.mp4"],
+        ["audio/sons/tonnerre-01.mp4"],
+        ["audio/sons/ambiance-pluie-ville.mp4"],
+        ["videos/paysages/ambiance-pluie-ville.mp4"],
         ["audio/sons/harpe.ogg"],
         ["audio/sons/eau-vive.mp3"],
         ["images/paysages/eau-vive.jpg"],

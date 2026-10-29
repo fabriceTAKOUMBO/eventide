@@ -26,8 +26,14 @@ Catalog loadTestCatalog() =>
 /// Every audio item of the catalog, as if bundled (no file IO in tests).
 Set<String> allBundledAudio(Catalog catalog) => {
       for (final kind in const [LayerKind.son, LayerKind.musique])
-        for (final item in catalog.items(kind)) 'assets/audio/${kind == LayerKind.son ? 'sons' : 'musiques'}/${item.id}.ogg',
+        for (final item in catalog.items(kind))
+          // A sound played by events (thunder) is its variants' files.
+          for (final id in item.events?.variants ?? [item.id])
+            'assets/audio/${kind == LayerKind.son ? 'sons' : 'musiques'}/$id.ogg',
     };
+
+/// Audio files of the catalog: one per loop, one per variant of a sound played by events.
+int audioFileCount(Catalog catalog) => allBundledAudio(catalog).length;
 
 /// In-memory LocalStore with the same JSON round trip as the real one.
 class MemoryStore extends LocalStore {
