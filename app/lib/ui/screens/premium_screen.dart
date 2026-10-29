@@ -1,5 +1,5 @@
 // Screen 11 · Premium: what you gain, three plans (annual preselected), one button
-// whose text follows the chosen plan. Purchases are never triggered by voice.
+// whose text follows the chosen plan.
 import 'package:flutter/material.dart';
 
 import '../../app/app_model.dart';
@@ -134,11 +134,11 @@ class _PremiumScreenState extends State<PremiumScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (final text in const [
-            'Tous les paysages (2 en gratuit)',
-            'Programmations sans limite',
+            'Tous les paysages et leurs ambiances (2 en gratuit)',
+            'Toutes les mélodies et tous les sons',
+            'Favoris et programmations sans limite',
             'Écoute sans connexion',
             'Aucune publicité',
-            'Assistant vocal (annuel et mensuel)',
           ])
             ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 32),
@@ -250,7 +250,7 @@ class _PlanCard extends StatelessWidget {
       ),
       PurchaseChoice.lifetime => (
         'À vie',
-        'Paiement unique, sans assistant vocal',
+        'Paiement unique, sans abonnement',
         'une seule fois',
         null,
       ),

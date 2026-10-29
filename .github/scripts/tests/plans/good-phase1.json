@@ -266,7 +266,7 @@
       }
     },
     {
-      "address": "module.prod.module.observability.aws_cloudwatch_log_metric_filter.app_event[\"voice-global-cap-api\"]",
+      "address": "module.prod.module.observability.aws_cloudwatch_log_metric_filter.app_event[\"rtdn-rejected-api\"]",
       "mode": "managed",
       "type": "aws_cloudwatch_log_metric_filter",
       "name": "app_event",
@@ -277,7 +277,7 @@
         ],
         "before": null,
         "after": {
-          "name": "ev-prod-voice-global-cap-api",
+          "name": "ev-prod-rtdn-rejected-api",
           "log_group_name": "/ecs/ev-prod/api"
         },
         "after_unknown": {}

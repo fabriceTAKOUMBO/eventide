@@ -145,18 +145,6 @@ variable "rtdn_service_account_email" {
   default     = ""
 }
 
-variable "voice" {
-  description = "Assistant vocal (routeur, modèle, plafonds) ; voir modules/shared_platform."
-  type = object({
-    router               = optional(string, "gemini")
-    model                = optional(string, "gemini-2.5-flash-lite")
-    monthly_cap_eur      = optional(string, "2.00")
-    usd_eur_rate         = optional(string, "0.93")
-    global_daily_cap_eur = optional(string, "20.00")
-  })
-  default = {}
-}
-
 variable "legal_publisher_name" {
   description = "Éditeur affiché sur la politique de confidentialité."
   type        = string

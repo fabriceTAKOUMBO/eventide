@@ -85,7 +85,7 @@ locals {
       metric      = "TargetResponseTime", statistic = null, extended = "p95", period = 300,
       periods     = 3, datapoints = 2, threshold = var.latency_p95_threshold_seconds,
       operator    = "GreaterThanThreshold",
-      description = "Temps de reponse p95 de l API superieur a ${var.latency_p95_threshold_seconds} s (l assistant vocal attend le modele)"
+      description = "Temps de reponse p95 de l API superieur a ${var.latency_p95_threshold_seconds} s"
     }
     "api-unhealthy" = {
       metric      = "UnHealthyHostCount", statistic = "Maximum", extended = null, period = 60,
@@ -172,26 +172,12 @@ locals {
   metric_namespace = "Eventide/${var.name}"
 
   log_events = {
-    voice-global-cap = {
-      event       = "voice_global_cap_reached"
-      metric      = "VoiceGlobalCapReached"
-      threshold   = 1
-      period      = 300
-      description = "Plafond quotidien GLOBAL du cout de l assistant atteint (VOICE_GLOBAL_DAILY_CAP_EUR) : abus possible, ou plafond trop bas. L assistant repond 503 model_unavailable (regles seules). Journaux : event = voice_global_cap_reached."
-    }
-    model-unavailable = {
-      event       = "model_unavailable"
-      metric      = "ModelUnavailable"
-      threshold   = var.model_unavailable_threshold
-      period      = 300
-      description = "Echecs repetes d appel au modele Gemini (cle, quota Google, panne, modele retire) : reservations rendues, l application passe aux regles seules. Journaux : event = model_unavailable."
-    }
     purchase-finalization-failed = {
       event       = "purchase_finalization_failed"
       metric      = "PurchaseFinalizationFailed"
       threshold   = 3
       period      = 3600
-      description = "Achats non acquittes ou non consommes (Google rembourse apres 3 jours) : finalize_purchases reessaie chaque heure. Journaux : event = purchase_finalization_failed."
+      description = "Achats non acquittes (Google rembourse apres 3 jours) : finalize_purchases reessaie chaque heure. Journaux : event = purchase_finalization_failed."
     }
     google-credentials = {
       event       = "play_api_auth_error"

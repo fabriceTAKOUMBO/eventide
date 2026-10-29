@@ -16,13 +16,10 @@ void main() {
       expect(DemoMode.resolve(requested: false, nativeDemoBuild: false), isFalse);
     });
 
-    test('forced entitlements: annual Premium with the assistant included', () {
+    test('forced entitlements: annual Premium', () {
       const e = DemoMode.entitlements;
       expect(e.plan, Plan.annual);
       expect(e.premium, isTrue);
-      expect(e.plan.includesAssistant, isTrue);
-      expect(e.voice.mode, VoiceMode.included);
-      expect(e.voice.canUseModel, isTrue);
       expect(e.expiresAt, isNull);
     });
 
@@ -42,12 +39,10 @@ void main() {
       expect(offers.map((o) => o.choice), [PurchaseChoice.annual, PurchaseChoice.monthly, PurchaseChoice.lifetime]);
       expect(offers.every((o) => !o.available), isTrue);
       await billing.buy(PurchaseChoice.annual);
-      await billing.buyCredits();
       await billing.restore();
       await Future<void>.delayed(Duration.zero);
       expect(events, isEmpty);
-      expect(billing.creditsPrice, isNull);
-      expect(billing.calls, ['buy:annual', 'credits', 'restore']);
+      expect(billing.calls, ['buy:annual', 'restore']);
       await sub.cancel();
     });
   });

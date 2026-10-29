@@ -44,7 +44,6 @@ RUN DJANGO_SETTINGS_MODULE=config.settings.prod \
     DATABASE_URL="postgres://build:build@127.0.0.1:5432/build" \
     ALLOWED_HOSTS="localhost" \
     PUBLIC_WEB_BASE_URL="https://build.invalid" \
-    VOICE_ROUTER="rules-only" \
     /app/.venv/bin/python manage.py collectstatic --noinput
 
 # Autorités de certification RDS (PostgreSQL en sslmode=verify-full), vérifiées par empreinte

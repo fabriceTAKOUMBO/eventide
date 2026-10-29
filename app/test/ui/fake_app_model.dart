@@ -7,7 +7,6 @@ import 'dart:io';
 import 'package:eventide/app/app_model.dart';
 import 'package:eventide/core/catalog.dart';
 import 'package:eventide/core/landscape_media.dart';
-import 'package:eventide/core/ops.dart' show ChangeLine;
 import 'package:eventide/core/plan.dart';
 import 'package:eventide/core/scene.dart';
 import 'package:eventide/core/schedule.dart';
@@ -35,7 +34,6 @@ class FakeAppModel extends AppModel {
     Set<PermissionKind>? granted,
     Set<PermissionKind>? deniedForever,
     Set<String>? hintsSeen,
-    this.creditsPrice,
   }) : catalog = catalog ?? loadTestCatalog(),
        // ignore: prefer_initializing_formals
        _plan = plan,
@@ -71,7 +69,6 @@ class FakeAppModel extends AppModel {
   final List<Favorite> _favorites = [];
   late AppSettings _settings;
   final Set<PermissionKind> _granted;
-  VoiceState _voice = const VoiceIdle();
   final StreamController<AppEvent> _events =
       StreamController<AppEvent>.broadcast();
   int _idCounter = 0;
@@ -86,8 +83,6 @@ class FakeAppModel extends AppModel {
   bool exactAlarmAllowed;
   @override
   bool signedIn;
-  @override
-  String? creditsPrice;
 
   /// Permissions refused with « Ne plus demander » (cleared once granted).
   final Set<PermissionKind> deniedForever;
@@ -103,11 +98,6 @@ class FakeAppModel extends AppModel {
 
   set plan(Plan plan) {
     _plan = plan;
-    notifyListeners();
-  }
-
-  set voiceState(VoiceState state) {
-    _voice = state;
     notifyListeners();
   }
 
@@ -190,11 +180,6 @@ class FakeAppModel extends AppModel {
         ? DateTime(2027, 10, 28)
         : (_plan == Plan.monthly ? DateTime(2026, 11, 28) : null),
     autoRenewing: _plan == Plan.annual || _plan == Plan.monthly,
-    voice: switch (_plan) {
-      Plan.free => const VoiceQuota(mode: VoiceMode.trial, trialRemaining: 3),
-      Plan.lifetime => const VoiceQuota(mode: VoiceMode.credits),
-      _ => const VoiceQuota(mode: VoiceMode.included),
-    },
   );
 
   @override
@@ -217,8 +202,6 @@ class FakeAppModel extends AppModel {
     ),
   ];
 
-  @override
-  VoiceState get voiceState => _voice;
   @override
   Stream<AppEvent> get events => _events.stream;
   @override
@@ -479,58 +462,7 @@ class FakeAppModel extends AppModel {
   Future<void> copyShareLink() async => _log('copyShareLink');
 
   @override
-  Future<void> startVoice() async {
-    _log('startVoice');
-    _voice = const VoiceListening(
-      partialText: 'Mets le minuteur sur 1 h',
-      soundLevel: 0.6,
-    );
-    notifyListeners();
-  }
-
-  @override
-  Future<void> stopVoice() async {
-    _log('stopVoice');
-    final phrase = switch (_voice) {
-      VoiceListening(:final partialText) => partialText,
-      _ => '',
-    };
-    _voice = VoiceResult(
-      phrase: phrase,
-      changes: const [ChangeLine('Minuteur', 'Arrêt après 1 h')],
-      quotaLabel: plan == Plan.free
-          ? 'Essai gratuit · 2 demandes restantes'
-          : null,
-    );
-    notifyListeners();
-  }
-
-  @override
-  Future<void> undoVoice() async {
-    _log('undoVoice');
-    _voice = const VoiceIdle();
-    notifyListeners();
-  }
-
-  @override
-  void keepVoice() {
-    _log('keepVoice');
-    _voice = const VoiceIdle();
-    notifyListeners();
-  }
-
-  @override
-  void resetVoice() {
-    _log('resetVoice');
-    _voice = const VoiceIdle();
-    notifyListeners();
-  }
-
-  @override
   Future<void> buy(PurchaseChoice choice) async => _log('buy:${choice.name}');
-
-  @override
-  Future<void> buyCredits() async => _log('buyCredits');
 
   @override
   Future<void> restorePurchases() async => _log('restorePurchases');

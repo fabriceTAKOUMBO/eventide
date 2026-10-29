@@ -13,93 +13,12 @@ enum Plan {
   /// Monthly, annual and lifetime are Premium.
   bool get isPremium => this != Plan.free;
 
-  /// The voice assistant is included in monthly and annual only.
-  bool get includesAssistant => this == Plan.monthly || this == Plan.annual;
-
   static Plan fromId(Object? value) {
     for (final p in Plan.values) {
       if (p.name == value) return p;
     }
     return Plan.free;
   }
-}
-
-enum VoiceMode {
-  /// Free plan: 3 trial requests, once.
-  trial,
-
-  /// Monthly and annual: included, with a monthly cost cap.
-  included,
-
-  /// Lifetime: credits sold separately.
-  credits,
-
-  /// No assistant available.
-  none;
-
-  static VoiceMode fromId(Object? value) {
-    for (final m in VoiceMode.values) {
-      if (m.name == value) return m;
-    }
-    return VoiceMode.none;
-  }
-}
-
-class VoiceQuota {
-  const VoiceQuota({
-    required this.mode,
-    this.trialRemaining = 0,
-    this.creditsRemaining = 0,
-    this.monthlyCapReached = false,
-  });
-
-  final VoiceMode mode;
-  final int trialRemaining;
-  final int creditsRemaining;
-
-  /// The 2 € monthly cap is reached: rules only until next month.
-  final bool monthlyCapReached;
-
-  /// The server model can be called (rules always work locally).
-  bool get canUseModel => switch (mode) {
-    VoiceMode.trial => trialRemaining > 0,
-    VoiceMode.included => !monthlyCapReached,
-    VoiceMode.credits => creditsRemaining > 0,
-    VoiceMode.none => false,
-  };
-
-  factory VoiceQuota.fromJson(Map<String, dynamic> json) {
-    int read(String key) {
-      final v = json[key];
-      return v is num ? v.toInt() : 0;
-    }
-
-    return VoiceQuota(
-      mode: VoiceMode.fromId(json['mode']),
-      trialRemaining: read('trial_remaining'),
-      creditsRemaining: read('credits_remaining'),
-      monthlyCapReached: json['monthly_cap_reached'] == true,
-    );
-  }
-
-  Map<String, dynamic> toJson() => {
-    'mode': mode.name,
-    'trial_remaining': trialRemaining,
-    'credits_remaining': creditsRemaining,
-    'monthly_cap_reached': monthlyCapReached,
-  };
-
-  @override
-  bool operator ==(Object other) =>
-      other is VoiceQuota &&
-      other.mode == mode &&
-      other.trialRemaining == trialRemaining &&
-      other.creditsRemaining == creditsRemaining &&
-      other.monthlyCapReached == monthlyCapReached;
-
-  @override
-  int get hashCode =>
-      Object.hash(mode, trialRemaining, creditsRemaining, monthlyCapReached);
 }
 
 /// Body of `GET /entitlements` (contract §6).
@@ -109,26 +28,21 @@ class Entitlements {
     required this.premium,
     this.expiresAt,
     this.autoRenewing = false,
-    required this.voice,
   });
 
-  /// Free plan with the 3 trial requests (used before the first sync).
-  factory Entitlements.free({int trialRemaining = 3}) => Entitlements(
-    plan: Plan.free,
-    premium: false,
-    voice: VoiceQuota(mode: VoiceMode.trial, trialRemaining: trialRemaining),
-  );
+  /// Free plan (used before the first sync).
+  factory Entitlements.free() =>
+      const Entitlements(plan: Plan.free, premium: false);
 
   final Plan plan;
   final bool premium;
   final DateTime? expiresAt;
   final bool autoRenewing;
-  final VoiceQuota voice;
 
+  /// Lenient: unknown fields are ignored.
   factory Entitlements.fromJson(Map<String, dynamic> json) {
     final plan = Plan.fromId(json['plan']);
     final expires = json['expires_at'];
-    final voice = json['voice'];
     return Entitlements(
       plan: plan,
       premium: json['premium'] is bool
@@ -136,9 +50,6 @@ class Entitlements {
           : plan.isPremium,
       expiresAt: expires is String ? DateTime.tryParse(expires) : null,
       autoRenewing: json['auto_renewing'] == true,
-      voice: voice is Map
-          ? VoiceQuota.fromJson(Map<String, dynamic>.from(voice))
-          : const VoiceQuota(mode: VoiceMode.none),
     );
   }
 
@@ -147,7 +58,6 @@ class Entitlements {
     'premium': premium,
     'expires_at': expiresAt?.toUtc().toIso8601String(),
     'auto_renewing': autoRenewing,
-    'voice': voice.toJson(),
   };
 
   @override
@@ -156,12 +66,10 @@ class Entitlements {
       other.plan == plan &&
       other.premium == premium &&
       other.expiresAt == expiresAt &&
-      other.autoRenewing == autoRenewing &&
-      other.voice == voice;
+      other.autoRenewing == autoRenewing;
 
   @override
-  int get hashCode =>
-      Object.hash(plan, premium, expiresAt, autoRenewing, voice);
+  int get hashCode => Object.hash(plan, premium, expiresAt, autoRenewing);
 }
 
 /// Who may use what (dossier, section 6).

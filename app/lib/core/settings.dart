@@ -37,18 +37,13 @@ class AppSettings {
 
   String get textSizeLabel => textSizeLabels[textSize.clamp(0, 2)];
 
-  /// Stored form (French keys of contract §7 plus local-only fields).
+  /// Stored form (French keys, plus local-only fields).
   Map<String, dynamic> toJson() => {
-    ...toVoiceStateJson(),
-    'onboarded': onboarded,
-  };
-
-  /// The `reglages` object sent to `POST /voice` (contract §7).
-  Map<String, dynamic> toVoiceStateJson() => {
     'taille_texte': textSize,
     'contraste_renforce': highContrast,
     'ecran_noir_minuteur': blackScreenDuringTimer,
     'wifi_seulement': wifiOnly,
+    'onboarded': onboarded,
   };
 
   /// Lenient: unknown or invalid values fall back to the defaults.

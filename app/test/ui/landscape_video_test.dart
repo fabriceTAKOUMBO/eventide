@@ -168,7 +168,6 @@ Future<(RealAppModel, PlaybackHandler, FakeAudioEngine)> _realModel() async {
     native: native,
     api: api,
     connectivity: connectivity,
-    speech: FakeSpeech(),
     billing: FakeBilling(),
     ads: FakeAds(),
     account: FakeAccount(),
@@ -387,7 +386,7 @@ void main() {
 
       await model.play();
       await tester.pump();
-      await model.pause(); // play button, notification, voice, focus loss, timer end
+      await model.pause(); // play button, notification, focus loss, timer end
       await tester.pump();
       await model.togglePlay();
       await tester.pump();

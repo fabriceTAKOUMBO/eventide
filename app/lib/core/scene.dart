@@ -1,5 +1,5 @@
 // The scene document (contract §1, annex A of the dossier): everything that
-// is playing, stored locally, shared by link and edited by the assistant.
+// is playing, stored locally and shared by link.
 
 import 'catalog.dart';
 

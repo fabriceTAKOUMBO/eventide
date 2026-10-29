@@ -151,7 +151,7 @@ const List<TimerSetting> mediaCardTimerCycle = [
   TimerNone(),
 ];
 
-/// Next timer of the cycle. A duration outside the cycle (45 min from the voice assistant)
+/// Next timer of the cycle. A duration outside the cycle (45 min from a stored scene)
 /// goes to the next longer step.
 TimerSetting nextMediaCardTimer(TimerSetting current) => switch (current) {
   TimerNone() => const TimerDuration(15),

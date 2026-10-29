@@ -1,11 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Network: free tier streaming, Premium downloads, API (voice, purchases, shares). -->
+    <!-- Network: free tier streaming, Premium downloads, API (purchases, shares). -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- Voice assistant (asked only after the in-app explanation). -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Android 13+: reminder and fallback notifications (asked after the explanation). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Scheduled starts (setAlarmClock). Denied by default on Android 14+ for new installs:
@@ -126,10 +124,6 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />
-        </intent>
-        <!-- speech_to_text: find the on-device recognition service. -->
-        <intent>
-            <action android:name="android.speech.RecognitionService" />
         </intent>
     </queries>
 </manifest>

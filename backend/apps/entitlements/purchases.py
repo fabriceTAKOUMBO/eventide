@@ -2,7 +2,7 @@
 
 Google is always called OUTSIDE a database transaction; the recording that follows is atomic
 and idempotent on ``purchase_token``: the same token presented again refreshes its state and
-never grants credits twice.
+is never recorded twice.
 """
 
 from __future__ import annotations
@@ -12,11 +12,7 @@ from datetime import timedelta
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
-from django.db.models import F
 from django.utils import timezone
-
-from apps.accounts.models import Account
-from apps.installations.models import Installation
 
 from . import play
 from .models import Purchase
@@ -40,8 +36,6 @@ def kind_of(product_id: str) -> str | None:
         return Purchase.Kind.SUBSCRIPTION
     if product_id == settings.PLAY_LIFETIME_PRODUCT_ID:
         return Purchase.Kind.LIFETIME
-    if product_id in settings.PLAY_CREDIT_PRODUCTS:
-        return Purchase.Kind.CREDITS
     return None
 
 
@@ -66,38 +60,7 @@ def _fetch(kind: str, product_id: str, token: str) -> dict:
         "auto_renewing": False,
         "order_id": product.order_id,
         "google_acknowledged": product.acknowledged,
-        "google_consumed": product.consumed,
-        "quantity": product.quantity,
     }
-
-
-def _holder_model(purchase: Purchase):
-    if purchase.account_id is not None:
-        return Account, purchase.account_id
-    return Installation, purchase.installation_id
-
-
-def _grant_credits(purchase: Purchase, quantity: int) -> None:
-    """Credits of a consumable, granted exactly once (conditional update on the purchase)."""
-    amount = settings.PLAY_CREDIT_PRODUCTS[purchase.product_id] * quantity
-    granted = Purchase.objects.filter(pk=purchase.pk, credits_granted=0).update(
-        credits_granted=amount
-    )
-    if granted:
-        model, pk = _holder_model(purchase)
-        model.objects.filter(pk=pk).update(credits=F("credits") + amount)
-        purchase.credits_granted = amount
-        logger.info("Voice credits granted", extra={"event": "credits_granted", "amount": amount})
-
-
-def _revoke_credits(purchase: Purchase) -> None:
-    """Refunded consumable: take back what is left of its credits (never below zero)."""
-    if purchase.credits_granted <= 0:
-        return
-    model, pk = _holder_model(purchase)
-    holder = model.objects.select_for_update().get(pk=pk)
-    taken = min(holder.credits, purchase.credits_granted)
-    model.objects.filter(pk=pk).update(credits=F("credits") - taken)
 
 
 def _record(
@@ -122,8 +85,6 @@ def _record(
     }
     if state.get("google_acknowledged"):
         fields["acknowledged"] = True
-    if state.get("google_consumed"):
-        fields["consumed"] = True
     with transaction.atomic():
         if existing is None:
             if owner is None:  # only RTDN updates existing purchases without an owner
@@ -131,18 +92,9 @@ def _record(
             purchase = Purchase.objects.create(purchase_token=token, **owner.fields, **fields)
         else:
             purchase = Purchase.objects.select_for_update().get(pk=existing.pk)
-            previous_state = purchase.state
             for name, value in fields.items():
                 setattr(purchase, name, value)
             purchase.save()
-            if (
-                kind == Purchase.Kind.CREDITS
-                and state["state"] == Purchase.State.REVOKED
-                and previous_state != Purchase.State.REVOKED
-            ):
-                _revoke_credits(purchase)
-        if kind == Purchase.Kind.CREDITS and purchase.state == Purchase.State.ACTIVE:
-            _grant_credits(purchase, state.get("quantity", 1))
         linked = state.get("linked_purchase_token")
         if linked:
             # Upgrade, downgrade or resubscription: the previous token no longer entitles.
@@ -153,17 +105,8 @@ def _record(
 
 
 def finalise(purchase: Purchase) -> bool:
-    """Acknowledge (subscription, lifetime) or consume (credits) at Google; True when done."""
+    """Acknowledge (subscription, lifetime) at Google; True when done."""
     try:
-        if purchase.kind == Purchase.Kind.CREDITS:
-            if purchase.consumed or purchase.state != Purchase.State.ACTIVE:
-                return True
-            if not purchase.credits_granted:
-                return False
-            play.consume_product(purchase.product_id, purchase.purchase_token)
-            Purchase.objects.filter(pk=purchase.pk).update(consumed=True, acknowledged=True)
-            purchase.consumed = True
-            return True
         if purchase.acknowledged or purchase.state not in Purchase.ENTITLED_SUBSCRIPTION_STATES:
             return True
         if purchase.kind == Purchase.Kind.SUBSCRIPTION:
@@ -261,23 +204,15 @@ def revoke(purchase: Purchase) -> None:
         locked.state = Purchase.State.REVOKED
         locked.auto_renewing = False
         locked.save(update_fields=["state", "auto_renewing", "updated_at"])
-        if locked.kind == Purchase.Kind.CREDITS:
-            _revoke_credits(locked)
     logger.info("Purchase revoked", extra={"event": "purchase_revoked", "kind": purchase.kind})
 
 
 def pending_finalisation():
     since = timezone.now() - FINALISATION_WINDOW
-    credits = Purchase.objects.filter(
-        kind=Purchase.Kind.CREDITS,
-        state=Purchase.State.ACTIVE,
-        consumed=False,
-        created_at__gte=since,
+    return list(
+        Purchase.objects.filter(
+            state__in=Purchase.ENTITLED_SUBSCRIPTION_STATES,
+            acknowledged=False,
+            created_at__gte=since,
+        )
     )
-    others = Purchase.objects.filter(
-        kind__in=[Purchase.Kind.SUBSCRIPTION, Purchase.Kind.LIFETIME],
-        state__in=Purchase.ENTITLED_SUBSCRIPTION_STATES,
-        acknowledged=False,
-        created_at__gte=since,
-    )
-    return list(credits) + list(others)

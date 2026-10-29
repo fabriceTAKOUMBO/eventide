@@ -4,13 +4,13 @@ from datetime import timedelta
 from unittest import mock
 
 import pytest
+import requests
 from django.core.management import call_command
 from django.utils import timezone
 
 from apps.accounts.models import Account
 from apps.entitlements import purchases
 from apps.entitlements.models import Purchase
-from apps.installations.models import Installation
 from conftest import client_for, make_installation, make_purchase
 
 PKG = "app.eventide.test"
@@ -54,14 +54,8 @@ def subscription(
     return data
 
 
-def product(state=0, consumed=0, ack=0, quantity=1):
-    return {
-        "purchaseState": state,
-        "consumptionState": consumed,
-        "acknowledgementState": ack,
-        "orderId": "GPA.9999-0000",
-        "quantity": quantity,
-    }
+def product(state=0, ack=0):
+    return {"purchaseState": state, "acknowledgementState": ack, "orderId": "GPA.9999-0000"}
 
 
 @pytest.mark.django_db
@@ -71,12 +65,6 @@ def test_free_entitlements_by_default(api):
         "premium": False,
         "expires_at": None,
         "auto_renewing": False,
-        "voice": {
-            "mode": "trial",
-            "trial_remaining": 3,
-            "credits_remaining": 0,
-            "monthly_cap_reached": False,
-        },
     }
 
 
@@ -93,7 +81,7 @@ def test_subscription_is_verified_acknowledged_and_entitles(api, google_http):
     body = response.json()
     assert body["plan"] == "annual" and body["premium"] is True
     assert body["auto_renewing"] is True and body["expires_at"].endswith("Z")
-    assert body["voice"]["mode"] == "included"
+    assert set(body) == {"plan", "premium", "expires_at", "auto_renewing"}
     purchase = Purchase.objects.get(purchase_token="tok-sub")
     assert purchase.acknowledged is True
     assert [c.request.method for c in google_http.calls] == ["GET", "POST"]
@@ -208,6 +196,32 @@ def test_google_unavailable_is_503(api, google_http, status):
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("product_id", "url", "answer"),
+    [
+        ("eventide_premium", sub_url("t"), {"body": "not json"}),
+        ("eventide_lifetime", product_url("eventide_lifetime", "t"), {"body": "not json"}),
+        (
+            "eventide_lifetime",
+            product_url("eventide_lifetime", "t"),
+            {"json": {"purchaseState": []}},
+        ),
+        ("eventide_premium", sub_url("t"), {"body": requests.ConnectionError("down")}),
+    ],
+)
+def test_unreadable_or_unreachable_google_is_503(api, google_http, product_id, url, answer):
+    google_http.get(url, **answer)
+    base_plan = "monthly" if product_id == "eventide_premium" else None
+    response = api.post(
+        "/v1/purchases",
+        {"product_id": product_id, "purchase_token": "t", "base_plan_id": base_plan},
+        format="json",
+    )
+    assert response.status_code == 503
+    assert not Purchase.objects.exists()
+
+
+@pytest.mark.django_db
 def test_play_not_configured_is_503(api):
     response = api.post(
         "/v1/purchases",
@@ -225,7 +239,9 @@ def test_play_not_configured_is_503(api):
         {"product_id": "eventide_premium", "purchase_token": "", "base_plan_id": "monthly"},
         {"product_id": "eventide_premium", "purchase_token": "t", "base_plan_id": "weekly"},
         {"product_id": "eventide_lifetime", "purchase_token": "t", "base_plan_id": "monthly"},
-        {"product_id": "eventide_credits_50", "purchase_token": 3, "base_plan_id": None},
+        {"product_id": "eventide_lifetime", "purchase_token": 3, "base_plan_id": None},
+        # The credits pack no longer exists (assistant removed, contract § 6).
+        {"product_id": "eventide_credits_50", "purchase_token": "t", "base_plan_id": None},
     ],
 )
 def test_invalid_purchase_bodies_are_400(api, data):
@@ -243,7 +259,6 @@ def test_lifetime_purchase_is_acknowledged(api, google_http):
     )
     body = response.json()
     assert body["plan"] == "lifetime" and body["premium"] is True
-    assert body["voice"]["mode"] == "credits"
     assert Purchase.objects.get(purchase_token="life").acknowledged is True
 
 
@@ -261,40 +276,18 @@ def test_pending_lifetime_is_recorded_without_entitlement(api, google_http):
 
 
 @pytest.mark.django_db
-def test_credits_are_granted_once_and_consumed(api, installation, google_http):
-    inst, _ = installation
-    google_http.get(product_url("eventide_credits_50", "cr"), json=product())
-    consume = google_http.post(product_url("eventide_credits_50", "cr", ":consume"), json={})
-    body = {"product_id": "eventide_credits_50", "purchase_token": "cr", "base_plan_id": None}
-    first = api.post("/v1/purchases", body, format="json").json()
-    assert first["voice"]["credits_remaining"] == 50
-    # Same token again (app retry): no second grant, no second consume.
-    google_http.get(product_url("eventide_credits_50", "cr"), json=product(consumed=1))
-    second = api.post("/v1/purchases", body, format="json").json()
-    assert second["voice"]["credits_remaining"] == 50
-    inst.refresh_from_db()
-    assert inst.credits == 50
-    assert consume.call_count == 1
-    assert Purchase.objects.get(purchase_token="cr").consumed is True
-
-
-@pytest.mark.django_db
-def test_failed_consume_is_retried_by_the_command(api, installation, google_http):
-    inst, _ = installation
-    google_http.get(product_url("eventide_credits_50", "cr2"), json=product(quantity=2))
-    google_http.post(product_url("eventide_credits_50", "cr2", ":consume"), status=503, json={})
-    body = {"product_id": "eventide_credits_50", "purchase_token": "cr2", "base_plan_id": None}
-    assert (
-        api.post("/v1/purchases", body, format="json").json()["voice"]["credits_remaining"] == 100
-    )
-    purchase = Purchase.objects.get(purchase_token="cr2")
-    assert purchase.consumed is False
-    google_http.replace("POST", product_url("eventide_credits_50", "cr2", ":consume"), json={})
+def test_failed_acknowledgement_is_retried_by_the_command(api, google_http):
+    google_http.get(product_url("eventide_lifetime", "life2"), json=product())
+    ack = product_url("eventide_lifetime", "life2", ":acknowledge")
+    google_http.post(ack, status=503, json={})
+    body = {"product_id": "eventide_lifetime", "purchase_token": "life2", "base_plan_id": None}
+    assert api.post("/v1/purchases", body, format="json").json()["plan"] == "lifetime"
+    purchase = Purchase.objects.get(purchase_token="life2")
+    assert purchase.acknowledged is False
+    google_http.replace("POST", ack, json={})
     call_command("finalize_purchases")
     purchase.refresh_from_db()
-    assert purchase.consumed is True
-    inst.refresh_from_db()
-    assert inst.credits == 100
+    assert purchase.acknowledged is True
 
 
 @pytest.mark.django_db
@@ -341,13 +334,11 @@ def test_concurrent_posts_of_the_same_token_record_one_purchase():
             "auto_renewing": False,
             "order_id": "GPA.1",
             "google_acknowledged": True,
-            "google_consumed": True,
-            "quantity": 1,
         }
 
     def worker():
         try:
-            results.append(purchases.submit(owner, product_id="eventide_credits_50", token="race"))
+            results.append(purchases.submit(owner, product_id="eventide_lifetime", token="race"))
         finally:
             connection.close()
 
@@ -359,8 +350,6 @@ def test_concurrent_posts_of_the_same_token_record_one_purchase():
             t.join()
     assert len(results) == 2
     assert Purchase.objects.filter(purchase_token="race").count() == 1
-    inst.refresh_from_db()
-    assert inst.credits == 50  # granted once despite the race
 
 
 # --- Real-time developer notifications -------------------------------------------------------
@@ -477,44 +466,43 @@ def test_rtdn_unknown_token_at_google_revokes(client, pubsub_token, google_http)
 
 
 @pytest.mark.django_db
-def test_rtdn_voided_credits_takes_back_what_is_left(client, pubsub_token):
-    inst, _ = make_installation(credits=30)
+def test_rtdn_voided_purchase_is_revoked(client, pubsub_token):
+    inst, token = make_installation()
     make_purchase(
         installation=inst,
         purchase_token="tok-v",
-        product_id="eventide_credits_50",
-        kind="credits",
+        product_id="eventide_lifetime",
+        kind="lifetime",
         base_plan_id="",
         expires_at=None,
-        credits_granted=50,
-        consumed=True,
     )
+    assert client_for(token).get("/v1/entitlements").json()["plan"] == "lifetime"
     note = {"packageName": PKG, "voidedPurchaseNotification": {"purchaseToken": "tok-v"}}
     assert rtdn(client, push(note)).status_code == 204
     assert rtdn(client, push(note)).status_code == 204  # idempotent
-    inst.refresh_from_db()
-    assert inst.credits == 0
     assert Purchase.objects.get(purchase_token="tok-v").state == "revoked"
+    assert client_for(token).get("/v1/entitlements").json()["plan"] == "free"
 
 
 @pytest.mark.django_db
-def test_rtdn_completed_pending_credits_are_granted(client, pubsub_token, google_http):
-    inst, _ = make_installation()
+def test_rtdn_completed_pending_lifetime_is_acknowledged(client, pubsub_token, google_http):
+    inst, token = make_installation()
     make_purchase(
         installation=inst,
         purchase_token="tok-p",
-        product_id="eventide_credits_50",
-        kind="credits",
+        product_id="eventide_lifetime",
+        kind="lifetime",
         state="pending",
         base_plan_id="",
         expires_at=None,
+        acknowledged=False,
     )
-    google_http.get(product_url("eventide_credits_50", "tok-p"), json=product())
-    google_http.post(product_url("eventide_credits_50", "tok-p", ":consume"), json={})
+    google_http.get(product_url("eventide_lifetime", "tok-p"), json=product())
+    ack = google_http.post(product_url("eventide_lifetime", "tok-p", ":acknowledge"), json={})
     note = {"packageName": PKG, "oneTimeProductNotification": {"purchaseToken": "tok-p"}}
     assert rtdn(client, push(note)).status_code == 204
-    inst.refresh_from_db()
-    assert inst.credits == 50
+    assert ack.call_count == 1
+    assert client_for(token).get("/v1/entitlements").json()["plan"] == "lifetime"
 
 
 @pytest.mark.django_db
@@ -526,13 +514,4 @@ def test_entitled_states_and_priority(installation):
     )
     assert api.get("/v1/entitlements").json()["plan"] == "lifetime"
     make_purchase(installation=inst, state="canceled", base_plan_id="monthly")
-    body = api.get("/v1/entitlements").json()
-    assert body["plan"] == "monthly" and body["voice"]["mode"] == "included"
-    Installation.objects.filter(pk=inst.pk).update(credits=4)
-    assert api.get("/v1/entitlements").json()["voice"]["credits_remaining"] == 4
-
-
-@pytest.mark.django_db
-def test_voice_disabled_mode_none(api, settings):
-    settings.VOICE_ENABLED = False
-    assert api.get("/v1/entitlements").json()["voice"]["mode"] == "none"
+    assert api.get("/v1/entitlements").json()["plan"] == "monthly"

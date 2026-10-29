@@ -114,7 +114,7 @@ output "alerts_topic_arn" {
 
 output "secret_names" {
   description = "Secrets à remplir à la main (valeur provisoire A_REMPLACER)."
-  value       = ["${local.secret_prefix}/gemini-api-key", "${local.secret_prefix}/google-play-service-account"]
+  value       = ["${local.secret_prefix}/google-play-service-account"]
 }
 
 output "shared_alb" {

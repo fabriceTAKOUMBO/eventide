@@ -65,8 +65,7 @@ bash "$(git rev-parse --show-toplevel)/.github/scripts/check-plan-additions-only
   - projet Google Cloud lié à l'application dans la Play Console (Play Integrity) ; API **Google Play Android Developer** et **Play Integrity** activées ;
   - compte de service de ce projet, invité dans la Play Console (*Utilisateurs et autorisations*) avec les droits de consultation des données financières et de gestion des commandes et abonnements ; clé JSON créée (elle sera déposée au § 6, jamais ailleurs) ;
   - identifiant client OAuth « Application Web » utilisé par l'application comme `serverClientId` pour la connexion Google (c'est l'audience du jeton d'identité vérifié par l'API) ;
-  - clé de l'API Gemini sur un projet **avec facturation** (offre payante : conditions d'utilisation des données différentes de l'offre gratuite, à relire avant l'ouverture) ; budget et alertes de facturation posés côté Google Cloud.
-- Produits Google Play à créer avec ces identifiants (ceux du code) : abonnement `eventide_premium` (offres de base `monthly`, `annual`), achat unique `eventide_lifetime`, consommable `eventide_credits_50` (50 crédits).
+- Produits Google Play à créer avec ces identifiants (ceux du code) : abonnement `eventide_premium` (offres de base `monthly`, `annual`), achat unique `eventide_lifetime` (plus de pack de crédits : assistant vocal retiré le 29 octobre 2026).
 
 ## 2. État Terraform (bootstrap)
 
@@ -206,13 +205,9 @@ Ensuite :
 
 ## 6. Secrets à déposer
 
-Deux secrets sont créés avec la valeur provisoire `A_REMPLACER` (l'API répond alors `503` et l'alarme `ev-prod-google-not-configured` se déclenche) : `eventide/prod/gemini-api-key` et `eventide/prod/google-play-service-account` (sortie `secrets_to_fill`). Dans CloudShell, sans écho ni fichier :
+Un secret est créé avec la valeur provisoire `A_REMPLACER` (l'API répond alors `503` et l'alarme `ev-prod-google-not-configured` se déclenche) : `eventide/prod/google-play-service-account` (sortie `secrets_to_fill`). Dans CloudShell, sans laisser de fichier :
 
 ```bash
-read -rs -p "Clé de l'API Gemini : " V; echo
-printf '%s' "$V" | aws secretsmanager put-secret-value --secret-id eventide/prod/gemini-api-key \
-  --secret-string file:///dev/stdin --query VersionId --output text
-unset V
 # Clé JSON du compte de service Google Play : téléverser le fichier dans CloudShell, puis
 aws secretsmanager put-secret-value --secret-id eventide/prod/google-play-service-account \
   --secret-string file://cle-compte-de-service.json --query VersionId --output text
@@ -389,9 +384,9 @@ Manuels :
 
 - [ ] `curl -sI https://api.<domaine>/v1/health` : `strict-transport-security` présent ; `curl -sv --tls-max 1.1 https://api.<domaine>/v1/health` échoue (TLS 1.2 minimum, politique de l'écouteur partagé).
 - [ ] CINAF, JobMinutes et Candidature Express répondent comme avant (leurs pages d'accueil) : nos règles ne les concernent pas.
-- [ ] Application de test (piste interne de la Play Console) : création d'installation (`201`), droits (`GET /v1/entitlements`), phrase vocale (`POST /v1/voice` : `source: "model"`, compteur d'essai qui baisse), adresses signées puis lecture d'un son, partage (`https://<domaine>/m/<code>`).
+- [ ] Application de test (piste interne de la Play Console) : création d'installation (`201`), droits (`GET /v1/entitlements`), adresses signées puis lecture d'un son, partage (`https://<domaine>/m/<code>`).
 - [ ] Achat de test (testeur de licence) : `POST /v1/purchases` → `200`, achat acquitté (plus de remboursement automatique après 3 jours), notification RTDN reçue.
-- [ ] Journaux `/ecs/ev-prod/api` : JSON, **aucune phrase**, aucun jeton.
+- [ ] Journaux `/ecs/ev-prod/api` : JSON, aucun jeton.
 - [ ] Alerte de test : `aws cloudwatch set-alarm-state --alarm-name ev-prod-api-5xx --state-value ALARM --state-reason test` → e-mail reçu (prouve que CloudWatch peut publier dans le sujet chiffré par notre clé).
 - [ ] Charge sur la base partagée (Performance Insights de l'instance, dimension « Bases de données ») : `eventide` reste marginale.
 
@@ -409,8 +404,7 @@ Le service `api` de préproduction tourne de 8 h à 20 h les jours ouvrés (heur
 ## 15. Après la mise en service
 
 - [ ] Une semaine après : le budget `eventide-mensuel` affiche des dépenses (étiquette active) ; comparer à l'[estimation](couts-estimes.md).
-- [ ] Politique de confidentialité (`/confidentialite`) relue par le product owner : hébergement aux États-Unis, Gemini, durées de conservation, éditeur et contact renseignés (`legal_publisher_name`, `legal_contact_email`).
-- [ ] Conditions de l'offre payante de Gemini relues (usage des données, durée de conservation) avant l'ouverture.
+- [ ] Politique de confidentialité (`/confidentialite`) relue par le product owner : hébergement aux États-Unis, durées de conservation, éditeur et contact renseignés (`legal_publisher_name`, `legal_contact_email`).
 - [ ] Ranger l'état local du `bootstrap` dans le coffre de l'équipe ; supprimer `/tmp/ev-prod.json`.
 - [ ] Recommandé pour toute l'organisation : CloudTrail et GuardDuty.
 
@@ -441,8 +435,6 @@ Le service `api` de préproduction tourne de 8 h à 20 h les jours ouvrés (heur
 | Alarme `ev-prod-google-credentials` | Le compte de service n'a plus les droits dans la Play Console, ou sa clé est révoquée |
 | Alarme `ev-prod-rtdn-rejected` | Audience ou compte de service de l'abonnement push différents de `RTDN_AUDIENCE` / `rtdn_service_account_email` |
 | Alarme `ev-prod-purchase-finalization-failed` | Achats non acquittés : Google les rembourse après 3 jours. `finalize-purchases` réessaie chaque heure ; regarder `/ecs/ev-prod/jobs` |
-| Alarme `ev-prod-model-unavailable` | Gemini injoignable, clé invalide ou modèle retiré : vérifier la clé, la facturation Google et `voice.model` ; l'application retombe sur les règles locales |
-| Alarme `ev-prod-voice-global-cap` | Plafond global quotidien de l'assistant atteint (`voice.global_daily_cap_eur`) : abus ou succès ; l'API répond `503 model_unavailable` aux demandes qui iraient au modèle jusqu'au lendemain (minuit UTC) ; les règles locales du téléphone continuent |
 | Alarme `ev-prod-db-backup-missing` | Journaux `/ecs/ev-prod/jobs`, flux `db-backup/*` ; relancer la tâche à la main (§ 12) |
 | `403` sur les adresses de contenu | Clé absente du bucket, mauvais type MIME, ou clé de signature changée sans redéploiement de l'API |
 

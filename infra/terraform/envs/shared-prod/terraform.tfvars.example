@@ -52,14 +52,6 @@ rtdn_service_account_email = ""   # compte de service de l'abonnement Pub/Sub pu
 legal_publisher_name       = ""
 legal_contact_email        = ""
 
-voice = {
-  router               = "gemini"
-  model                = "gemini-2.5-flash-lite"
-  monthly_cap_eur      = "2.00"
-  usd_eur_rate         = "0.93"
-  global_daily_cap_eur = "20.00"
-}
-
 content_custom_domain = false # true : cdn.<domaine> (exige domain_name)
 
 # Alarmes sur la charge de l'instance PostgreSQL partagée (métriques lues seulement, aucune

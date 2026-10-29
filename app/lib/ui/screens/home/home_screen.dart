@@ -564,7 +564,6 @@ class _HomeScreenState extends State<HomeScreen>
                                   onUnlock: () => Nav.premium(context),
                                   onLandscapes: () => Nav.landscapes(context),
                                   onMix: () => Nav.mix(context),
-                                  onVoice: () => Nav.voice(context),
                                   onSchedule: _openSchedule,
                                 ),
                               ),

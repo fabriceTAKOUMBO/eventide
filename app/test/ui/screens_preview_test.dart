@@ -1,13 +1,10 @@
 // Renders every screen to PNG (scratchpad/screens) with the real fonts, to compare with
 // the mockup. Also fails on any layout overflow or exception.
-import 'package:eventide/app/app_model.dart';
-import 'package:eventide/core/ops.dart' show ChangeLine;
 import 'package:eventide/core/plan.dart';
 import 'package:eventide/core/schedule.dart';
 import 'package:eventide/core/settings.dart';
 import 'package:eventide/core/sleep.dart';
 import 'package:eventide/ui/navigation.dart';
-import 'package:eventide/ui/screens/credits_screen.dart';
 import 'package:eventide/ui/screens/landscapes_sheet.dart';
 import 'package:eventide/ui/screens/mix_sheet.dart';
 import 'package:eventide/ui/screens/premium_screen.dart';
@@ -18,7 +15,6 @@ import 'package:eventide/ui/screens/settings_screen.dart';
 import 'package:eventide/ui/screens/share_screen.dart';
 import 'package:eventide/ui/screens/sleep_screen.dart';
 import 'package:eventide/ui/screens/standby_screen.dart';
-import 'package:eventide/ui/screens/voice_screen.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'app_harness.dart';
@@ -159,42 +155,9 @@ void main() {
     navigatorOf(tester).pop();
 
     model.plan = Plan.lifetime;
-    await openRoute(tester, Routes.credits, (_) => const CreditsScreen());
-    await shot(tester, '15_credits');
+    await openRoute(tester, Routes.settings, (_) => const SettingsScreen());
+    await shot(tester, '15_reglages_a_vie');
     navigatorOf(tester).pop();
-    await tearDownApp(tester);
-  });
-
-  testWidgets('preview: voice states', (tester) async {
-    usePhoneView(tester);
-    final model = FakeAppModel(granted: {PermissionKind.microphone});
-    await pumpApp(tester, model);
-    await openRoute(tester, Routes.voice, (_) => const VoiceScreen());
-    model.voiceState = const VoiceListening(
-      partialText: 'Mets le minuteur sur 1 h et programme la pluie tous les soirs à 22 h',
-      soundLevel: 0.7,
-    );
-    await settle(tester);
-    await shot(tester, '05_voix_ecoute');
-    model.voiceState = const VoiceThinking(phrase: 'Mets le minuteur sur 1 h');
-    await settle(tester);
-    await shot(tester, '05b_voix_reflexion');
-    model.voiceState = const VoiceResult(
-      phrase: 'Mets le minuteur sur 1 h et programme la pluie tous les soirs à 22 h',
-      changes: [
-        ChangeLine('Minuteur', 'Arrêt après 1 h'),
-        ChangeLine('Programmation', 'Tous les jours à 22 h · pluie douce'),
-      ],
-      quotaLabel: 'Essai gratuit · 2 demandes restantes',
-    );
-    await settle(tester);
-    await shot(tester, '05c_voix_resultat');
-    model.voiceState = const VoiceError(
-      message: 'Sans connexion, je ne peux pas comprendre votre demande.',
-      offline: true,
-    );
-    await settle(tester);
-    await shot(tester, '05d_voix_erreur');
     await tearDownApp(tester);
   });
 

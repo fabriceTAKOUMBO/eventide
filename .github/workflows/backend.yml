@@ -2,9 +2,8 @@ name: Backend CI
 
 # API Django (backend/) : lint, sécurité, migrations, réglages de production, tests contre
 # PostgreSQL 16 (la version de l'instance partagée), audit des dépendances, image ARM64.
-# Lancé aussi quand le catalogue de l'application ou les cas partagés du validateur changent :
-# les tests vérifient que backend/eventide/catalog.json est la copie exacte de
-# app/assets/catalog.json et jouent shared/test-vectors/ops-validation.json.
+# Lancé aussi quand le catalogue de l'application change : les tests vérifient que
+# backend/eventide/catalog.json est la copie exacte de app/assets/catalog.json.
 
 on:
   push:
@@ -12,13 +11,11 @@ on:
     paths:
       - "backend/**"
       - "app/assets/catalog.json"
-      - "shared/test-vectors/**"
       - ".github/workflows/backend.yml"
   pull_request:
     paths:
       - "backend/**"
       - "app/assets/catalog.json"
-      - "shared/test-vectors/**"
       - ".github/workflows/backend.yml"
   workflow_dispatch:
 
@@ -102,7 +99,6 @@ jobs:
           DJANGO_SETTINGS_MODULE: config.settings.prod
           ALLOWED_HOSTS: api.example.invalid
           PUBLIC_WEB_BASE_URL: https://example.invalid
-          VOICE_ROUTER: rules-only
         run: |
           DJANGO_SECRET_KEY="$(python3 -c 'import secrets; print(secrets.token_urlsafe(64))')" \
             uv run --frozen python manage.py check --deploy --fail-level WARNING

@@ -52,5 +52,4 @@ paths = [
   '''(^|/)tests/''',
   '''(^|/)test/''',
   '''(^|/)conftest\.py$''',
-  '''(^|/)shared/test-vectors/''',
 ]

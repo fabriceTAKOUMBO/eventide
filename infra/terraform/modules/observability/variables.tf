@@ -59,7 +59,7 @@ variable "target_5xx_threshold" {
 }
 
 variable "latency_p95_threshold_seconds" {
-  description = "Temps de réponse p95 de l'API (s), appel au modèle compris."
+  description = "Temps de réponse p95 de l'API (s)."
   type        = number
   default     = 4
 }
@@ -68,12 +68,6 @@ variable "ecs_utilization_threshold" {
   description = "Seuil CPU et mémoire des tâches (%)."
   type        = number
   default     = 85
-}
-
-variable "model_unavailable_threshold" {
-  description = "Échecs d'appel au modèle sur 5 minutes."
-  type        = number
-  default     = 10
 }
 
 variable "log_ingestion_gb_per_day" {

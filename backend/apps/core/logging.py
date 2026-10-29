@@ -1,7 +1,7 @@
 """Logging helpers: request id on every line, and a scrubber that drops forbidden fields.
 
-The phrase, the transcript and every token are never logged by the code; ``ScrubFilter`` is
-a second line of defence if a future ``extra=`` passes one of them by mistake.
+Tokens are never logged by the code; ``ScrubFilter`` is a second line of defence if a future
+``extra=`` passes one of them by mistake.
 """
 
 from __future__ import annotations
@@ -13,10 +13,6 @@ request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id
 
 FORBIDDEN_FIELDS = frozenset(
     {
-        "phrase",
-        "phrase_normalisee",
-        "transcript",
-        "etat",
         "token",
         "id_token",
         "integrity_token",

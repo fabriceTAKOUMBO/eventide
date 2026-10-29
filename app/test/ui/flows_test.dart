@@ -5,7 +5,6 @@ import 'package:eventide/core/plan.dart';
 import 'package:eventide/core/scene.dart';
 import 'package:eventide/ui/navigation.dart';
 import 'package:eventide/ui/screens/battery_guide_screen.dart';
-import 'package:eventide/ui/screens/credits_screen.dart';
 import 'package:eventide/ui/screens/home/home_screen.dart';
 import 'package:eventide/ui/screens/privacy_screen.dart';
 import 'package:eventide/ui/screens/mix_sheet.dart';
@@ -14,7 +13,6 @@ import 'package:eventide/ui/screens/schedule_editor_screen.dart';
 import 'package:eventide/ui/screens/schedules_screen.dart';
 import 'package:eventide/ui/screens/settings_screen.dart';
 import 'package:eventide/ui/screens/standby_screen.dart';
-import 'package:eventide/ui/screens/voice_screen.dart';
 import 'package:eventide/ui/screens/landscapes_sheet.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' show Opacity;
@@ -482,84 +480,6 @@ void main() {
     });
   });
 
-  group('Voix', () {
-    testWidgets('explains the microphone first, then listens at once', (
-      tester,
-    ) async {
-      usePhoneView(tester);
-      final model = FakeAppModel();
-      await pumpApp(tester, model);
-      await tapLabel(tester, 'Régler à la voix');
-      expect(find.text('Le micro'), findsOneWidget);
-      expect(model.calls, isNot(contains('startVoice')));
-      await tapText(tester, 'Continuer');
-      expect(
-        model.calls,
-        containsAllInOrder(['requestPermission:microphone', 'startVoice']),
-      );
-      expect(find.text('Touchez pour arrêter'), findsOneWidget);
-      await tapLabel(tester, 'Arrêter l’enregistrement');
-      expect(find.text('C’est fait'), findsOneWidget);
-      expect(find.text('Essai gratuit · 2 demandes restantes'), findsOneWidget);
-      await tapText(tester, 'Garder');
-      expect(model.calls, contains('keepVoice'));
-      expect(find.byType(VoiceScreen), findsNothing);
-      await tearDownApp(tester);
-    });
-
-    testWidgets('all states render; Annuler undoes', (tester) async {
-      usePhoneView(tester);
-      final model = FakeAppModel(granted: {PermissionKind.microphone});
-      await pumpApp(tester, model);
-      await openRoute(tester, Routes.voice, (_) => const VoiceScreen());
-      expect(model.calls, contains('startVoice'));
-      model.voiceState = const VoiceListening(
-        partialText: 'Ajoute du piano',
-        soundLevel: 0.4,
-      );
-      await settle(tester);
-      expect(find.text('« Ajoute du piano »'), findsOneWidget);
-      expect(find.text('Vous pouvez aussi dire'), findsOneWidget);
-      model.voiceState = const VoiceThinking(phrase: 'Ajoute du piano');
-      await settle(tester);
-      expect(find.text('Je prépare vos réglages'), findsOneWidget);
-      model.voiceState = const VoiceRephrase(
-        phrase: 'Mets le truc',
-        message: 'Je n’ai pas bien compris.',
-      );
-      await settle(tester);
-      expect(find.text('Pouvez-vous reformuler ?'), findsOneWidget);
-      expect(find.text('Je n’ai pas bien compris.'), findsOneWidget);
-      model.voiceState = const VoiceRefused(
-        phrase: 'Achète Premium',
-        message: 'Je ne peux pas acheter à votre place.',
-      );
-      await settle(tester);
-      expect(
-        find.text('Je ne peux pas acheter à votre place.'),
-        findsOneWidget,
-      );
-      model.voiceState = const VoiceError(
-        message: 'Pas de réseau.',
-        offline: true,
-      );
-      await settle(tester);
-      expect(find.text('Pas de connexion'), findsOneWidget);
-      await tapText(tester, 'Réessayer');
-      expect(model.calls.where((c) => c == 'startVoice'), hasLength(2));
-      model.voiceState = const VoiceResult(
-        phrase: 'Ajoute du piano',
-        changes: [],
-      );
-      await settle(tester);
-      expect(find.text('Rien n’a changé.'), findsOneWidget);
-      await tapText(tester, 'Annuler');
-      expect(model.calls, contains('undoVoice'));
-      expect(find.byType(VoiceScreen), findsNothing);
-      await tearDownApp(tester);
-    });
-  });
-
   group('Programmations', () {
     testWidgets('editor saves a new schedule after explaining notifications', (
       tester,
@@ -724,7 +644,7 @@ void main() {
   });
 
   group('Events and night', () {
-    testWidgets('model events open Premium, credits, share and toasts', (
+    testWidgets('model events open Premium and show toasts', (
       tester,
     ) async {
       usePhoneView(tester);
@@ -739,9 +659,6 @@ void main() {
       model.emit(const OpenPremiumEvent());
       await settle(tester);
       expect(find.byType(PremiumScreen), findsOneWidget);
-      model.emit(const OpenCreditsEvent());
-      await settle(tester);
-      expect(find.text('Crédits d’assistant'), findsOneWidget);
       model.emit(const SharedMixOpenedEvent(lockedItems: 2));
       await settle(tester);
       expect(
@@ -864,9 +781,17 @@ void main() {
       tester,
     ) async {
       usePhoneView(tester);
-      final model = FakeAppModel(deniedForever: {PermissionKind.microphone});
+      final model = FakeAppModel(
+        deniedForever: {PermissionKind.notifications},
+        exactAlarmAllowed: true,
+      );
       await pumpApp(tester, model);
-      await openRoute(tester, Routes.voice, (_) => const VoiceScreen());
+      await openRoute(
+        tester,
+        Routes.scheduleEditor,
+        (_) => const ScheduleEditorScreen(),
+      );
+      await tapText(tester, 'Enregistrer');
       expect(find.text('Continuer'), findsNothing);
       expect(
         find.textContaining('Android ne la demandera plus'),
@@ -874,16 +799,9 @@ void main() {
       );
       await tapText(tester, 'Ouvrir les réglages');
       expect(model.calls, contains('openAppSettings'));
-      expect(model.calls, isNot(contains('requestPermission:microphone')));
-      expect(model.calls, isNot(contains('startVoice')));
-      expect(find.text('Le micro n’est pas autorisé'), findsOneWidget);
-
-      // Granted from Android's settings: the next try starts listening.
-      model.deniedForever.clear();
-      await tapText(tester, 'Autoriser le micro');
-      await tapText(tester, 'Continuer');
-      expect(model.calls, contains('requestPermission:microphone'));
-      expect(model.calls, contains('startVoice'));
+      expect(model.calls, isNot(contains('requestPermission:notifications')));
+      // The schedule is saved anyway: only its reminder needs the notifications.
+      expect(model.schedules, hasLength(1));
       await tearDownApp(tester);
     });
 
@@ -916,27 +834,6 @@ void main() {
       );
       await tapText(tester, 'Ouvrir les réglages');
       expect(model.calls, contains('openBatteryGuide'));
-      await tearDownApp(tester);
-    });
-
-    testWidgets('credits show the Google Play price, or a neutral line', (
-      tester,
-    ) async {
-      usePhoneView(tester);
-      final model = FakeAppModel(plan: Plan.lifetime, creditsPrice: '2,99 €');
-      await pumpApp(tester, model);
-      await openRoute(tester, Routes.credits, (_) => const CreditsScreen());
-      expect(
-        find.text('Prix du pack : 2,99 €, payé une fois sur Google Play.'),
-        findsOneWidget,
-      );
-      model.creditsPrice = null;
-      model.plan = Plan.lifetime; // notifies
-      await settle(tester);
-      expect(
-        find.text('Le prix s’affiche dans Google Play avant de payer.'),
-        findsOneWidget,
-      );
       await tearDownApp(tester);
     });
   });

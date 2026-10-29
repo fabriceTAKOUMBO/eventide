@@ -15,8 +15,6 @@ from django.conf import settings
 
 CATALOG_PATH = Path(settings.BASE_DIR) / "eventide" / "catalog.json"
 
-# Contract « cible » of an operation -> catalog section.
-TARGET_SECTIONS = {"son": "sons", "musique": "musiques", "decor": "decors"}
 # Scene document list (contract § 1) -> catalog section.
 SCENE_SECTIONS = {"sons": "sons", "musique": "musiques", "decor": "decors"}
 MOMENTS = ("aube", "jour", "soir", "nuit")

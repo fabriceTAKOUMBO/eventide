@@ -87,9 +87,6 @@ void main() {
     test('clock', () {
       expect(formatClock(22, 0), '22 h 00');
       expect(formatClock(7, 5), '7 h 05');
-      expect(formatClockShort(22, 0), '22 h');
-      expect(formatClockShort(22, 30), '22 h 30');
-      expect(formatClockShort(7, 5), '7 h 05');
     });
 
     test('durations', () {
@@ -100,17 +97,14 @@ void main() {
       expect(formatDuration(const Duration(hours: 1, minutes: 5)), '1 h 05');
       expect(formatDuration(const Duration(seconds: 59)), '0 min');
       expect(formatDuration(const Duration(minutes: -3)), '0 min');
-      expect(formatPercent(70), '70 %');
     });
 
-    test('timer chip and summary', () {
+    test('timer chip', () {
       expect(timerChipLabel(const TimerDuration(60)), 'Arrêt 1 h');
       expect(timerChipLabel(const TimerDuration(15)), 'Arrêt 15 min');
       expect(timerChipLabel(const TimerDuration(90)), 'Arrêt 1 h 30');
       expect(timerChipLabel(const TimerNight()), 'Toute la nuit');
       expect(timerChipLabel(const TimerNone()), 'Minuteur');
-      expect(timerSummary(const TimerDuration(60)), 'Arrêt après 1 h');
-      expect(timerSummary(const TimerNone()), 'Sans minuteur');
     });
 
     test('next start label', () {
@@ -182,20 +176,19 @@ void main() {
         landscapeId: 'cascade-foret',
       );
       expect(
-        scheduleSummary(s, catalog),
-        'Tous les jours à 22 h · Cascade en forêt',
-      );
-      expect(scheduleSummary(s), 'Tous les jours à 22 h');
-      expect(
         scheduleListLine(s.copyWith(rampMinutes: 10), catalog),
         '22 h 00 · Tous les jours · Pour dormir · Cascade en forêt',
       );
       expect(
-        scheduleSummary(
+        scheduleListLine(s),
+        '22 h 00 · Tous les jours · Pour dormir',
+      );
+      expect(
+        scheduleListLine(
           s.copyWith(hour: 13, minute: 30, days: {1, 2, 3, 4, 5}),
           catalog,
         ),
-        'Du lundi au vendredi à 13 h 30 · Cascade en forêt',
+        '13 h 30 · Du lundi au vendredi · Pour dormir · Cascade en forêt',
       );
     });
   });

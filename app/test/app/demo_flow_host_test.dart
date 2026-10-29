@@ -59,7 +59,6 @@ void main() {
       native: native,
       api: api,
       connectivity: connectivity,
-      speech: FakeSpeech(),
       billing: billing,
       ads: const NoAdsService(),
       account: FakeAccount(),

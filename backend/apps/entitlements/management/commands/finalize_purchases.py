@@ -1,4 +1,4 @@
-"""Retry acknowledgement / consumption of recent purchases (Google refunds after 3 days).
+"""Retry acknowledgement of recent purchases (Google refunds after 3 days).
 
 Scheduled every hour (EventBridge Scheduler, infra/terraform/modules/scheduler).
 """
@@ -9,7 +9,7 @@ from apps.entitlements import purchases
 
 
 class Command(BaseCommand):
-    help = "Acknowledge or consume Google Play purchases not finalised yet."
+    help = "Acknowledge Google Play purchases not finalised yet."
 
     def handle(self, *args, **options):
         pending = purchases.pending_finalisation()

@@ -56,7 +56,7 @@ run "without_domain_no_public_entry" {
     error_message = "La préproduction est désactivée par défaut."
   }
   assert {
-    condition     = contains(output.prod.secrets_to_fill, "eventide/prod/gemini-api-key")
+    condition     = output.prod.secrets_to_fill == ["eventide/prod/google-play-service-account"]
     error_message = "Secrets sous eventide/prod/*."
   }
   assert {

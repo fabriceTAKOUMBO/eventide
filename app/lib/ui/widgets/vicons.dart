@@ -77,10 +77,6 @@ abstract final class VIcons {
     _RectPart(5, 11, 14, 9.5, 2.6),
     _PathPart('M8.2 11V8.2a3.8 3.8 0 0 1 7.6 0V11'),
   ], stroke: 2.1);
-  static const mic = VIconData([
-    _RectPart(9, 3, 6, 12, 3),
-    _PathPart('M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3'),
-  ], stroke: 1.9);
   static const close = VIconData([
     _PathPart('M6 6l12 12M18 6L6 18'),
   ], stroke: 1.8);
@@ -154,13 +150,6 @@ abstract final class VIcons {
       'M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2z',
     ),
   ], stroke: 1.6);
-  static const refresh = VIconData([
-    _PathPart('M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4'),
-  ], stroke: 1.9);
-  static const question = VIconData([
-    _CirclePart(12, 12, 9),
-    _PathPart('M9.5 9.5a2.6 2.6 0 0 1 5 .8c0 1.8-2.5 2.2-2.5 3.9M12 17.2h.01'),
-  ], stroke: 1.9);
 }
 
 /// Draws a [VIconData] at [size] with [color]. Purely decorative: wrap it in a labelled

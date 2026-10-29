@@ -269,9 +269,9 @@ if [ "${API_CHECK:-false}" = "true" ]; then
   api ev_app "$APP_PW" shell -c "
 from apps.installations.views import register
 installation, token = register('ab' * 32, '1.0.0')
-from apps.voice import quota
+from apps.shares.models import Share
 from apps.core import ratelimit
-quota.reserve(installation, mode='trial', source='local')
+Share.objects.create(code='chk00001', scene={'version': 1}, installation=installation)
 ratelimit.hit('check', 'k', limit=5, window_seconds=60)
 print('ok')" | grep -q ok || ko "écriture par ev_app après les migrations"
   backup > /dev/null

@@ -1,8 +1,8 @@
 """Google Play Developer API (``androidpublisher`` v3) through the service account.
 
 - ``purchases.subscriptionsv2.get`` for the subscription ``eventide_premium``;
-- ``purchases.products.get`` for the one-time product and the consumable credits;
-- ``acknowledge`` (subscription, one-time product) and ``consume`` (credits), within 3 days.
+- ``purchases.products.get`` for the one-time product ``eventide_lifetime``;
+- ``acknowledge`` (subscription, one-time product), within 3 days.
 """
 
 from __future__ import annotations
@@ -46,9 +46,7 @@ class SubscriptionState:
 class ProductState:
     state: str  # Purchase.State value
     acknowledged: bool
-    consumed: bool
     order_id: str
-    quantity: int
 
 
 SUBSCRIPTION_STATES = {
@@ -146,9 +144,7 @@ def get_product(product_id: str, token: str) -> ProductState:
     return ProductState(
         state=PRODUCT_STATES.get(purchase_state, "revoked"),
         acknowledged=int(data.get("acknowledgementState", 0)) == 1,
-        consumed=int(data.get("consumptionState", 0)) == 1,
         order_id=str(data.get("orderId", ""))[:64],
-        quantity=max(1, int(data.get("quantity", 1) or 1)),
     )
 
 
@@ -167,11 +163,4 @@ def acknowledge_product(product_id: str, token: str) -> None:
         f"{_base()}/purchases/products/{quote(product_id, safe='')}/tokens/{_token(token)}"
         ":acknowledge",
         json={},
-    )
-
-
-def consume_product(product_id: str, token: str) -> None:
-    _call(
-        "POST",
-        f"{_base()}/purchases/products/{quote(product_id, safe='')}/tokens/{_token(token)}:consume",
     )

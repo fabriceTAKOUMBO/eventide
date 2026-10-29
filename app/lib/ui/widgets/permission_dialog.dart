@@ -9,19 +9,16 @@ import 'glass.dart';
 import 'vicons.dart';
 
 String permissionTitle(PermissionKind kind) => switch (kind) {
-  PermissionKind.microphone => 'Le micro',
   PermissionKind.notifications => 'Les notifications',
   PermissionKind.exactAlarm => 'Démarrer à l’heure',
 };
 
 String permissionSentence(PermissionKind kind) => switch (kind) {
-  PermissionKind.microphone => 'Pour vous écouter quand vous parlez, Eventide a besoin du micro. Votre voix n’est pas enregistrée.',
   PermissionKind.notifications => 'Pour vous rappeler l’heure d’aller dormir et afficher les commandes du son, Eventide a besoin des notifications.',
   PermissionKind.exactAlarm => 'Pour lancer le son exactement à l’heure choisie, Android demande votre autorisation.',
 };
 
 VIconData _permissionIcon(PermissionKind kind) => switch (kind) {
-  PermissionKind.microphone => VIcons.mic,
   PermissionKind.notifications => VIcons.bell,
   PermissionKind.exactAlarm => VIcons.alarm,
 };

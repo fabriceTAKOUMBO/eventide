@@ -119,7 +119,7 @@ Ce qui est seulement **lu** (sources `data`) : le VPC, les sous-réseaux, l'ALB 
 
 **Sans WAF.** Aucun WAF ne peut être ajouté à l'ALB partagé (il s'appliquerait aux autres produits). Protections : limites de débit de l'application (par IP, appareil et installation, tenues dans PostgreSQL), Play Integrity à la création d'installation, plafonds de coût de l'assistant (par abonné et global par jour).
 
-**Secrets applicatifs.** Clé Django, mots de passe des rôles et clé de signature CloudFront générés par Terraform ; clé de l'API Gemini et clé JSON du compte de service Google Play déposées à la main par le product owner (valeur provisoire `A_REMPLACER`, que l'API traite comme « non configuré » : 503 et alarme `ev-prod-google-not-configured`). Les rôles d'exécution ne lisent que nos secrets. Les tâches `api`, `migrate` et `jobs` n'ont **aucun rôle de tâche** (aucun droit AWS à l'exécution) ; seules les tâches de sauvegarde et de test de restauration en ont un, limité à notre bucket de sauvegardes et à notre clé.
+**Secrets applicatifs.** Clé Django, mots de passe des rôles et clé de signature CloudFront générés par Terraform ; clé JSON du compte de service Google Play déposée à la main par le product owner (valeur provisoire `A_REMPLACER`, que l'API traite comme « non configuré » : 503 et alarme `ev-prod-google-not-configured`). Les rôles d'exécution ne lisent que nos secrets. Les tâches `api`, `migrate` et `jobs` n'ont **aucun rôle de tâche** (aucun droit AWS à l'exécution) ; seules les tâches de sauvegarde et de test de restauration en ont un, limité à notre bucket de sauvegardes et à notre clé.
 
 ## 7. Préproduction
 

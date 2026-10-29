@@ -16,12 +16,11 @@ abstract final class StoreKeys {
   static const nights = 'nights';
   static const entitlements = 'entitlements';
   static const installation = 'installation';
-  static const voiceTrial = 'voice_trial';
 
   /// Small UI/app state: last landscape per theme, onboarding, ad caps, open night.
   static const appState = 'app_state';
 
-  static const all = [scene, schedules, favorites, settings, nights, entitlements, installation, voiceTrial, appState];
+  static const all = [scene, schedules, favorites, settings, nights, entitlements, installation, appState];
 }
 
 class LocalStore {

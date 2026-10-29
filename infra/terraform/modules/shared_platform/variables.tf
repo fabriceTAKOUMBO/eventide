@@ -252,23 +252,6 @@ variable "rtdn_service_account_email" {
   default     = ""
 }
 
-variable "voice" {
-  description = "Assistant vocal : routeur, modèle Gemini, plafond mensuel par abonné, taux USD/EUR, plafond quotidien global (EUR)."
-  type = object({
-    router               = optional(string, "gemini")
-    model                = optional(string, "gemini-2.5-flash-lite")
-    monthly_cap_eur      = optional(string, "2.00")
-    usd_eur_rate         = optional(string, "0.93")
-    global_daily_cap_eur = optional(string, "20.00")
-  })
-  default = {}
-
-  validation {
-    condition     = contains(["rules-only", "gemini", "jev"], var.voice.router)
-    error_message = "voice.router : rules-only, gemini ou jev."
-  }
-}
-
 variable "legal_publisher_name" {
   description = "Éditeur affiché sur /confidentialite."
   type        = string
