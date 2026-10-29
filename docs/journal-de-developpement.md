@@ -1,5 +1,19 @@
 # Journal de développement — Eventide
 
+## 29 octobre 2026 (soir) — plantage au bout du thème Nature, tonnerre, police
+
+- **Plantage reproductible**, trouvé par le product owner : en faisant défiler le thème Nature jusqu'au dernier paysage (`lisiere-verte`), l'app s'arrêtait. Elle s'arrêtait ensuite **à chaque démarrage**, et il fallait la réinstaller.
+  - **Cause** : les paysages dessinés étaient trop lourds pour le processeur graphique (milliers de flous et de découpes ; pour `lisiere`, une découpe en 26 ovales et 260 points flous). Ils étaient dessinés pour le paysage visible, ses voisins, la vignette et la carte de lecture. Le paysage était ensuite enregistré comme dernier paysage, donc redessiné à chaque démarrage.
+  - **Correction** : dessins version 2 (aucune découpe, presque plus de flous ; mémoire de pointe ÷ 1,8), un seul dessin à la fois.
+  - **Protection** : un démarrage interrompu fait repartir l'app sur `cascade-foret`, sans perdre favoris, programmations ni réglages ; un dessin interrompu est ensuite remplacé par une version simplifiée ; le rapport de problème nomme le dernier dessin ([architecture § 19](app/architecture.md)).
+  - **Non prouvé** : le plantage exact du pilote graphique (Exynos 2400) ne se reproduit pas sans le téléphone.
+- **Fond d'écran animé** : fonctionne sur l'écran d'accueil **et** l'écran verrouillé du S24. « Enregistrer dans la Galerie » est retiré.
+- **Tonnerre** :
+  - **Plus fréquent** : premier coup entre 20 s et 1 min, puis un toutes les 70 s à 3 min.
+  - **Son jugé artificiel** : les variantes sont fabriquées par ordinateur, il faut de vrais enregistrements. Les sites de sons sont bloqués depuis la session. Le product owner peut en télécharger sur Pixabay et les envoyer, ou on les obtient avec Higgsfield.
+- **Police jugée pas assez premium** : aperçu de quatre styles publié ([artifact](https://claude.ai/artifact/KtMrKznhbkvVz8jdizcgZj)). Recommandation : n° 2 « Galerie » (Cormorant Garamond pour les titres, Manrope plus légère pour le texte). **Choix du product owner en attente.** Les polices peuvent venir de npm (`@expo-google-fonts/*`, fichiers TTF) : npm et PyPI sont joignables, pas Google Fonts.
+- **CI** : passage 40910734429 vert (Kotlin compilé, versions optimisées, alignement 16 Ko, démarrage sur émulateurs). Démo S24 : artefact 12915265395.
+
 ## 29 octobre 2026 (après-midi) — retours du test sur le S24, réorientation
 
 **Retours du product owner après la démo sur son Galaxy S24** :
