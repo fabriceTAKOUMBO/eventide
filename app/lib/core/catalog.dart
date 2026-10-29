@@ -5,6 +5,7 @@
 
 import 'dart:math' as math;
 
+import 'lightning.dart';
 import 'scene.dart';
 
 /// The three kinds of layers a scene can hold.
@@ -93,9 +94,14 @@ class EventSound {
     required List<String> variants,
     this.interval = defaultInterval,
     this.firstDelay = defaultFirstDelay,
+    this.storm,
   }) : variants = List.unmodifiable(variants);
 
+  /// Every file of the sound (`variantes`), the parts of [storm] included.
   final List<String> variants;
+
+  /// `orage`: each event is a storm sequence of these parts; null: each event is one variant.
+  final StormSpec? storm;
 
   /// `intervalle_s`: gap drawn at random between two events.
   final SecondsRange interval;
@@ -105,6 +111,69 @@ class EventSound {
 
   static const SecondsRange defaultInterval = SecondsRange(120, 300);
   static const SecondsRange defaultFirstDelay = SecondsRange(45, 120);
+}
+
+/// `orage` of a sound played by events (contract § 11): its parts by type, the weights of the
+/// kinds of sequences, and the loops that swell after a strong strike.
+class StormSpec {
+  StormSpec({
+    required Map<StormPart, List<String>> parts,
+    required Map<StormKind, double> weights,
+    List<String> averse = const [],
+    List<String> rafale = const [],
+  })  : parts = Map.unmodifiable({for (final e in parts.entries) e.key: List<String>.unmodifiable(e.value)}),
+        weights = Map.unmodifiable(weights),
+        averse = List.unmodifiable(averse),
+        rafale = List.unmodifiable(rafale);
+
+  /// `parties`: variant ids per type (only known types, ids of `variantes`, never empty).
+  final Map<StormPart, List<String>> parts;
+
+  /// `sequences`: weight (> 0) of each kind.
+  final Map<StormKind, double> weights;
+
+  /// `averse`: sounds (loops) that redouble after a strike.
+  final List<String> averse;
+
+  /// `rafale`: sounds (loops) that have a light gust after a strike.
+  final List<String> rafale;
+
+  /// The kinds that can be drawn (their required part is there). Empty: one variant per event.
+  Map<StormKind, double> get drawable => StormRules.drawable(weights, parts.keys.toSet());
+
+  /// Parses `orage`; null unless it is an object. Unknown types and kinds, ids not in
+  /// [variants] and weights that are not numbers above 0 are left out.
+  static StormSpec? fromJson(Object? json, List<String> variants) {
+    if (json is! Map) return null;
+    final parts = <StormPart, List<String>>{};
+    final rawParts = json['parties'];
+    if (rawParts is Map) {
+      for (final e in rawParts.entries) {
+        final part = StormPart.fromKey(e.key);
+        if (part == null) continue;
+        final ids = <String>[];
+        for (final id in _stringList(e.value)) {
+          if (variants.contains(id) && !ids.contains(id)) ids.add(id);
+        }
+        if (ids.isNotEmpty) parts[part] = ids;
+      }
+    }
+    final weights = <StormKind, double>{};
+    final rawWeights = json['sequences'];
+    if (rawWeights is Map) {
+      for (final e in rawWeights.entries) {
+        final kind = StormKind.fromKey(e.key);
+        final w = e.value;
+        if (kind != null && w is num && w > 0) weights[kind] = w.toDouble();
+      }
+    }
+    return StormSpec(
+      parts: parts,
+      weights: weights,
+      averse: _stringList(json['averse']),
+      rafale: _stringList(json['rafale']),
+    );
+  }
 }
 
 /// A sound, a music or a decor effect of the catalog.
@@ -159,6 +228,7 @@ class CatalogItem {
         variants: variants.isEmpty ? [id] : variants,
         interval: SecondsRange.fromJson(json['intervalle_s']) ?? EventSound.defaultInterval,
         firstDelay: SecondsRange.fromJson(json['premier_s']) ?? EventSound.defaultFirstDelay,
+        storm: StormSpec.fromJson(json['orage'], variants),
       );
     }
     return CatalogItem(

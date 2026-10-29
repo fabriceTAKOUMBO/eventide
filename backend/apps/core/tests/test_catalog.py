@@ -58,3 +58,33 @@ def test_ambiances_and_event_sounds_follow_contract_section_11(catalog):
         own = [s["id"] for s in catalog.raw["sons"] if s.get("paysage") == landscape["id"]]
         if own:
             assert landscape["mix"]["sons"][0]["id"] == own[0], landscape["id"]
+
+
+STORM_PARTS = {"avant", "coup", "coup-proche", "replique", "lointain"}
+STORM_KINDS = {"lointain": "lointain", "orage": "coup", "proche": "coup-proche"}
+
+
+def test_storm_sequences_follow_contract_section_11(catalog):
+    """``orage`` (optional): parts drawn from ``variantes``, weighted kinds whose required part
+    exists, swelling loops that are catalog loops."""
+    storms = [s for s in catalog.raw["sons"] if "orage" in s]
+    assert [s["id"] for s in storms] == ["tonnerre"]
+    for sound in storms:
+        assert sound["lecture"] == "evenements"
+        storm = sound["orage"]
+        parts = storm["parties"]
+        assert set(parts) <= STORM_PARTS, sound["id"]
+        listed = [v for ids in parts.values() for v in ids]
+        assert len(listed) == len(set(listed)), "a variant belongs to one part"
+        assert set(listed) == set(sound["variantes"]), "every variant has its part"
+        for kind, weight in storm["sequences"].items():
+            assert kind in STORM_KINDS, kind
+            assert isinstance(weight, (int, float)) and weight > 0, kind
+            assert parts.get(STORM_KINDS[kind]), f"{kind} needs its part {STORM_KINDS[kind]}"
+        for key in ("averse", "rafale"):
+            for loop in storm.get(key, []):
+                assert catalog.has("sons", loop), loop
+                assert catalog.sections["sons"][loop].get("lecture", "boucle") == "boucle", loop
+    # Every variant is a Premium sound file of the thunder (contract § 8).
+    for variant in storms[0]["variantes"]:
+        assert catalog.sound_of_file(variant) == "tonnerre"

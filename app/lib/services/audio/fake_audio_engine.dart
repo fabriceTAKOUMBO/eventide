@@ -132,10 +132,43 @@ class FakeAudioEngine implements AudioEngine {
     eventVolumes[key] = volume;
   }
 
+  /// Swells asked for ([swell]) on layers that were audible, oldest first.
+  final List<FakeSwell> swells = [];
+
+  @override
+  Future<void> swell(
+    List<String> keys, {
+    required double gainDb,
+    required Duration rise,
+    required Duration hold,
+    required Duration fall,
+  }) async {
+    // Like the real engine: only audible loops, only while playing.
+    if (layers.isEmpty || _paused) return;
+    final live = [for (final k in keys) if (volumeOf(k) > 0) k];
+    if (live.isEmpty) return;
+    swells.add(FakeSwell(live, gainDb: gainDb, rise: rise, hold: hold, fall: fall));
+    calls.add('swell:${live.join(',')}:${gainDb.toStringAsFixed(1)}');
+  }
+
   @override
   Future<void> dispose() async {
     layers = const [];
   }
+}
+
+/// One [FakeAudioEngine.swell] call.
+class FakeSwell {
+  const FakeSwell(this.keys, {required this.gainDb, required this.rise, required this.hold, required this.fall});
+
+  final List<String> keys;
+  final double gainDb;
+  final Duration rise;
+  final Duration hold;
+  final Duration fall;
+
+  @override
+  String toString() => 'FakeSwell($keys, +${gainDb.toStringAsFixed(1)} dB)';
 }
 
 /// One [FakeAudioEngine.playEvent] call.

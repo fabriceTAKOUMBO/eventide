@@ -9,7 +9,7 @@
 #     (medias-test/audio/sons/*.ogg -> assets/audio/sons/): non-distributable, for the product
 #     owner's internal tests on their own phone, to be removed before any beta.
 # The Premium sounds include the landscape ambiances and the variants of the event sounds
-# (tonnerre-01.ogg...: contract § 11).
+# (tonnerre-coup-01.ogg, tonnerre-avant-01.ogg...: contract § 11).
 # Never run it before a production build; never commit what it copies
 # (git checkout -- assets && git clean -f assets).
 #

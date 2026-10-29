@@ -134,18 +134,18 @@ void main() {
   group('ambiances and variants of event sounds (contract § 11)', () {
     // remote.json lists the audio files on the content server (tools/media/remote_manifest.py).
     const remote = RemoteLandscapeMedia(
-      sounds: {'ambiance-pluie-ville', 'tonnerre-01', 'tonnerre-02', 'vagues'},
+      sounds: {'ambiance-pluie-ville', 'tonnerre-coup-01', 'tonnerre-avant-01', 'vagues'},
       music: {'harpe'},
     );
 
     test('a variant is a sound file: audio/sons/<variant>.ogg by signed URL', () async {
       final repo = build(backend: true, remote: remote);
-      final source = await repo.resolve(LayerKind.son, 'tonnerre-01', allowNetwork: true);
+      final source = await repo.resolve(LayerKind.son, 'tonnerre-coup-01', allowNetwork: true);
       expect(fetched.map((u) => u.toString()), [
         'https://api.test/v1/content/urls',
-        'https://cdn.test/audio/sons/tonnerre-01.ogg?sig=1',
+        'https://cdn.test/audio/sons/tonnerre-coup-01.ogg?sig=1',
       ]);
-      expect(source, FileAudioSource(repo.cachedPath('audio/sons/tonnerre-01.ogg')));
+      expect(source, FileAudioSource(repo.cachedPath('audio/sons/tonnerre-coup-01.ogg')));
     });
 
     test('a file the server does not have is never requested (test-only ambiance)', () async {
@@ -168,17 +168,17 @@ void main() {
         const AssetAudioSource('assets/audio/sons/ambiance-toits-pluie.ogg'),
       );
       final old = build(remote: const RemoteLandscapeMedia(videos: {'pluie-ville'}));
-      expect(await old.isPublished(LayerKind.son, 'tonnerre-07'), isTrue);
+      expect(await old.isPublished(LayerKind.son, 'tonnerre-lointain-03'), isTrue);
     });
 
     test('remote.json audio lists are parsed leniently', () {
       final parsed = RemoteLandscapeMedia.fromJson({
         'version': 1,
         'videos': ['pluie-ville'],
-        'sons': ['tonnerre-01', 'Bad Id', 3],
+        'sons': ['tonnerre-coup-01', 'Bad Id', 3],
         'musiques': 'nope',
       });
-      expect(parsed.sounds, {'tonnerre-01'});
+      expect(parsed.sounds, {'tonnerre-coup-01'});
       expect(parsed.music, isNull);
       expect(RemoteLandscapeMedia.fromJson({'videos': []}).sounds, isNull);
     });
@@ -188,9 +188,9 @@ void main() {
       final repo = build(devBaseUrl: 'http://dev', remote: remote);
       final count = await repo.prefetchForOffline(catalog, wifiOnly: false);
       final paths = fetched.map((u) => u.path).toList();
-      expect(paths, containsAll(['/audio/sons/tonnerre-01.ogg', '/audio/sons/tonnerre-02.ogg', '/audio/sons/vagues.ogg']));
+      expect(paths, containsAll(['/audio/sons/tonnerre-coup-01.ogg', '/audio/sons/tonnerre-avant-01.ogg', '/audio/sons/vagues.ogg']));
       expect(paths, isNot(contains('/audio/sons/tonnerre.ogg')), reason: 'an event sound has no loop');
-      expect(paths, isNot(contains('/audio/sons/tonnerre-03.ogg')), reason: 'not on the server');
+      expect(paths, isNot(contains('/audio/sons/tonnerre-coup-02.ogg')), reason: 'not on the server');
       expect(paths, isNot(contains('/audio/sons/ambiance-toits-pluie.ogg')));
       expect(count, paths.length);
     });

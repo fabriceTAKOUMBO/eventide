@@ -1,18 +1,24 @@
 // Sounds played by events (API contract § 11): instead of a loop, short sounds now and then,
-// never twice the same (a thunder every 2 to 5 minutes, each one different). Owned by the
-// PlaybackHandler, so it lives in the background audio service and keeps going with the screen
-// off. Pure timing: the engine plays, the decor draws the flash announced on [strikes].
+// never twice the same. Owned by the PlaybackHandler, so it lives in the background audio
+// service and keeps going with the screen off. Pure timing: the engine plays, the decor draws
+// the flash announced on [EventSoundScheduler.strikes].
 //
-// Rules applied (contract § 11):
+// Each event is a [StormPlan] (core/lightning.dart): with the catalog's `orage`, a storm
+// sequence (a distant rumble alone; a soft pre-rumble, the flash, the strike and its roll;
+// a close strike and its aftershock; the rain redoubling and a gust after a strike); without
+// it, one variant after a flash. Rules applied (contract § 11):
 //   * first event `premier_s` after the start of the listening, a resume after a pause, or the
 //     addition of the sound (also its return from level 0 or from the mute); then a gap drawn in
-//     `intervalle_s` from one event to the next;
-//   * each event: a variant at random, never one of the two last played; gain −6 to 0 dB, speed
-//     0.92 to 1.08, stereo position −0.4 to 0.4; never two events at the same time (an event due
-//     while another one sounds waits for its end);
-//   * nothing during a pause, the end-of-timer fade or once stopped; level 0 or a muted sound
-//     category: no event, and the one sounding fades out;
-//   * a flash first ([LightningStrike]), the thunder 0.4 to 3.5 s later (the closer, the brighter).
+//     `intervalle_s` from the start of one event to the start of the next;
+//   * never two events at the same time: an event due while another one still sounds waits
+//     until one second after the end of its last sound;
+//   * every file of an event is found (or fetched) at its start; a flash is announced only once
+//     the file of the sound it announces is ready (waiting up to [resolveTimeout]), so the crack
+//     always follows its flash after the drawn delay; a file that cannot be had: that sound and
+//     its flash are skipped, the rest of the event goes on;
+//   * a swell (rain, wind) only after a strike that played;
+//   * nothing during a pause, the end-of-timer fade or once stopped (the event in progress is
+//     abandoned); level 0 or a muted sound category: no event, and the one sounding fades out.
 import 'dart:async';
 import 'dart:math';
 
@@ -30,6 +36,34 @@ class EventVariant {
   final Future<AudioSourceRef> Function() resolve;
 }
 
+/// The storm of an event sound in the mix (catalog `orage`), ready to play.
+class StormLayer {
+  const StormLayer({
+    required this.parts,
+    required this.weights,
+    this.averseKeys = const [],
+    this.rafaleKeys = const [],
+  });
+
+  /// Variants of each part type (published ones only).
+  final Map<StormPart, List<EventVariant>> parts;
+
+  /// `orage.sequences`.
+  final Map<StormKind, double> weights;
+
+  /// Engine keys of the audible loops of the mix that redouble after a strike (`orage.averse`)...
+  final List<String> averseKeys;
+
+  /// ...and of those that have a light gust (`orage.rafale`).
+  final List<String> rafaleKeys;
+
+  /// The kinds that can be drawn now. Empty: one variant per event.
+  Map<StormKind, double> get drawable => StormRules.drawable(weights, {
+        for (final e in parts.entries)
+          if (e.value.isNotEmpty) e.key,
+      });
+}
+
 /// A sound played by events in the mix, ready to play.
 class EventLayer {
   const EventLayer({
@@ -38,10 +72,13 @@ class EventLayer {
     required this.volume,
     this.interval = EventSound.defaultInterval,
     this.firstDelay = EventSound.defaultFirstDelay,
+    this.storm,
   });
 
   /// Layer key, as for the loops (`son:tonnerre`).
   final String key;
+
+  /// Every published variant (one is played per event without [storm]).
   final List<EventVariant> variants;
 
   /// 0..1: the level of the sound (0 when removed or muted: no event).
@@ -49,8 +86,24 @@ class EventLayer {
   final SecondsRange interval;
   final SecondsRange firstDelay;
 
+  /// Storm sequences (catalog `orage`), or null.
+  final StormLayer? storm;
+
   @override
   String toString() => 'EventLayer($key, ${volume.toStringAsFixed(2)})';
+}
+
+/// A timer of the event in progress; cancelling it completes [done] with false.
+class _Wait {
+  _Wait(this.done);
+
+  final Completer<bool> done;
+  Timer? timer;
+
+  void cancel() {
+    timer?.cancel();
+    if (!done.isCompleted) done.complete(false);
+  }
 }
 
 class _State {
@@ -58,21 +111,30 @@ class _State {
 
   EventLayer layer;
 
-  /// When the next event sounds (its flash comes [delay] earlier).
+  /// When the next event starts (its first step: a flash or a sound).
   DateTime? due;
-  Duration delay = Duration.zero;
-  Timer? timer;
+  Timer? next;
 
-  /// Variants played, oldest first (the last two are never replayed).
+  /// Waits of the event in progress.
+  final List<_Wait> waits = [];
+
+  /// Variants played, oldest first (the last two are never replayed): single events...
   final List<String> recent = [];
 
-  /// Bumped whenever the schedule is redone: a stale callback does nothing.
+  /// ...and per part type of the storm sequences.
+  final Map<StormPart, List<String>> recentParts = {};
+
+  /// Bumped whenever the schedule is redone: a stale callback or event does nothing.
   int generation = 0;
 
   void cancel() {
-    timer?.cancel();
-    timer = null;
+    next?.cancel();
+    next = null;
     due = null;
+    for (final w in waits.toList()) {
+      w.cancel();
+    }
+    waits.clear();
     generation++;
   }
 }
@@ -88,6 +150,7 @@ class EventSoundScheduler {
 
   final Map<String, _State> _states = {};
   final StreamController<LightningStrike> _strikes = StreamController<LightningStrike>.broadcast();
+  final StreamController<StormPlan> _sequences = StreamController<StormPlan>.broadcast();
 
   /// Listening (started and not paused, stopped or fading out).
   bool _running = false;
@@ -95,12 +158,21 @@ class EventSoundScheduler {
   /// End of the event sounding now (any layer): no other event before it.
   DateTime? _busyUntil;
 
-  /// A flash just before each thunder (contract § 11): the `eclairs` decor draws it.
+  /// How long a flash waits for the file of its sound, and a sound for its file.
+  static const Duration resolveTimeout = Duration(seconds: 5);
+
+  /// An event starts at least this long after the end of the previous one.
+  static const Duration eventGap = Duration(seconds: 1);
+
+  /// A flash before each strike (contract § 11): the `eclairs` decor draws it.
   Stream<LightningStrike> get strikes => _strikes.stream;
+
+  /// Each event as it starts (tests and logs).
+  Stream<StormPlan> get sequences => _sequences.stream;
 
   bool get running => _running;
 
-  /// When the next event of [key] sounds (tests and logs).
+  /// When the next event of [key] starts (tests and logs).
   @visibleForTesting
   DateTime? nextEventOf(String key) => _states[key]?.due;
 
@@ -147,6 +219,7 @@ class EventSoundScheduler {
   void dispose() {
     stop();
     _strikes.close();
+    _sequences.close();
   }
 
   void _apply(List<EventLayer> layers, {required bool fresh}) {
@@ -177,74 +250,172 @@ class EventSoundScheduler {
   }
 
   void _scheduleFirst(_State s) {
-    if (s.layer.volume <= 0) return;
-    _schedule(s, _now().add(s.layer.firstDelay.draw(_random)));
-  }
-
-  /// Plans the event of [s] at [at] (not before the end of the one sounding), its flash before.
-  void _schedule(_State s, DateTime at) {
     s.cancel();
-    final busy = _busyUntil;
-    if (busy != null && at.isBefore(busy)) at = busy.add(const Duration(seconds: 1));
-    s.due = at;
-    s.delay = StormRules.thunderDelay(_random);
-    final generation = s.generation;
-    var wait = at.subtract(s.delay).difference(_now());
-    if (wait.isNegative) wait = Duration.zero;
-    s.timer = Timer(wait, () => _flash(s, generation));
+    if (s.layer.volume <= 0) return;
+    _planNext(s, _now().add(s.layer.firstDelay.draw(_random)));
   }
 
-  void _flash(_State s, int generation) {
-    if (!_alive(s, generation)) return;
-    final due = s.due!;
+  /// Plans the next event of [s] at [at] (not before the end of the one sounding).
+  void _planNext(_State s, DateTime at) {
+    s.next?.cancel();
     final busy = _busyUntil;
-    if (busy != null && due.isBefore(busy)) {
+    if (busy != null && at.isBefore(busy)) at = busy.add(eventGap);
+    s.due = at;
+    final generation = s.generation;
+    var wait = at.difference(_now());
+    if (wait.isNegative) wait = Duration.zero;
+    s.next = Timer(wait, () => _begin(s, generation));
+  }
+
+  void _begin(_State s, int generation) {
+    if (!_alive(s, generation)) return;
+    s.next = null;
+    final now = _now();
+    final busy = _busyUntil;
+    if (busy != null && now.isBefore(busy)) {
       // Another event still sounds: this one waits for its end.
-      _schedule(s, busy.add(const Duration(seconds: 1)));
+      _planNext(s, busy.add(eventGap));
       return;
     }
-    final draw = StormRules.draw([for (final v in s.layer.variants) v.id], s.recent, _random);
-    final variant = s.layer.variants.firstWhere((v) => v.id == draw.variant);
-    // The file is found (or fetched) during the delay before the thunder.
-    final source = variant.resolve();
-    source.ignore();
-    _strikes.add(LightningStrike(
-      at: _now(),
-      thunderDelay: s.delay,
-      intensity: StormRules.intensityFor(s.delay),
-    ));
-    var wait = due.difference(_now());
-    if (wait.isNegative) wait = Duration.zero;
-    s.timer = Timer(wait, () => _thunder(s, generation, draw, source));
+    final plan = _draw(s);
+    if (plan == null) return;
+    // No other event before the last step of this one (each sound pushes it to its own end).
+    _extendBusy(now.add(plan.lastStepAt));
+    _planNext(s, now.add(s.layer.interval.draw(_random)));
+    if (!_sequences.isClosed) _sequences.add(plan);
+    unawaited(_run(s, generation, plan, now));
   }
 
-  Future<void> _thunder(_State s, int generation, EventDraw draw, Future<AudioSourceRef> source) async {
-    if (!_alive(s, generation)) return;
-    final start = _now();
-    Duration? length;
+  /// The next event of [s]: a storm sequence when the catalog has `orage` and a kind can be
+  /// drawn, else a single variant.
+  StormPlan? _draw(_State s) {
+    final storm = s.layer.storm;
+    if (storm != null) {
+      final kinds = storm.drawable;
+      if (kinds.isNotEmpty) {
+        final parts = {
+          for (final e in storm.parts.entries)
+            if (e.value.isNotEmpty) e.key: [for (final v in e.value) v.id],
+        };
+        return StormRules.plan(StormRules.drawKind(kinds, _random), parts, s.recentParts, _random);
+      }
+    }
+    if (s.layer.variants.isEmpty) return null;
+    return StormRules.singlePlan([for (final v in s.layer.variants) v.id], s.recent, _random);
+  }
+
+  EventVariant? _variantOf(EventLayer layer, StormSound sound) {
+    final pool = sound.part == null ? layer.variants : (layer.storm?.parts[sound.part] ?? const <EventVariant>[]);
+    for (final v in pool) {
+      if (v.id == sound.variant) return v;
+    }
+    return null;
+  }
+
+  Future<void> _run(_State s, int generation, StormPlan plan, DateTime start) async {
+    // Every file of the event is found (or fetched) now.
+    final sources = <StormSound, Future<AudioSourceRef>>{};
+    for (final sound in plan.sounds) {
+      final variant = _variantOf(s.layer, sound);
+      if (variant == null) continue;
+      final source = variant.resolve();
+      source.ignore();
+      sources[sound] = source;
+    }
+    var shift = Duration.zero;
+    final skipped = <StormSound>{};
+    var struck = false;
+    for (var i = 0; i < plan.steps.length; i++) {
+      final step = plan.steps[i];
+      if (!await _until(s, generation, start.add(step.at + shift))) return;
+      switch (step) {
+        case StormFlash():
+          final announced = plan.announcedBy(i);
+          if (announced != null) {
+            // The flash waits for the file of its sound: the crack then comes on time.
+            final before = _now();
+            final ready = await _ready(sources[announced]);
+            if (!_alive(s, generation)) return;
+            if (!ready) {
+              skipped.add(announced);
+              continue;
+            }
+            shift += _now().difference(before);
+          }
+          if (!_strikes.isClosed) {
+            _strikes.add(LightningStrike(at: _now(), thunderDelay: step.delay, intensity: step.intensity));
+          }
+        case StormSound():
+          if (skipped.contains(step)) continue;
+          final played = await _play(s, generation, step, sources[step]);
+          if (!_alive(s, generation)) return;
+          if (played && (step.part?.isStrike ?? false)) struck = true;
+        case StormSwell():
+          if (!struck) continue;
+          final storm = s.layer.storm;
+          final keys = step.target == SwellTarget.averse ? storm?.averseKeys : storm?.rafaleKeys;
+          if (keys == null || keys.isEmpty) continue;
+          unawaited(_engine
+              .swell(keys, gainDb: step.gainDb, rise: step.rise, hold: step.hold, fall: step.fall)
+              .catchError((Object e) => debugPrint('EventSoundScheduler: swell skipped ($e)')));
+      }
+    }
+  }
+
+  /// Waits until [at]; false if the event was abandoned meanwhile.
+  Future<bool> _until(_State s, int generation, DateTime at) {
+    if (!_alive(s, generation)) return Future<bool>.value(false);
+    final wait = at.difference(_now());
+    if (wait <= Duration.zero) return Future<bool>.value(true);
+    final w = _Wait(Completer<bool>());
+    w.timer = Timer(wait, () {
+      s.waits.remove(w);
+      if (!w.done.isCompleted) w.done.complete(_alive(s, generation));
+    });
+    s.waits.add(w);
+    return w.done.future;
+  }
+
+  Future<bool> _ready(Future<AudioSourceRef>? source) async {
+    if (source == null) return false;
     try {
-      final ref = await source.timeout(const Duration(seconds: 5));
-      if (!_alive(s, generation)) return;
-      length = await _engine.playEvent(
+      await source.timeout(resolveTimeout);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> _play(_State s, int generation, StormSound sound, Future<AudioSourceRef>? source) async {
+    try {
+      if (source == null) throw StateError('unknown variant');
+      final ref = await source.timeout(resolveTimeout);
+      if (!_alive(s, generation)) return false;
+      final length = await _engine.playEvent(
         s.layer.key,
         ref,
         volume: s.layer.volume,
-        gain: draw.gain,
-        speed: draw.speed,
-        pan: draw.pan,
+        gain: sound.gain,
+        speed: sound.speed,
+        pan: sound.pan,
       );
+      if (length == null) return false;
+      final part = sound.part;
+      final recent = part == null ? s.recent : (s.recentParts[part] ??= <String>[]);
+      recent.add(sound.variant);
+      if (recent.length > StormRules.noRepeat) recent.removeAt(0);
+      _extendBusy(_now().add(length));
+      return true;
     } catch (e) {
-      // Not downloaded, offline, broken file: this event is skipped, the next one is planned.
-      debugPrint('EventSoundScheduler: ${s.layer.key} ${draw.variant} skipped ($e)');
+      // Not downloaded, offline, broken file: this sound is skipped, the event goes on.
+      debugPrint('EventSoundScheduler: ${s.layer.key} ${sound.variant} skipped ($e)');
+      return false;
     }
-    if (!_alive(s, generation)) return;
-    if (length != null) {
-      s.recent.add(draw.variant);
-      if (s.recent.length > StormRules.noRepeat) s.recent.removeAt(0);
-      final end = _now().add(length);
-      if (_busyUntil == null || end.isAfter(_busyUntil!)) _busyUntil = end;
-    }
-    _schedule(s, start.add(s.layer.interval.draw(_random)));
+  }
+
+  void _extendBusy(DateTime end) {
+    final busy = _busyUntil;
+    if (busy == null || end.isAfter(busy)) _busyUntil = end;
   }
 
   bool _alive(_State s, int generation) =>

@@ -7,10 +7,10 @@ exercise the audio engine (looping, layering, fades) until licensed content
 replaces them.
 
 Sounds played by events (catalog `lecture: evenements`, API contract § 11) are
-not loops: each of their `variantes` is a one-shot (THUNDER_VARIANTS for
-`tonnerre`, from silence to silence, -23 LUFS integrated), written to
-audio/sons/<variant>.ogg. Landscape ambiances (catalog `paysage`) come from the
-landscape videos (make_ambiance.py) and are skipped here.
+not loops and are not made here: the variants of `tonnerre` come from the real
+thunder of the `pluie-ville` soundtrack (make_thunder.py). Landscape ambiances
+(catalog `paysage`) come from the landscape videos (make_ambiance.py). Both are
+skipped here.
 
 Seamless looping
 ----------------
@@ -568,165 +568,6 @@ def snd_vent(cv: Canvas):
         howl += band * env
     leaves = cv.noise(tilt(f, -2.0) * hpm(f, 2500) * lpm(f, 9000), corr=0.2) * g ** 2 * cv.drift(10.0, 0.4, 1.0)
     return base + undb(-6) * mid + undb(-17) * howl + undb(-21) * leaves
-
-
-# ----------------------------------------------------------------------------
-# Thunder: one-shot event variants (contract § 11), not a loop
-# ----------------------------------------------------------------------------
-
-def stroke_envelope(rng, t, starts, near, swell):
-    """Sum of strokes: squared attack (fast when near, slow for a swelling distant roll),
-    exponential decay; each later stroke a little weaker."""
-    env = np.zeros(t.size)
-    for i, tb in enumerate(starts):
-        if i == 0:
-            att = 0.006 + 0.08 * (1.0 - near) ** 2
-        else:
-            att = rng.uniform(0.04, 0.25 + 0.5 * (1.0 - near))
-        att *= 1.0 + 5.0 * swell
-        dec = rng.uniform(0.7, 1.9) * (1.0 + 0.9 * (1.0 - near))
-        amp = 1.0 if i == 0 else rng.uniform(0.35, 0.9) * 0.85 ** i
-        tt = t - tb
-        env += amp * np.where(tt < 0, 0.0, np.where(tt < att, (np.maximum(tt, 0.0) / att) ** 2,
-                                                    np.exp(-(tt - att) / dec)))
-    return env
-
-
-def oneshot_reverb(rng, x, rt60, damp_hz, echoes):
-    """Linear (not circular) convolution with a decaying-noise impulse response plus a few
-    discrete echoes (buildings, hills) between 0.12 and 1.2 s."""
-    m = int(rt60 * 1.2 * SR)
-    t = np.arange(m) / SR
-    f = np.fft.rfftfreq(m, 1.0 / SR)
-    out = []
-    for ch in range(2):
-        nz = rng.standard_normal(m)
-        ir = np.fft.irfft(np.fft.rfft(nz) * lpm(f, damp_hz, 1), n=m) * np.exp(-6.91 * t / rt60)
-        ir *= 1.0 - np.exp(-t / 0.02)
-        for _ in range(echoes):
-            d = rng.uniform(0.12, 1.2)
-            ir[int(d * SR)] += rng.uniform(0.6, 1.6) * np.exp(-2.0 * d) * 30.0
-        ir /= np.sqrt(np.sum(ir ** 2))
-        n = x.shape[1] + m
-        y = np.fft.irfft(np.fft.rfft(x[ch], n=n) * np.fft.rfft(ir, n=n), n=n)[: x.shape[1]]
-        out.append(y)
-    return np.stack(out)
-
-
-def thunder_event(rng, dur, near, strokes, pan=(0.0, 0.0), swell=0.0, roll_hz=6.0, echoes=3,
-                  rt60=3.0, boom=0.0):
-    """One thunder, from the onset to silence (``dur`` s, tail included).
-
-    Derived from the former looping ``snd_tonnerre``/``thunder`` recipe: strokes on a rolling
-    envelope over brown noise whose low-pass rises with nearness (110 Hz far away, ~800 Hz
-    close by), a tearing crack for a near strike (dense clicks, 400-4500 Hz, ~0.3 s), an
-    optional low boom, a slow pan across the stereo field (the roll travels), a damped
-    outdoor reverb with echoes, and a natural tail: exponential decay after the strokes (-32 dB
-    one second before the end), then a 1 s fade to silence."""
-    m = int(dur * SR)
-    t = np.arange(m) / SR
-    onset = 0.04
-    later = np.sort(rng.uniform(0.2, dur * 0.42, max(0, strokes - 1)))
-    env = stroke_envelope(rng, t, np.concatenate([[onset], later]), near, swell)
-    roll = emag(rng.standard_normal(m), lambda fr: (fr > 0.3) * lpm(fr, roll_hz, 3))
-    env *= np.clip(1.0 + 0.75 * roll / (np.abs(roll).max() + 1e-12), 0.12, None)
-    # Natural tail: after the last strokes, an exponential decay down to -32 dB one second
-    # before the end (the reverb then fades on its own, a last 1 s fade ends it).
-    hold, end = dur * 0.45, dur - 1.0
-    tau = (end - hold) / (32.0 / 8.686)
-    env *= np.where(t < hold, 1.0, np.exp(-(t - hold) / tau))
-    common = rng.standard_normal(m)
-    nz = np.sqrt(0.55) * common + np.sqrt(0.45) * rng.standard_normal((2, m))
-    fc = 110.0 + 700.0 * near ** 1.5
-    rumble = unit_rms(emag(nz, lambda fr: tilt(fr, -6.0) * hpm(fr, 25) * lpm(fr, fc, 2) * bump(fr, 55, 3.0, 1.2)))
-    sig = rumble * env
-    if near >= 0.6:
-        k = rng.poisson(900 * near)
-        pos = (onset + rng.exponential(0.09, k)) * SR
-        pos = pos[pos < m].astype(int)
-        clicks = np.zeros((2, m))
-        amp = np.minimum(rng.pareto(2.2, pos.size) + 1.0, 6.0) * rng.choice([-1.0, 1.0], pos.size)
-        gl, gr = pan_gains(rng.uniform(-0.5, 0.5, pos.size))
-        np.add.at(clicks[0], pos, amp * gl)
-        np.add.at(clicks[1], pos, amp * gr)
-        crack = unit_rms(emag(clicks, lambda fr: hpm(fr, 400) * lpm(fr, 4500) * bump(fr, 1400, 4.0, 1.5)))
-        ce = np.where(t < onset, 0.0, np.exp(-(t - onset) / (0.12 + 0.25 * (1.0 - near))))
-        sig += (1.6 * near) * crack * ce
-    if boom > 0:
-        tb = np.maximum(t - onset - 0.02, 0.0)
-        f0 = 38.0 + 32.0 * np.exp(-tb / 0.25)
-        thump = np.sin(2.0 * np.pi * np.cumsum(f0) / SR) * np.exp(-tb / 0.45) * (t > onset + 0.02)
-        sig += boom * 2.5 * thump * np.array([[1.0], [1.0]])
-    gl, gr = pan_gains(np.linspace(pan[0], pan[1], m))
-    sig = sig * np.stack([gl, gr]) / SQRT2
-    sig = sig + 0.55 * oneshot_reverb(rng, sig, rt60, 900.0 + 1500.0 * near, echoes)
-    return sig * env_ar(m, 0.004, 1.0)
-
-
-# Ten thunders for the `tonnerre` event sound (catalog `variantes`): close cracks with a rumble,
-# medium rolls and distant rolling rumbles, 6 to 20 s each, tails included. PLACEHOLDERS:
-# synthetic, to be replaced by recorded/licensed (or generated) thunder with the same keys.
-THUNDER_VARIANTS = {
-    # close: a tearing crack, a boom, a heavy rumble
-    "tonnerre-01": dict(dur=10.0, near=0.95, strokes=3, pan=(-0.25, 0.15), boom=0.8, echoes=3, rt60=3.2),
-    # close, short: double crack, quick decay, echoes between the buildings
-    "tonnerre-02": dict(dur=7.0, near=0.85, strokes=2, pan=(0.3, 0.1), roll_hz=9.0, echoes=6, rt60=2.2),
-    # medium distance: a roll that crosses from left to right
-    "tonnerre-03": dict(dur=12.0, near=0.55, strokes=5, pan=(-0.6, 0.5), roll_hz=5.0, echoes=2, rt60=3.5),
-    # distant: long rolling rumble
-    "tonnerre-04": dict(dur=16.0, near=0.3, strokes=6, pan=(0.4, -0.2), swell=0.6, roll_hz=4.0, rt60=4.5),
-    # very distant: low rumble, soft
-    "tonnerre-05": dict(dur=9.0, near=0.12, strokes=3, pan=(-0.2, -0.4), swell=1.0, roll_hz=3.0, rt60=4.0),
-    # close crack, then a long echoing roll across the sky
-    "tonnerre-06": dict(dur=18.0, near=0.8, strokes=6, pan=(0.5, -0.5), boom=0.4, roll_hz=5.5, echoes=5, rt60=4.8),
-    # medium, several strokes in a row
-    "tonnerre-07": dict(dur=14.0, near=0.62, strokes=7, pan=(-0.1, 0.3), roll_hz=7.0, echoes=3, rt60=3.0),
-    # distant, swelling then fading
-    "tonnerre-08": dict(dur=11.0, near=0.25, strokes=4, pan=(0.6, 0.4), swell=1.4, roll_hz=3.5, rt60=4.2),
-    # close, sharp crack, fast decay, city echoes
-    "tonnerre-09": dict(dur=8.0, near=1.0, strokes=2, pan=(0.0, -0.2), boom=1.0, roll_hz=10.0, echoes=7, rt60=2.0),
-    # distant double rumble, very long
-    "tonnerre-10": dict(dur=20.0, near=0.38, strokes=8, pan=(-0.5, 0.6), swell=0.4, roll_hz=4.5, echoes=2, rt60=5.0),
-}
-EVENT_RECIPES = {"tonnerre": THUNDER_VARIANTS}
-
-
-# Opus overshoots the peaks of a thunder crack by up to ~1 dB: the master keeps 1.5 dB more
-# headroom, so that the decoded file stays under -1 dBTP.
-EVENT_TRUE_PEAK_DBTP = TRUE_PEAK_MAX_DBTP - 1.5
-
-
-def finalize_event(x, ceiling_dbtp=EVENT_TRUE_PEAK_DBTP):
-    """One-shot level: DC/rumble guard, -23 LUFS (BS.1770-4, not circular), true peak under
-    ``ceiling_dbtp`` (gentle look-ahead limiter on the loudest cracks)."""
-    n = x.shape[1]
-    f = np.fft.rfftfreq(2 * n, 1.0 / SR)
-    x = np.fft.irfft(np.fft.rfft(x, n=2 * n, axis=-1) * chain(f, [("hp", 22.0, 0.707)]), n=2 * n, axis=-1)[:, :n]
-    x = x * undb(TARGET_LUFS - loudness_lufs(x, circular=False))
-    limited = False
-    for _ in range(8):
-        if todb(true_peak(x)) <= ceiling_dbtp:
-            break
-        limited = True
-        x = limit(x, undb(ceiling_dbtp - 0.5))
-        x = x * undb(TARGET_LUFS - loudness_lufs(x, circular=False))
-    tp = todb(true_peak(x))
-    if tp > ceiling_dbtp:
-        x = x * undb(ceiling_dbtp - tp)
-        tp = ceiling_dbtp
-    return x, {"lufs": loudness_lufs(x, circular=False), "true_peak_dbtp": tp, "limited": limited}
-
-
-def momentary_max_lufs(x):
-    """Loudest 400 ms block (BS.1770 momentary loudness)."""
-    n = x.shape[-1]
-    f = np.fft.rfftfreq(n, 1.0 / SR)
-    y = np.fft.irfft(np.fft.rfft(x, axis=-1) * k_weighting(f), n=n, axis=-1)
-    blk, hop = int(0.4 * SR), int(0.1 * SR)
-    cs = np.concatenate([np.zeros((2, 1)), np.cumsum(y ** 2, axis=1)], axis=1)
-    starts = np.arange(0, n - blk + 1, hop)
-    z = ((cs[:, starts + blk] - cs[:, starts]) / blk).sum(axis=0)
-    return float(-0.691 + 10.0 * np.log10(z.max() + 1e-20))
 
 
 def snd_vagues(cv: Canvas):
@@ -1624,21 +1465,14 @@ def edge_error_db(x, y, edge=0.01, context=0.2):
 # ----------------------------------------------------------------------------
 
 def load_catalog():
-    """(kind, id, free) of every loop to make, and ("variants", variant id, free) of every
-    variant of an event sound (`lecture: evenements`, contract § 11). Landscape ambiances
-    (`paysage`) come from the landscape videos (make_ambiance.py), not from here."""
+    """(kind, id, free) of every loop to make. Landscape ambiances (`paysage`) come from the
+    landscape videos (make_ambiance.py) and the variants of the event sounds (`lecture:
+    evenements`, contract § 11) from the real thunder (make_thunder.py), not from here."""
     cat = json.loads(CATALOG.read_text(encoding="utf-8"))
     items = []
     for kind in ("sons", "musiques"):
         for entry in cat[kind]:
-            if entry.get("paysage"):
-                continue
-            if entry.get("lecture") == "evenements":
-                recipes = EVENT_RECIPES.get(entry["id"], {})
-                for variant in entry.get("variantes", []):
-                    if variant not in recipes:
-                        raise SystemExit(f"no recipe for the variant {variant} of {entry['id']}")
-                    items.append(("variants", variant, bool(entry["gratuit"])))
+            if entry.get("paysage") or entry.get("lecture") == "evenements":
                 continue
             if entry["id"] not in RECIPES[kind]:
                 raise SystemExit(f"no recipe for {kind}/{entry['id']}")
@@ -1652,64 +1486,12 @@ def event_sounds():
     return [e["id"] for e in cat["sons"] if e.get("lecture") == "evenements"]
 
 
-def variant_spec(variant_id):
-    for recipes in EVENT_RECIPES.values():
-        if variant_id in recipes:
-            return recipes[variant_id]
-    raise KeyError(variant_id)
-
-
 def out_paths(kind, item_id, free):
-    # Variants of an event sound are files of the sound folder: audio/sons/<variant>.ogg.
-    rel = Path("sons" if kind == "variants" else kind) / f"{item_id}.ogg"
+    rel = Path(kind) / f"{item_id}.ogg"
     return (FREE_ROOT if free else PREMIUM_ROOT) / rel, (PREMIUM_ROOT if free else FREE_ROOT) / rel
 
 
-VARIANT_COMMENT = ("Eventide synthetic PLACEHOLDER thunder - generated from scratch by "
-                   "tools/media/generate_audio.py - to be replaced by recorded or licensed thunder")
-
-
-def build_variant(args):
-    """One event variant: a one-shot (silence, onset, tail to silence), plain Ogg Opus (no loop
-    treatment: the end padding is silence)."""
-    _, item_id, free, wav_dir, _ = args
-    t_start = time.time()
-    spec = variant_spec(item_id)
-    rng = np.random.default_rng(zlib.crc32(item_id.encode()))
-    x, info = finalize_event(thunder_event(rng, **spec))
-    x32 = x.astype(np.float32)
-    dest, stale = out_paths("variants", item_id, free)
-    if stale.exists():
-        stale.unlink()
-    encode_opus(x32, dest, f"Eventide placeholder - {item_id}", plain=True, comment=VARIANT_COMMENT)
-    if wav_dir:
-        write_wav(x32, Path(wav_dir) / "variants" / f"{item_id}.wav")
-    row = measure_variant(item_id, free, dest)
-    row.update({"spec": spec, "true_peak_dbtp": round(info["true_peak_dbtp"], 2), "limited": info["limited"],
-                "elapsed_s": round(time.time() - t_start, 1)})
-    return row
-
-
-def measure_variant(item_id, free, dest: Path):
-    y = decode(dest)
-    i_lufs, peak = ffmpeg_ebur128(dest)
-    spec = variant_spec(item_id)
-    lev = np.abs(y).max(axis=0)
-    tail = lev[-int(0.05 * SR):].max()
-    return {
-        "kind": "variants", "id": item_id, "free": free, "path": str(dest.relative_to(REPO)),
-        "bytes": dest.stat().st_size, "seconds": round(y.shape[1] / SR, 2), "near": spec["near"],
-        "lufs": round(loudness_lufs(y, circular=False), 2), "ffmpeg_lufs": i_lufs,
-        "momentary_max_lufs": round(momentary_max_lufs(y), 1),
-        "decoded_peak_dbfs": peak, "decoded_true_peak_dbtp": round(float(todb(true_peak(y))), 2),
-        "clipped_samples": int((np.abs(y) >= 1.0).sum()),
-        "last_50ms_peak_dbfs": round(float(todb(tail)), 1),
-    }
-
-
 def build_one(args):
-    if args[0] == "variants":
-        return build_variant(args)
     kind, item_id, free, wav_dir, plain = args
     t_start = time.time()
     seconds, recipe = RECIPES[kind][item_id]
@@ -1748,8 +1530,6 @@ def measure(kind, item_id, free, dest: Path, x=None):
 
 def check_one(args):
     kind, item_id, free = args[:3]
-    if kind == "variants":
-        return measure_variant(item_id, free, out_paths(kind, item_id, free)[0])
     return measure(kind, item_id, free, out_paths(kind, item_id, free)[0])
 
 
@@ -1788,19 +1568,6 @@ def print_report(rows):
           f"premium for S3: {(total - free) / 1024:.0f} KiB)")
 
 
-def print_variants(rows):
-    print("Event variants (one-shots): LUFS integrated (not circular), momentary max (400 ms),")
-    print("true peak after decoding, clipped samples, peak of the last 50 ms (the tail ends in silence)")
-    hdr = (f"{'id':<14}{'near':>5}{'len s':>7}{'KiB':>5}{'LUFS':>7}{'ffmpg':>7}{'M max':>7}{'TPdec':>7}"
-           f"{'clip':>5}{'end dB':>8}")
-    print(hdr)
-    print("-" * len(hdr))
-    for r in rows:
-        print(f"{r['id']:<14}{r['near']:>5.2f}{r['seconds']:>7.2f}{r['bytes'] / 1024:>5.0f}{r['lufs']:>7.1f}"
-              f"{fmt(r['ffmpeg_lufs'], '7.1f')}{r['momentary_max_lufs']:>7.1f}{r['decoded_true_peak_dbtp']:>7.1f}"
-              f"{r['clipped_samples']:>5}{r['last_50ms_peak_dbfs']:>8.1f}")
-
-
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--only", nargs="*", help="ids to (re)generate")
@@ -1813,11 +1580,9 @@ def main():
     a = ap.parse_args()
 
     events = event_sounds()
-    # `--only tonnerre` (an event sound) means all its variants.
     wanted = set(a.only or [])
-    for sound in events:
-        if sound in wanted:
-            wanted |= set(EVENT_RECIPES.get(sound, {}))
+    if wanted & set(events):
+        raise SystemExit("event sounds (tonnerre) are made by make_thunder.py")
     items = [(k, i, free, a.wav_dir, a.plain_opus) for k, i, free in load_catalog()
              if not a.only or i in wanted]
     if a.only and not items:
@@ -1829,27 +1594,22 @@ def main():
     if not a.check_only and not a.only and not a.plain_opus:
         make_silence()
     if not a.check_only:
-        # An event sound has no looping file any more (its variants replace it).
+        # An event sound has no looping file (its variants, made by make_thunder.py, replace it).
         for sound in events:
             for root in (FREE_ROOT, PREMIUM_ROOT):
                 old = root / "sons" / f"{sound}.ogg"
                 if old.exists():
                     old.unlink()
-                    print(f"removed {old.relative_to(REPO)} (now an event sound: variants only)")
+                    print(f"removed {old.relative_to(REPO)} (an event sound: variants only)")
         write_remote_manifest()
-    loops = [r for r in rows if r["kind"] != "variants"]
-    variants = [r for r in rows if r["kind"] == "variants"]
-    if loops:
-        print_report(loops)
-    if variants:
-        print_variants(variants)
+    if rows:
+        print_report(rows)
     print(f"done in {time.time() - t0:.0f} s")
     if a.report:
         Path(a.report).write_text(json.dumps(rows, indent=2), encoding="utf-8")
-    bad = [r["id"] for r in loops if r["decoded_samples"] != r["samples"]]
-    bad += [r["id"] for r in variants if r["clipped_samples"]]
+    bad = [r["id"] for r in rows if r["decoded_samples"] != r["samples"]]
     if bad:
-        print("WARNING: decoded length differs from the loop length (or clipped variant): " + ", ".join(bad))
+        print("WARNING: decoded length differs from the loop length: " + ", ".join(bad))
         return 1
     return 0
 

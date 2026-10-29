@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:audio_service/audio_service.dart';
+import 'package:eventide/core/catalog.dart';
+import 'package:eventide/core/lightning.dart';
 import 'package:eventide/core/media_card.dart';
 import 'package:eventide/core/scene.dart';
 import 'package:eventide/services/audio/audio_engine.dart';
@@ -627,7 +629,7 @@ void main() {
       key: 'son:tonnerre',
       variants: [
         for (var i = 1; i <= 10; i++)
-          EventVariant('tonnerre-$i', () async => AssetAudioSource('assets/audio/sons/tonnerre-$i.ogg')),
+          EventVariant('tonnerre-coup-$i', () async => AssetAudioSource('assets/audio/sons/tonnerre-coup-$i.ogg')),
       ],
       volume: 0.5,
     );
@@ -718,6 +720,59 @@ void main() {
         handler.stop();
         async.flushMicrotasks();
       });
+    });
+  });
+
+
+  test('storm sequences go on in the background service: strikes, aftershocks, the rain redoubling', () {
+    fakeAsync((async) {
+      final handler = build(async, t0);
+      List<EventVariant> part(String name) => [
+            for (var i = 1; i <= 3; i++)
+              EventVariant('tonnerre-$name-0$i', () async => AssetAudioSource('assets/audio/sons/tonnerre-$name-0$i.ogg')),
+          ];
+      final parts = {
+        StormPart.avant: part('avant'),
+        StormPart.coup: part('coup'),
+        StormPart.coupProche: part('proche'),
+        StormPart.replique: part('replique'),
+        StormPart.lointain: part('lointain'),
+      };
+      final storm = EventLayer(
+        key: 'son:tonnerre',
+        variants: [for (final l in parts.values) ...l],
+        volume: 0.5,
+        interval: const SecondsRange(70, 170),
+        firstDelay: const SecondsRange(20, 60),
+        storm: StormLayer(
+          parts: parts,
+          weights: const {StormKind.lointain: 25, StormKind.orage: 55, StormKind.proche: 20},
+          averseKeys: const ['son:eau-vive'],
+        ),
+      );
+      final strikes = <LightningStrike>[];
+      handler.lightningStrikes.listen(strikes.add);
+      handler.start(PlayRequest(
+        landscapeId: 'pluie-ville',
+        title: 'Pluie sur la ville',
+        layers: _request().layers,
+        timer: const TimerNone(),
+        events: [storm],
+      ));
+      async.flushMicrotasks();
+      async.elapse(const Duration(hours: 1));
+      final ids = [for (final e in engine.events) (e.source as AssetAudioSource).assetKey];
+      for (final name in ['avant', 'coup', 'proche', 'replique', 'lointain']) {
+        expect(ids.where((id) => id.contains('tonnerre-$name-')), isNotEmpty, reason: name);
+      }
+      expect(strikes, isNotEmpty);
+      expect(engine.swells, isNotEmpty);
+      expect(engine.swells.every((w) => w.keys.single == 'son:eau-vive'), isTrue);
+      handler.stop();
+      async.flushMicrotasks();
+      final count = engine.events.length;
+      async.elapse(const Duration(hours: 1));
+      expect(engine.events.length, count, reason: 'nothing after the stop');
     });
   });
 }

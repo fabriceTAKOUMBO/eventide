@@ -24,7 +24,7 @@ KEY_RE = re.compile(
 )
 # (prefix, extension) -> catalog section; any other pair is refused. A landscape's still image
 # and its video are both gated by the landscape's own ``gratuit`` flag; a variant of an event
-# sound (``audio/sons/tonnerre-01.ogg``, contract § 11) by its sound's.
+# sound (``audio/sons/tonnerre-coup-01.ogg``, contract § 11) by its sound's.
 LAYOUT = {
     ("audio/sons", "ogg"): "sons",
     ("audio/musiques", "ogg"): "musiques",

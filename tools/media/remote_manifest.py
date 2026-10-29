@@ -6,7 +6,7 @@ file (contract § 8 and § 11):
   * ``videos`` / ``images``: Premium landscapes with ``videos/paysages/<id>.mp4`` /
     ``images/paysages/<id>.jpg``;
   * ``sons`` / ``musiques``: every ``audio/sons/<id>.ogg`` / ``audio/musiques/<id>.ogg``,
-    including the landscape ambiances and the variants of the event sounds (``tonnerre-01``...).
+    including the landscape ambiances and the variants of the event sounds (``tonnerre-coup-01``...).
     A sound that is neither bundled nor listed (e.g. a test-only ambiance, demo build only) is
     left out of the mix by the app, without an error message.
 

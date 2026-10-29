@@ -85,6 +85,9 @@ abstract final class MixRules {
   /// Global output never goes above this, whatever the layer levels.
   static const double masterCap = 0.85;
 
+  /// A layer's volume never goes above this (a storm swell included).
+  static const double maxLayerVolume = 1.0;
+
   /// Music sits under nature sounds by default.
   static double categoryGain(LayerKind kind) => switch (kind) {
         LayerKind.son => 1.0,
@@ -185,6 +188,20 @@ abstract class AudioEngine {
   /// Brings the events of [key] still sounding to the layer volume [volume] (each keeps its own
   /// gain) over [fade]; at 0 (sound removed or muted) they fade out, then stop.
   Future<void> setEventVolume(String key, double volume, {Duration fade = MixRules.levelFade});
+
+  /// Briefly raises the loop layers [keys] after a storm's strike (contract § 11: the rain
+  /// redoubling, a light gust of wind): each one to its own volume × [gainDb], never above its
+  /// full volume ([MixRules.maxLayerVolume]; the master cap does not change), over [rise], held
+  /// for [hold], back to its own volume over [fall]. A layer missing, parked or at volume 0 is
+  /// left alone, and nothing happens while paused or stopped. A level change of the layer, a
+  /// pause or a stop end the swell (the layer is at its own volume again).
+  Future<void> swell(
+    List<String> keys, {
+    required double gainDb,
+    required Duration rise,
+    required Duration hold,
+    required Duration fall,
+  });
 
   Future<void> dispose();
 }

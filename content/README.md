@@ -16,7 +16,7 @@ Le chemin d'un fichier sous `content/` est sa clé S3 :
 
 | Clé S3 | Contenu |
 |---|---|
-| `audio/sons/<id>.ogg` | boucle de son de nature Premium, ambiance d'un paysage Premium (`ambiance-<paysage>`), ou variante d'un son à événements (`tonnerre-01`…, contrat § 11) |
+| `audio/sons/<id>.ogg` | boucle de son de nature Premium, ambiance d'un paysage Premium (`ambiance-<paysage>`), ou variante d'un son à événements (`tonnerre-coup-01`…, contrat § 11) |
 | `audio/musiques/<id>.ogg` | boucle musicale Premium |
 | `images/paysages/<id>.jpg` | image fixe d'un paysage Premium : exactement la première image de sa vidéo (veille, vignettes, « réduire les animations », chargement) |
 | `videos/paysages/<id>.mp4` | vidéo d'un paysage Premium : boucle sans raccord, H.264, sans son, 2,5 Mo au plus |
@@ -51,7 +51,7 @@ démo seulement). Il est réécrit par chaque outil qui écrit ici (`process_vid
 
 | Clé | Contenu |
 |---|---|
-| `audio/sons/tonnerre-01.ogg` à `tonnerre-10.ogg` | variantes du son à événements `tonnerre` (6 à 20 s chacune, joués de temps en temps, jamais en boucle) : substituts synthétiques |
+| `audio/sons/tonnerre-<partie>-NN.ogg` (17 fichiers : `avant` ×3, `coup` ×4, `proche` ×3, `replique` ×3, `lointain` ×4) | parties du son à événements `tonnerre` (5,8 à 25,4 s chacune, jouées en séquences d'orage, jamais en boucle) : tirées du vrai tonnerre de la bande son de `pluie-ville`, pluie retirée (`tools/media/make_thunder.py`) |
 
 | Clé | Contenu |
 |---|---|
