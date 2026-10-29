@@ -44,3 +44,10 @@ Le coup de tonnerre de la bande son de `pluie-ville` (3,3 s à 10 s) n'a pas ét
 La bande son de `ciel-etoile` est une musique, pas un son de paysage : elle n'a pas été reprise.
 
 Ces fichiers ne vont **jamais** sur S3 ni dans la version de production : seule la version démo les copie dans ses ressources au moment de la construction, et la CI échoue si l'un d'eux apparaît sous `content/` ou `app/assets/`, ou dans l'APK de production. **À retirer avant toute bêta, même fermée, et toute publication** (voir `medias-test/LISEZMOI.md`).
+
+## Icône de l'application (29 octobre 2026)
+
+| Fichier source | Usage | Origine | Statut |
+|---|---|---|---|
+| `medias-bruts/icone/full-relax-source.jpg` (1536 × 2752) | icônes Android (`mipmap-*`), icône Play (`app/assets/brand/logo_512.png`, `logo_1024.png`), via `tools/media/make_icon_from_photo.py` | Image fournie par le product owner, générée par IA d'après lui | **Provenance à confirmer avant publication** : elle ressemble à une image d'une vidéo YouTube de tiers (`toits-pluie`). Elle ne doit pas en être une retouche ; sinon, la regénérer à partir d'un texte seul. |
+

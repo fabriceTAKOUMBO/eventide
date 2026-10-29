@@ -30,6 +30,7 @@ Depuis la racine du dépôt :
 ```sh
 python3 tools/media/generate_audio.py   # 17 boucles, 10 variantes du tonnerre, silence.ogg (~1 min 30 sur 4 cœurs)
 node tools/media/generate_icons.js      # logo, icônes Android, logotype
+python3 tools/media/make_icon_from_photo.py   # icône Full Relax (photo) : icônes Android, icône Play 512/1024 (remplace les icônes de generate_icons.js)
 ```
 
 Options de `generate_audio.py` :
