@@ -34,8 +34,17 @@ class _Voice {
   /// Parks the voice once its fade to silence is over.
   Timer? parkTimer;
 
-  /// The voice is still fading in (entry, unmute, resume) until then: the drift leaves it alone.
+  /// The voice is still fading in (entry, unmute, resume) or swelling until then: the drift
+  /// leaves it alone.
   DateTime steadyAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// Brings the voice back from a storm swell ([SoLoudAudioEngine.swell]) to its own volume.
+  Timer? swellTimer;
+
+  void endSwell() {
+    swellTimer?.cancel();
+    swellTimer = null;
+  }
 }
 
 /// One event sounding over the loops (a thunder, contract § 11): a non-looping voice.
@@ -56,12 +65,16 @@ class _Event {
 bool _silent(double volume) => volume <= 0.0005;
 
 class SoLoudAudioEngine implements AudioEngine {
-  SoLoudAudioEngine({SoLoud? soloud, Random? random})
+  SoLoudAudioEngine({SoLoud? soloud, Random? random, DateTime Function()? now})
       : _soloud = soloud ?? SoLoud.instance,
-        _random = random ?? Random();
+        _random = random ?? Random(),
+        _now = now ?? DateTime.now;
 
   final SoLoud _soloud;
   final Random _random;
+
+  /// The clock of the master ramp, the entries and the drift (tests: fake time).
+  final DateTime Function() _now;
 
   final Map<String, _Voice> _voices = {};
   final List<_Event> _events = [];
@@ -133,14 +146,14 @@ class SoLoudAudioEngine implements AudioEngine {
   /// Fades the master to where it should be after [fade], then continues an unfinished ramp.
   void _applyMaster(Duration fade) {
     _rampResume?.cancel();
-    final now = DateTime.now();
+    final now = _now();
     final at = now.add(fade);
     _safe(() => _soloud.fadeGlobalVolume(_targetMasterAt(at), fade));
     final end = _rampEnd;
     if (end != null && at.isBefore(end)) {
       _rampResume = Timer(fade, () {
         if (_paused || _voices.isEmpty) return;
-        final remaining = end.difference(DateTime.now());
+        final remaining = end.difference(_now());
         if (remaining > Duration.zero) {
           _safe(() => _soloud.fadeGlobalVolume(MixRules.masterCap * (_ducked ? MixRules.duckFactor : 1.0), remaining));
         }
@@ -213,7 +226,7 @@ class SoLoudAudioEngine implements AudioEngine {
         final entry = layer.fadeIn ?? fadeIn;
         if (!_paused) _safe(() => _soloud.setPause(handle, false));
         _safe(() => _soloud.fadeVolume(handle, layer.volume, entry));
-        voice.steadyAt = DateTime.now().add(entry);
+        voice.steadyAt = _now().add(entry);
       }
       _voices[layer.key] = voice;
     } catch (e) {
@@ -227,6 +240,8 @@ class SoLoudAudioEngine implements AudioEngine {
     final changed = (voice.layer.volume - layer.volume).abs() > 0.001;
     voice.layer = layer;
     if (!changed) return;
+    // A level change ends a storm swell: the fade goes to the new volume.
+    voice.endSwell();
     if (_silent(layer.volume)) {
       if (voice.parked) return;
       _safe(() => _soloud.fadeVolume(voice.handle, 0, fade));
@@ -247,12 +262,13 @@ class SoLoudAudioEngine implements AudioEngine {
       if (!_paused) _safe(() => _soloud.setPause(voice.handle, false));
     }
     _safe(() => _soloud.fadeVolume(voice.handle, layer.volume, fade));
-    voice.steadyAt = DateTime.now().add(fade);
+    voice.steadyAt = _now().add(fade);
   }
 
   void _fadeOutVoice(_Voice voice, Duration fade) {
     voice.parkTimer?.cancel();
     voice.parkTimer = null;
+    voice.endSwell();
     _safe(() => _soloud.fadeVolume(voice.handle, 0, fade));
     // The voice is already out of _voices: a layer with the same key may start meanwhile with
     // its own handle; this one only finishes its fade, then stops and releases its source.
@@ -291,7 +307,7 @@ class SoLoudAudioEngine implements AudioEngine {
     _drift?.cancel();
     _drift = Timer.periodic(const Duration(seconds: 25), (_) {
       if (_paused) return;
-      final now = DateTime.now();
+      final now = _now();
       for (final voice in _voices.values) {
         // Parked, fading out, or still coming in (a 20 s music entry): left alone.
         if (voice.parked || voice.parkTimer != null || _silent(voice.layer.volume)) continue;
@@ -322,7 +338,7 @@ class SoLoudAudioEngine implements AudioEngine {
           if (!v.parked) _safe(() => _soloud.setPause(v.handle, false));
         }
       }
-      final now = DateTime.now();
+      final now = _now();
       if (rampUp > Duration.zero) {
         _rampFrom = 0;
         _rampStart = now;
@@ -357,6 +373,11 @@ class SoLoudAudioEngine implements AudioEngine {
       if (!_paused) return;
       for (final v in _voices.values) {
         _safe(() => _soloud.setPause(v.handle, true));
+        // A storm swell ends with the pause (silent now: the master is down).
+        if (v.swellTimer != null) {
+          v.endSwell();
+          if (!v.parked) _safe(() => _soloud.setVolume(v.handle, v.layer.volume));
+        }
       }
       // No event during a pause (contract § 11): a thunder still sounding ends here.
       await _stopEvents((_) => true);
@@ -368,7 +389,7 @@ class SoLoudAudioEngine implements AudioEngine {
     return _serial(() async {
       if (_voices.isEmpty || !_paused) return;
       _paused = false;
-      final now = DateTime.now();
+      final now = _now();
       for (final v in _voices.values) {
         if (v.parked) continue;
         final back = v.layer.resumeFade;
@@ -424,6 +445,7 @@ class SoLoudAudioEngine implements AudioEngine {
     for (final v in voices) {
       v.parkTimer?.cancel();
       v.parkTimer = null;
+      v.endSwell();
     }
     for (final v in voices) {
       try {
@@ -493,6 +515,37 @@ class SoLoudAudioEngine implements AudioEngine {
         e.end?.cancel();
         e.end = Timer(fade + const Duration(milliseconds: 50), () {
           _serial(() => _stopEvents((x) => identical(x, e)));
+        });
+      }
+    });
+  }
+
+  @override
+  Future<void> swell(
+    List<String> keys, {
+    required double gainDb,
+    required Duration rise,
+    required Duration hold,
+    required Duration fall,
+  }) {
+    return _serial(() async {
+      if (!_soloud.isInitialized || _voices.isEmpty || _paused) return;
+      final now = _now();
+      final factor = pow(10, gainDb / 20).toDouble();
+      for (final key in keys) {
+        final voice = _voices[key];
+        // Missing, muted (parked or parking) or silent: left alone.
+        if (voice == null || voice.parked || voice.parkTimer != null || _silent(voice.layer.volume)) continue;
+        final base = voice.layer.volume;
+        final peak = min(base * factor, MixRules.maxLayerVolume);
+        if (peak <= base + 0.0005) continue;
+        voice.endSwell();
+        _safe(() => _soloud.fadeVolume(voice.handle, peak, rise));
+        voice.steadyAt = now.add(rise + hold + fall);
+        voice.swellTimer = Timer(rise + hold, () {
+          voice.swellTimer = null;
+          if (_voices[key] != voice || voice.parked || _paused) return;
+          _safe(() => _soloud.fadeVolume(voice.handle, voice.layer.volume, fall));
         });
       }
     });

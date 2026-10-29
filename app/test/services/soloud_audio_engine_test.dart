@@ -280,7 +280,7 @@ void main() {
   );
 
   group('events (sounds played by events, contract § 11)', () {
-    const thunder = AssetAudioSource('assets/audio/sons/tonnerre-03.ogg');
+    const thunder = AssetAudioSource('assets/audio/sons/tonnerre-coup-03.ogg');
 
     _Voice event() => soloud.voice(thunder.assetKey);
 
@@ -350,6 +350,97 @@ void main() {
         engine.stop();
         async.flushMicrotasks();
         expect(soloud.voices, isEmpty);
+      });
+    });
+  });
+
+
+  group('storm swells (contract § 11: the rain redoubles, the wind gusts)', () {
+    const rise = Duration(seconds: 3), hold = Duration(seconds: 4), fall = Duration(seconds: 8);
+
+    test('a loop rises over the rise, holds, comes back over the fall', () {
+      fake((async) {
+        engine.start([_sound(0.6)]);
+        async.elapse(const Duration(seconds: 3));
+        engine.swell(['son:pluie-douce'], gainDb: 3, rise: rise, hold: hold, fall: fall);
+        async.flushMicrotasks();
+        expect(rain().lastFade!.$1, closeTo(0.6 * pow(10, 3 / 20), 1e-9));
+        expect(rain().lastFade!.$2, rise);
+        expect(soloud.global, MixRules.masterCap, reason: 'the master cap does not change');
+        async.elapse(rise + hold);
+        expect(rain().lastFade, (0.6, fall));
+      });
+    });
+
+    test('never above full volume; nothing for a loop already there, a missing one or a muted one', () {
+      fake((async) {
+        engine.start([_sound(0.9), _music(0.2)]);
+        async.elapse(const Duration(seconds: 3));
+        engine.swell(['son:pluie-douce', 'son:absent'], gainDb: 3, rise: rise, hold: hold, fall: fall);
+        async.flushMicrotasks();
+        expect(rain().lastFade, (MixRules.maxLayerVolume, rise));
+        async.elapse(rise + hold + fall);
+        engine.update([_sound(1.0), _music(0.2)]);
+        async.elapse(const Duration(seconds: 1));
+        final fades = rain().fades.length;
+        engine.swell(['son:pluie-douce'], gainDb: 3, rise: rise, hold: hold, fall: fall);
+        async.elapse(rise + hold + fall);
+        expect(rain().fades, hasLength(fades), reason: 'already at full volume');
+        engine.update([_sound(0), _music(0.2)], fade: MixRules.muteFade);
+        async.elapse(MixRules.muteFade + const Duration(milliseconds: 100));
+        expect(rain().paused, isTrue);
+        final muted = rain().fades.length;
+        engine.swell(['son:pluie-douce'], gainDb: 3, rise: rise, hold: hold, fall: fall);
+        async.elapse(rise + hold + fall);
+        expect(rain().fades, hasLength(muted), reason: 'a muted loop never swells');
+        expect(rain().volume, 0);
+      });
+    });
+
+    test('a level change during a swell wins; a pause ends it at the loop\'s own volume', () {
+      fake((async) {
+        engine.start([_sound(0.6)]);
+        async.elapse(const Duration(seconds: 3));
+        engine.swell(['son:pluie-douce'], gainDb: 2, rise: rise, hold: hold, fall: fall);
+        async.flushMicrotasks();
+        engine.update([_sound(0.3)]);
+        async.flushMicrotasks();
+        expect(rain().lastFade, (0.3, MixRules.levelFade));
+        final fades = rain().fades.length;
+        async.elapse(rise + hold + fall);
+        expect(rain().fades, hasLength(fades), reason: 'the swell does not come back over the new level');
+
+        engine.swell(['son:pluie-douce'], gainDb: 2, rise: rise, hold: hold, fall: fall);
+        async.flushMicrotasks();
+        expect(rain().volume, greaterThan(0.3));
+        engine.pause();
+        async.elapse(MixRules.pauseFade + const Duration(milliseconds: 50));
+        expect(rain().volume, 0.3, reason: 'back to its own volume, silently (paused)');
+        final paused = rain().fades.length;
+        async.elapse(rise + hold + fall);
+        expect(rain().fades, hasLength(paused));
+        engine.swell(['son:pluie-douce'], gainDb: 2, rise: rise, hold: hold, fall: fall);
+        async.elapse(rise + hold + fall);
+        expect(rain().fades, hasLength(paused), reason: 'nothing while paused');
+      });
+    });
+
+    test('the slow drift of the volumes leaves a swelling loop alone', () {
+      fake((async) {
+        // This engine reads the fake clock, so its drift (every 25 s) really runs.
+        final t0 = DateTime(2026, 10, 29, 23);
+        final timed = SoLoudAudioEngine(soloud: soloud, random: Random(3), now: () => t0.add(async.elapsed));
+        timed.start([_sound(0.6)]);
+        async.elapse(const Duration(seconds: 24));
+        final before = rain().fades.length;
+        timed.swell(['son:pluie-douce'], gainDb: 3, rise: rise, hold: hold, fall: fall);
+        async.elapse(rise + hold + fall);
+        final during = rain().fades.sublist(before);
+        expect(during.map((f) => f.$2), [rise, fall], reason: 'no drift fade during the swell (drift at 25 s)');
+        async.elapse(const Duration(seconds: 12));
+        expect(rain().fades.last.$2, const Duration(seconds: 20), reason: 'the drift goes on after it (50 s)');
+        timed.stop();
+        async.flushMicrotasks();
       });
     });
   });

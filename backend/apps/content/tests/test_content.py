@@ -124,9 +124,9 @@ def test_free_landscape_ambiance_is_signed_for_everyone(api, cloudfront_key):
     [
         ["audio/sons/ambiance-pluie-ville.ogg"],
         # Variants of the event sound « tonnerre » (Premium): the sound's own rule.
-        ["audio/sons/tonnerre-01.ogg"],
-        ["audio/sons/tonnerre-10.ogg", "audio/sons/eau-vive.ogg"],
-        ["audio/sons/ambiance-cascade-foret.ogg", "audio/sons/tonnerre-03.ogg"],
+        ["audio/sons/tonnerre-coup-01.ogg"],
+        ["audio/sons/tonnerre-lointain-04.ogg", "audio/sons/eau-vive.ogg"],
+        ["audio/sons/ambiance-cascade-foret.ogg", "audio/sons/tonnerre-avant-03.ogg"],
     ],
 )
 def test_premium_ambiance_and_event_variants_require_premium(
@@ -151,6 +151,7 @@ def test_every_variant_of_an_event_sound_is_a_sound_file(catalog):
             assert catalog.sound_of_file(variant) == sound["id"]
     assert catalog.sound_of_file("vent") == "vent"
     assert catalog.sound_of_file("tonnerre-99") is None
+    assert catalog.sound_of_file("tonnerre-01") is None  # the synthetic variants are gone
     assert catalog.sound_of_file("harpe") is None
 
 
@@ -162,11 +163,12 @@ def test_every_variant_of_an_event_sound_is_a_sound_file(catalog):
         ["audio/sons/klaxon.ogg"],
         # Event variants: only under audio/sons, only the listed ones.
         ["audio/sons/tonnerre-99.ogg"],
-        ["audio/sons/tonnerre-1.ogg"],
-        ["audio/musiques/tonnerre-01.ogg"],
-        ["images/paysages/tonnerre-01.jpg"],
-        ["videos/paysages/tonnerre-01.mp4"],
-        ["audio/sons/tonnerre-01.mp4"],
+        ["audio/sons/tonnerre-01.ogg"],
+        ["audio/sons/tonnerre-coup-1.ogg"],
+        ["audio/musiques/tonnerre-coup-01.ogg"],
+        ["images/paysages/tonnerre-coup-01.jpg"],
+        ["videos/paysages/tonnerre-coup-01.mp4"],
+        ["audio/sons/tonnerre-coup-01.mp4"],
         ["audio/sons/ambiance-pluie-ville.mp4"],
         ["videos/paysages/ambiance-pluie-ville.mp4"],
         ["audio/sons/harpe.ogg"],

@@ -15,7 +15,7 @@ Remarques :
 - **À confirmer avant la production** : les conditions de Google applicables au compte utilisé (Gemini grand public, Google One AI, Workspace…) pour un usage commercial dans une application payante, et l'éventuelle obligation de signaler un contenu généré par IA (Google Play, AI Act). Garder la preuve de génération (date, compte, invite) comme le demande le dossier (section 9).
 - Les fichiers de l'application et de S3 sont dérivés des originaux de `medias-bruts/` par `tools/media/process_video.py` (boucle sans raccord, son retiré, éclairs effacés pour `pluie-ville` depuis le 29 octobre 2026, image fixe = première image de la boucle).
 
-## Ambiances des paysages (bande son des vidéos du product owner)
+## Ambiances et tonnerre des paysages (bande son des vidéos du product owner)
 
 Contrat d'API § 11 : le son d'origine de la vidéo devient un son du catalogue, sans tonnerre, recomposé en boucle sans raccord par `tools/media/make_ambiance.py` (extraits de la bande son remontés au hasard, rien d'autre n'est ajouté).
 
@@ -23,15 +23,15 @@ Contrat d'API § 11 : le son d'origine de la vidéo devient un son du catalogue,
 |---|---|---|---|
 | `app/assets/audio/sons/ambiance-cascade-foret.ogg` (embarqué, gratuit) | `ambiance-cascade-foret` | Bande son de `medias-bruts/videos/cascade-foret.mp4`, générée par le product owner avec Google Gemini (Veo), 28 octobre 2026 | Usage commercial à confirmer selon les conditions de Google (comme la vidéo) |
 | `content/audio/sons/ambiance-pluie-ville.ogg` (S3, Premium) | `ambiance-pluie-ville` | Bande son de `medias-bruts/videos/pluie-ville.mp4` (les 2,8 premières secondes, avant le tonnerre), même origine | Usage commercial à confirmer selon les conditions de Google (comme la vidéo) |
+| `content/audio/sons/tonnerre-avant-01.ogg` … `tonnerre-lointain-04.ogg` (17 parties du son à événements `tonnerre`, S3, Premium) | `tonnerre` | Tonnerre de la bande son de `medias-bruts/videos/pluie-ville.mp4` (grondement faible de 0,5 à 3,2 s, coup à 3,3 s et son roulement), même origine que la vidéo (Google Gemini, Veo, 28 octobre 2026). La pluie en est retirée, puis les tranches sont filtrées, transposées et prolongées avec leur propre matière par `tools/media/make_thunder.py` (rien n'est synthétisé) | Usage commercial à confirmer selon les conditions de Google (comme la vidéo) |
 
-Le coup de tonnerre de la bande son de `pluie-ville` (3,3 s à 10 s) n'a pas été repris : il est mêlé à la pluie et coupé par la fin de la vidéo.
+Depuis le 29 octobre 2026, le tonnerre de la bande son de `pluie-ville` est repris (séparé de la pluie) ; l'ambiance, elle, reste sans tonnerre.
 
 ## Sons et musiques
 
 | Fichiers | Source | Statut |
 |---|---|---|
-| `app/assets/audio/**/*.ogg`, `content/audio/**/*.ogg` (sauf les ambiances ci-dessus) | Générés par nous à partir de rien (`tools/media/generate_audio.py`, synthèse numpy) | Généré par nous, aucun droit tiers. Substituts provisoires, à remplacer par les contenus sous licence en gardant les mêmes clés |
-| `content/audio/sons/tonnerre-01.ogg` à `tonnerre-10.ogg` (variantes du son à événements `tonnerre`) | Générés par nous à partir de rien (`tools/media/generate_audio.py`, `thunder_event`) | Généré par nous, aucun droit tiers. **Substituts provisoires** : à remplacer par des tonnerres enregistrés sous licence (ou générés, par exemple avec le connecteur Higgsfield), en gardant les mêmes clés, 6 à 20 s chacun, fin naturelle jusqu'au silence |
+| `app/assets/audio/**/*.ogg`, `content/audio/**/*.ogg` (sauf les ambiances et le tonnerre ci-dessus) | Générés par nous à partir de rien (`tools/media/generate_audio.py`, synthèse numpy) | Généré par nous, aucun droit tiers. Substituts provisoires, à remplacer par les contenus sous licence en gardant les mêmes clés |
 
 ## Matériel de test NON DIFFUSABLE (`medias-test/`)
 

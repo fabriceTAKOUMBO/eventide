@@ -9,6 +9,7 @@ import 'package:eventide/app/app_controller.dart';
 import 'package:eventide/app/app_model.dart';
 import 'package:eventide/app/demo_mode.dart';
 import 'package:eventide/core/catalog.dart';
+import 'package:eventide/core/lightning.dart';
 import 'package:eventide/core/landscape_media.dart';
 import 'package:eventide/core/media_card.dart';
 import 'package:eventide/core/plan.dart';
@@ -1302,17 +1303,44 @@ void main() {
       final events = h.handler.current!.events;
       expect(events.map((e) => e.key), ['son:tonnerre']);
       expect(events.single.volume, closeTo(0.5, 1e-9));
-      expect(events.single.variants.map((v) => v.id), [
-        for (var i = 1; i <= 10; i++) 'tonnerre-${i.toString().padLeft(2, '0')}',
-      ]);
+      final thunder = model.catalog.item(LayerKind.son, 'tonnerre')!.events!;
+      expect(events.single.variants.map((v) => v.id), thunder.variants);
       expect(events.single.interval, const SecondsRange(70, 170));
       expect(events.single.firstDelay, const SecondsRange(20, 60));
       expect(
         await events.single.variants.first.resolve(),
-        const AssetAudioSource('assets/audio/sons/tonnerre-01.ogg'),
+        const AssetAudioSource('assets/audio/sons/tonnerre-avant-01.ogg'),
       );
+      // Storm sequences (`orage`): the parts, and the rain bed that redoubles after a strike.
+      final storm = events.single.storm!;
+      expect({for (final e in storm.parts.entries) e.key: e.value.map((v) => v.id).toList()}, thunder.storm!.parts);
+      expect(storm.weights, thunder.storm!.weights);
+      expect(storm.averseKeys, ['son:ambiance-pluie-ville']);
+      expect(storm.rafaleKeys, isEmpty, reason: 'no wind in the mix');
       expect(model.lightningStrikes, h.handler.lightningStrikes, reason: "the audio service's strikes");
       expect(model.catalog.hasEventSound(model.scene), isTrue);
+    });
+
+    test('the swells follow the mix: the wind gusts once added, a muted or removed loop never swells', () async {
+      final model = await h.start(plan: Plan.annual);
+      model.selectLandscape('pluie-ville');
+      await settle();
+      await model.play();
+      model.setLayerLevel(LayerKind.son, 'vent', 30);
+      await settle();
+      var storm = h.handler.current!.events.single.storm!;
+      expect(storm.averseKeys, ['son:ambiance-pluie-ville']);
+      expect(storm.rafaleKeys, ['son:vent']);
+      model.setLayerLevel(LayerKind.son, 'ambiance-pluie-ville', 0);
+      await settle();
+      storm = h.handler.current!.events.single.storm!;
+      expect(storm.averseKeys, isEmpty);
+      expect(storm.rafaleKeys, ['son:vent']);
+      model.setCategoryMuted(LayerKind.son, true);
+      await settle();
+      storm = h.handler.current!.events.single.storm!;
+      expect(storm.rafaleKeys, isEmpty, reason: 'a muted loop is at volume 0');
+      expect(h.handler.current!.events.single.volume, 0);
     });
 
     test('muting the sounds or level 0 silences the thunder', () async {
@@ -1347,13 +1375,16 @@ void main() {
     });
 
     test('an ambiance the server does not have (test material) is left out without a message', () async {
+      final thunder = loadTestCatalog().item(LayerKind.son, 'tonnerre')!.events!;
+      const kept = {'tonnerre-coup-01', 'tonnerre-coup-02', 'tonnerre-replique-01'};
       final model = await h.start(
         plan: Plan.annual,
         notBundled: {
           'assets/audio/sons/ambiance-toits-pluie.ogg',
-          for (var i = 4; i <= 10; i++) 'assets/audio/sons/tonnerre-${i.toString().padLeft(2, '0')}.ogg',
+          for (final id in thunder.variants)
+            if (id != 'tonnerre-coup-02' && id != 'tonnerre-replique-01') 'assets/audio/sons/$id.ogg',
         },
-        remoteMedia: const RemoteLandscapeMedia(sounds: {'ambiance-pluie-ville', 'tonnerre-01'}),
+        remoteMedia: const RemoteLandscapeMedia(sounds: {'ambiance-pluie-ville', 'tonnerre-coup-01'}),
       );
       model.selectLandscape('toits-pluie');
       await settle();
@@ -1362,8 +1393,18 @@ void main() {
       expect(model.playing, isTrue);
       expect(h.engine.activeKeys, {'musique:cordes-lentes'});
       expect(await h.got<ToastEvent>(), isEmpty);
-      expect(h.handler.current!.events.single.variants.map((v) => v.id), ['tonnerre-01', 'tonnerre-02', 'tonnerre-03'],
+      final event = h.handler.current!.events.single;
+      expect(event.variants.map((v) => v.id).toSet(), kept,
           reason: 'bundled or listed variants are kept, the others are left out');
+      expect({for (final e in event.storm!.parts.entries) e.key: e.value.map((v) => v.id).toList()}, {
+        StormPart.avant: <String>[],
+        StormPart.coup: ['tonnerre-coup-01', 'tonnerre-coup-02'],
+        StormPart.coupProche: <String>[],
+        StormPart.replique: ['tonnerre-replique-01'],
+        StormPart.lointain: <String>[],
+      });
+      expect(event.storm!.drawable.keys, [StormKind.orage], reason: 'only what can be played is drawn');
+      expect(event.storm!.averseKeys, isEmpty, reason: 'the ambiance is left out');
     });
   });
 }

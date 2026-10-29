@@ -139,22 +139,51 @@ Ajouts du 29 octobre 2026 au catalogue (`app/assets/catalog.json`, copie de l'AP
 ```json
 {"id": "tonnerre", "nom": "Tonnerre", "gratuit": false, "alias": ["tonnerre", "orage"],
  "lecture": "evenements",
- "variantes": ["tonnerre-01", "tonnerre-02", "tonnerre-03"],
- "intervalle_s": [70, 170], "premier_s": [20, 60]}
+ "variantes": ["tonnerre-avant-01", "tonnerre-coup-01", "tonnerre-coup-02", "tonnerre-proche-01",
+               "tonnerre-replique-01", "tonnerre-lointain-01"],
+ "intervalle_s": [70, 170], "premier_s": [20, 60],
+ "orage": {
+   "parties": {"avant": ["tonnerre-avant-01"], "coup": ["tonnerre-coup-01", "tonnerre-coup-02"],
+               "coup-proche": ["tonnerre-proche-01"], "replique": ["tonnerre-replique-01"],
+               "lointain": ["tonnerre-lointain-01"]},
+   "sequences": {"lointain": 25, "orage": 55, "proche": 20},
+   "averse": ["ambiance-pluie-ville", "pluie-douce"],
+   "rafale": ["vent"]}}
 ```
 
 | Champ | Règle |
 |---|---|
 | `lecture` | `boucle` (valeur par défaut, champ absent) ou `evenements` |
-| `variantes` | au moins 3 identifiants de fichiers `audio/sons/<variante>.ogg` (même règle gratuit/Premium que le son) |
-| `intervalle_s` | `[min, max]` en secondes, `0 < min ≤ max` : écart tiré au hasard entre deux événements |
+| `variantes` | au moins 3 identifiants de fichiers `audio/sons/<variante>.ogg` (même règle gratuit/Premium que le son) : **tous** les fichiers du son, ceux des parties d'`orage` compris |
+| `intervalle_s` | `[min, max]` en secondes, `0 < min ≤ max` : écart tiré au hasard entre le début d'un événement et le début du suivant |
 | `premier_s` | `[min, max]` : délai du premier événement après le début de l'écoute, une reprise après pause ou l'ajout du son |
+| `orage` | facultatif (ajout du 29 octobre 2026, soir). Absent : chaque événement est **une variante seule** (règles « sans `orage` » ci-dessous). Présent : chaque événement est une **séquence** de parties, comme un vrai orage |
+| `orage.parties` | objet : type de partie → identifiants pris dans `variantes` (au moins un par type présent). Types : `avant` (grondement doux avant l'éclair), `coup` (coup de tonnerre et son long roulement), `coup-proche` (coup proche : claquement plus sec), `replique` (grondement plus faible qui suit), `lointain` (roulement lointain, sans claquement). Un type inconnu, ou un identifiant absent de `variantes`, est ignoré |
+| `orage.sequences` | objet : genre de séquence → poids (nombre > 0) du tirage au hasard. Genres : `lointain`, `orage`, `proche` (détail ci-dessous). Un genre inconnu est ignoré ; un genre dont la partie obligatoire manque n'est jamais tiré ; si aucun genre ne peut l'être, le son se joue comme sans `orage` |
+| `orage.averse` | identifiants de sons en boucle (la pluie, l'ambiance d'un paysage pluvieux) qui **redoublent** brièvement après un coup fort. Un identifiant inconnu ou absent du mix est ignoré |
+| `orage.rafale` | identifiants de sons en boucle (le vent) qui ont une **rafale légère** après un coup fort. Même règle |
 
-Lecture d'un son à événements (application) :
-- le niveau (0 à 100) règle le volume ; 0 retire le son : plus aucun événement. La sourdine des sons (§ 1) les fait taire aussi ;
-- à chaque événement : une variante au hasard, **jamais une des deux dernières jouées** ; légères variations tirées au hasard (volume de −6 à 0 dB, vitesse de 0,92 à 1,08, position stéréo de −0,4 à 0,4) ; jamais deux événements en même temps ;
-- aucun événement pendant une pause, pendant le fondu de fin du minuteur, ni quand l'écoute est arrêtée ; une reprise retire un nouveau `premier_s` ;
-- **éclair synchronisé** : si le décor `eclairs` est dans la scène (niveau > 0) et que le paysage est visible, un éclair est dessiné, puis le tonnerre suit après 0,4 à 3,5 s (plus le délai est court, plus l'éclair est vif). Sans tonnerre dans le mix, le décor `eclairs` garde ses propres éclairs, rares (un toutes les 2 à 5 minutes) et silencieux. Les éclairs ne sont plus dans les vidéos : la vidéo d'un paysage d'orage est traitée pour les retirer, et seul le décor les dessine.
+Lecture d'un son à événements (application), dans tous les cas :
+- le niveau (0 à 100) règle le volume ; 0 retire le son : plus aucun événement, et celui en cours s'éteint en fondu. La sourdine des sons (§ 1) les fait taire aussi ;
+- **jamais deux événements en même temps** : un événement ne commence qu'une seconde au moins après la fin complète du précédent (dernier son fini) ;
+- aucun événement pendant une pause, pendant le fondu de fin du minuteur, ni quand l'écoute est arrêtée : l'événement en cours est abandonné ; une reprise retire un nouveau `premier_s` ;
+- **éclair synchronisé** : l'éclair vient toujours **avant** le claquement, qui le suit après le délai dû à la distance ; plus le délai est court, plus l'éclair est vif. Le fichier du coup doit être prêt avant que l'éclair soit annoncé : s'il ne l'est pas, l'éclair l'attend (5 s au plus) ; s'il reste introuvable, ni l'éclair ni le coup, et l'événement continue sans eux. L'éclair est dessiné si le décor `eclairs` est dans la scène (niveau > 0) et que le paysage est visible. Sans tonnerre dans le mix, le décor `eclairs` garde ses propres éclairs, rares (un toutes les 2 à 5 minutes) et silencieux. Les éclairs ne sont plus dans les vidéos : la vidéo d'un paysage d'orage est traitée pour les retirer, et seul le décor les dessine.
+
+Sans `orage` : à chaque événement, une variante au hasard, **jamais une des deux dernières jouées** ; légères variations tirées au hasard (volume de −6 à 0 dB, vitesse de 0,92 à 1,08, position stéréo de −0,4 à 0,4) ; un éclair, puis la variante 0,4 à 3,5 s plus tard (intensité de l'éclair 1 à 0,35 selon le délai).
+
+Avec `orage` : chaque événement est une séquence tirée au hasard selon `orage.sequences`, jamais deux fois la même :
+
+| Genre | Partie obligatoire | Déroulement |
+|---|---|---|
+| `lointain` | `lointain` | un roulement lointain seul. 6 fois sur 10 sans éclair ; sinon un éclair faible (intensité 0,12 à 0,25), puis le roulement 3,5 à 6 s plus tard |
+| `orage` | `coup` | un grondement doux (`avant`, s'il y en a) dès le début ; l'éclair 2,5 à 5,5 s plus tard (au début s'il n'y a pas d'`avant`) ; le coup (`coup`) 1,2 à 3,5 s après l'éclair (intensité 0,83 à 0,35) ; 3 fois sur 10, une réplique (`replique`, s'il y en a) 8 à 20 s après le coup |
+| `proche` | `coup-proche` | l'éclair dès le début ; le coup proche 0,4 à 1,2 s après (intensité 1 à 0,83) ; une réplique (`replique`, s'il y en a) 5 à 20 s après le coup |
+
+- une réplique est précédée, une fois sur deux, d'un éclair faible (intensité 0,15 à 0,3) 2 à 3,5 s avant elle, jamais moins de 3 s après l'éclair du coup ;
+- chaque partie : une variante de son type au hasard, **jamais une des deux dernières jouées de ce type** ; volume de −3 à 0 dB (les fichiers portent déjà les écarts naturels entre les parties : une réplique ou un roulement lointain est plus faible qu'un coup), vitesse de 0,92 à 1,08 ; une position stéréo tirée pour la séquence (−0,4 à 0,4), chaque partie à ± 0,15 autour (bornée à ± 0,4) : l'orage vient d'une direction ;
+- **petits bruits** après un `coup` ou un `coup-proche` joué : les sons d'`orage.averse` présents et audibles redoublent de +1,5 à +3 dB (début 0,8 à 2,5 s après le coup, montée de 2,5 à 4 s, palier de 2 à 5 s, retour en 6 à 10 s) ; ceux d'`orage.rafale`, une rafale de +1,5 à +3 dB (début 0,3 à 1,5 s après le coup, montée de 0,8 à 1,5 s, palier de 0,3 à 1 s, retour en 3 à 5 s). Le volume d'un son ne dépasse jamais son plein volume (gain 1) et le plafond général du mélange (`masterCap`) ne change pas ; rien sur un son au niveau 0 ou en sourdine ; un changement de niveau, une pause ou un arrêt ramènent le son à son niveau.
+
+Fichiers des variantes : sons uniques, du silence au silence (aucune boucle), Ogg Opus, crête vraie ≤ −1 dBTP après décodage. Les parties du tonnerre sont tirées du vrai tonnerre de la bande son de `pluie-ville`, pluie retirée, pour se poser sur l'ambiance sans doubler la pluie (`tools/media/make_thunder.py`).
 
 ## 12. Paysages réels et paysages imaginaires (3D)
 

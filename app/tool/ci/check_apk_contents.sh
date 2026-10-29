@@ -2,7 +2,7 @@
 # Checks what a release APK is, so that the demo build can never pass for production:
 #   production: package be.cinaf.eventide, label « Eventide », free audio (with the free
 #               landscape ambiance) and free landscape videos only: no Premium audio (the Premium
-#               ambiances and the thunder variants tonnerre-NN included), no Premium landscape
+#               ambiances and the thunder variants tonnerre-<part>-NN included), no Premium landscape
 #               video or poster (content/videos, content/images: served by the API), and none of
 #               the third-party test-only media (medias-test/, non-distributable);
 #   demo:       package be.cinaf.eventide.demo, label « Eventide Démo », every Premium sound and

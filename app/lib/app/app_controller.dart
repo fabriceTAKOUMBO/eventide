@@ -591,6 +591,8 @@ class RealAppModel extends AppModel implements PlaybackHost {
   }) async {
     final layers = <EngineLayer>[];
     final events = <EventLayer>[];
+    // Storm of each event sound (`orage`), completed once the loops of the mix are known.
+    final storms = <EventLayer, StormSpec>{};
     var failed = false;
     var offline = false;
     for (final kind in const [LayerKind.son, LayerKind.musique]) {
@@ -608,13 +610,16 @@ class RealAppModel extends AppModel implements PlaybackHost {
               if (await _content.isPublished(kind, id)) EventVariant(id, () => _resolveVariant(kind, id)),
           ];
           if (variants.isEmpty) continue;
-          events.add(EventLayer(
+          final event = EventLayer(
             key: key,
             variants: variants,
             volume: MixRules.layerVolume(kind, scene.effectiveLevel(kind, layer.level)),
             interval: eventSound.interval,
             firstDelay: eventSound.firstDelay,
-          ));
+          );
+          events.add(event);
+          final storm = eventSound.storm;
+          if (storm != null) storms[event] = storm;
           continue;
         }
         // An ambiance neither bundled nor on the content server (test material, demo build
@@ -634,6 +639,10 @@ class RealAppModel extends AppModel implements PlaybackHost {
           offline = offline || e.offline;
         }
       }
+    }
+    for (var i = 0; i < events.length; i++) {
+      final storm = storms[events[i]];
+      if (storm != null) events[i] = _withStorm(events[i], storm, layers);
     }
     if (layers.isEmpty && events.isNotEmpty) {
       // Only event sounds (thunder alone): a parked, silent voice carries the session, so that
@@ -655,6 +664,31 @@ class RealAppModel extends AppModel implements PlaybackHost {
       ),
       failed: failed,
       offline: offline,
+    );
+  }
+
+  /// [event] with its storm sequences (contract § 11, `orage`): the published variants of each
+  /// part, and the audible loops of the mix ([loops]) that redouble or gust after a strike.
+  EventLayer _withStorm(EventLayer event, StormSpec storm, List<EngineLayer> loops) {
+    final byId = {for (final v in event.variants) v.id: v};
+    List<String> audible(List<String> ids) => [
+          for (final l in loops)
+            if (l.volume > 0 && ids.any((id) => l.key == MixRules.layerKey(LayerKind.son, id))) l.key,
+        ];
+    return EventLayer(
+      key: event.key,
+      variants: event.variants,
+      volume: event.volume,
+      interval: event.interval,
+      firstDelay: event.firstDelay,
+      storm: StormLayer(
+        parts: {
+          for (final e in storm.parts.entries) e.key: [for (final id in e.value) ?byId[id]],
+        },
+        weights: storm.weights,
+        averseKeys: audible(storm.averse),
+        rafaleKeys: audible(storm.rafale),
+      ),
     );
   }
 

@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import 'package:eventide/core/catalog.dart';
+import 'package:eventide/core/lightning.dart';
 import 'package:eventide/core/scene.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -164,10 +165,31 @@ void main() {
       final thunder = catalog.item(LayerKind.son, 'tonnerre')!;
       expect(thunder.playback, Playback.events);
       final events = thunder.events!;
-      expect(events.variants, [for (var i = 1; i <= 10; i++) 'tonnerre-${i.toString().padLeft(2, '0')}']);
+      List<String> ids(String part, int n) => [for (var i = 1; i <= n; i++) 'tonnerre-$part-0$i'];
+      final parts = {
+        StormPart.avant: ids('avant', 3),
+        StormPart.coup: ids('coup', 4),
+        StormPart.coupProche: ids('proche', 3),
+        StormPart.replique: ids('replique', 3),
+        StormPart.lointain: ids('lointain', 4),
+      };
+      expect(events.variants, [for (final l in parts.values) ...l], reason: 'every file of the storm');
       expect(events.interval, const SecondsRange(70, 170));
       expect(events.firstDelay, const SecondsRange(20, 60));
       expect(() => events.variants.add('x'), throwsUnsupportedError);
+      // Storm sequences from the real recording (contract § 11, `orage`).
+      final storm = events.storm!;
+      expect(storm.parts, parts);
+      expect(storm.weights, {StormKind.lointain: 25.0, StormKind.orage: 55.0, StormKind.proche: 20.0});
+      expect(storm.drawable, storm.weights);
+      expect(storm.averse, ['ambiance-pluie-ville', 'ambiance-toits-pluie', 'pluie-douce']);
+      expect(storm.rafale, ['vent']);
+      for (final id in [...storm.averse, ...storm.rafale]) {
+        final loop = catalog.item(LayerKind.son, id);
+        expect(loop, isNotNull, reason: id);
+        expect(loop!.events, isNull, reason: '$id is a loop');
+      }
+      expect(() => storm.parts[StormPart.coup]!.add('x'), throwsUnsupportedError);
       for (final s in catalog.sounds) {
         if (s.id != 'tonnerre') expect(s.events, isNull, reason: s.id);
       }
@@ -198,6 +220,34 @@ void main() {
       expect(odd.variants, ['a', 'b']);
       expect(odd.interval, EventSound.defaultInterval, reason: 'min > max');
       expect(odd.firstDelay, EventSound.defaultFirstDelay, reason: 'min must be > 0');
+      expect(odd.storm, isNull, reason: 'no `orage`: one variant per event');
+      final storm = parse({
+        'lecture': 'evenements',
+        'variantes': ['a', 'b', 'c', 'd'],
+        'orage': {
+          'parties': {
+            'coup': ['a', 'zz', 'a', 3],
+            'coup-proche': [],
+            'avant': 'b',
+            'eclair': ['c'],
+            'lointain': ['d'],
+          },
+          'sequences': {'orage': 2, 'proche': 1, 'lointain': 0, 'tempete': 4, 'variante': 1},
+          'averse': ['pluie-douce', 7],
+          'rafale': 'vent',
+        },
+      }).events!.storm!;
+      expect(storm.parts, {
+        StormPart.coup: ['a'],
+        StormPart.lointain: ['d'],
+      }, reason: 'unknown types, ids outside `variantes`, duplicates and empty lists are left out');
+      expect(storm.weights, {StormKind.orage: 2.0, StormKind.proche: 1.0});
+      expect(storm.drawable, {StormKind.orage: 2.0}, reason: 'no coup-proche part: proche is never drawn');
+      expect(storm.averse, ['pluie-douce']);
+      expect(storm.rafale, isEmpty);
+      final empty = parse({'lecture': 'evenements', 'variantes': ['a', 'b', 'c'], 'orage': {}}).events!.storm!;
+      expect(empty.drawable, isEmpty, reason: 'played as single variants');
+      expect(parse({'lecture': 'evenements', 'orage': 'oui'}).events!.storm, isNull);
       expect(SecondsRange.fromJson([2, 2.5]), const SecondsRange(2, 2.5));
       expect(SecondsRange.fromJson([1]), isNull);
       // Music and decor are never played by events.

@@ -28,7 +28,7 @@ Services : `storage.dart` (fichiers JSON), `api_client.dart` (API, jeton d'insta
 
 ## 3. Lecture audio
 
-- **Moteur** (`SoLoudAudioEngine`, `flutter_soloud` 5) : une voix en boucle par couche (sons et musiques ; les décors sont visuels), plus, de temps en temps, un **événement** joué une seule fois par-dessus (un coup de tonnerre : `playEvent`, § 18). Volume d'une couche = niveau / 100 × gain de catégorie (musique 0,8). Le volume global porte le plafond (0,85), la montée progressive, l'atténuation (*duck*), les fondus de pause et le fondu de fin.
+- **Moteur** (`SoLoudAudioEngine`, `flutter_soloud` 5) : une voix en boucle par couche (sons et musiques ; les décors sont visuels), plus, de temps en temps, des **événements** joués une seule fois par-dessus (les parties d'un orage : `playEvent`, § 18) et le bref gonflement d'une boucle après un coup de tonnerre (`swell`). Volume d'une couche = niveau / 100 × gain de catégorie (musique 0,8). Le volume global porte le plafond (0,85), la montée progressive, l'atténuation (*duck*), les fondus de pause et le fondu de fin.
 - Les fichiers sont **lus depuis le disque** (`LoadMode.disk`) : décodée en mémoire, une boucle stéréo pèse environ 18 Mo pour 47 s ; six couches sur toute une nuit seraient trop lourdes pour un téléphone d'entrée de gamme. Les boucles fournies se raccordent à l'échantillon près dans ce mode.
 - Départ de chaque couche à un endroit tiré au hasard (`seek`), longueurs de boucle différentes (23 à 47 s), légère variation lente et aléatoire du volume (± 7 % sur 20 s) : pas de répétition audible.
 - Changement de paysage : fondu enchaîné de 2 s (une couche commune aux deux paysages glisse simplement vers son nouveau niveau). Changement de niveau : 0,4 s.
@@ -346,33 +346,48 @@ Retour du product owner après la démo sur le Galaxy S24 : le son ne correspond
 - « Mon mix » ne la propose qu'avec son paysage (`CatalogItem.offeredWith`) ; une scène partagée qui la porte avec un autre paysage reste valide et la joue.
 - `ambiance-cascade-foret` est gratuite et embarquée ; `ambiance-pluie-ville` est Premium (S3) ; `ambiance-toits-pluie` vient d'une vidéo de tiers : démo seulement. Un son ni embarqué ni listé dans `remote.json` (`ContentRepository.isPublished`) est laissé de côté sans message : en production, `toits-pluie` joue sans son ambiance.
 
-### 18.2 Tonnerre : un son à événements
+### 18.2 Tonnerre : un son à événements, en séquences d'orage
 
-- `tonnerre` a `lecture: evenements` (`CatalogItem.events`, `EventSound`) : pas de boucle, mais une de ses dix variantes (`audio/sons/tonnerre-01.ogg`…) de temps en temps. Le contrôleur (`RealAppModel._prepare`) en fait une `EventLayer` (clé `son:tonnerre`, volume = niveau × gain de catégorie, 0 en sourdine) jointe à la `PlayRequest` ; chaque variante n'est trouvée (embarquée, en cache) ou téléchargée qu'au moment où un événement en a besoin, pendant l'éclair. Premium hors connexion : les variantes sont téléchargées avec les autres sons (`prefetchForOffline`).
-- **Ordonnanceur** (`EventSoundScheduler`, `lib/services/audio/event_scheduler.dart`), porté par `PlaybackHandler`, donc par le service audio en arrière-plan : le tonnerre continue écran éteint. Règles (contrat § 11) :
-  - premier événement `premier_s` (45 à 120 s) après le début de l'écoute, une reprise après pause, l'ajout du son ou son retour d'un niveau 0 ou de la sourdine ; ensuite un écart tiré dans `intervalle_s` (120 à 300 s) d'un événement au suivant ;
-  - variante au hasard, jamais une des deux dernières ; volume −6 à 0 dB, vitesse 0,92 à 1,08, position stéréo −0,4 à 0,4 (`StormRules`, `lib/core/lightning.dart`) ;
-  - jamais deux événements en même temps : un événement dû pendant qu'un autre sonne attend sa fin ;
-  - rien pendant une pause (la pause arrête aussi le tonnerre qui sonne), pendant le fondu de fin du minuteur, ni une fois arrêté ; niveau 0 ou sourdine : plus d'événement, et celui qui sonne s'éteint en fondu (`setEventVolume`) ; un changement de niveau s'applique aussi à celui qui sonne ;
-  - un fichier introuvable (hors connexion, absent) : cet événement est sauté, le suivant est prévu.
-- **Moteur** : `AudioEngine.playEvent` (une voix non bouclée par-dessus les couches, avec son gain, sa vitesse `setRelativePlaySpeed` et sa position `pan`, qui suit le volume global : montée, atténuation, fondu de fin) et `setEventVolume`. Le fichier est lu depuis le disque et libéré à la fin de l'événement.
-- **Le tonnerre seul** (toutes les autres couches retirées) : une voix silencieuse, garée (volume 0, jamais décodée), porte la séance (`carrier`), pour que pause, minuteur et carte de lecture fonctionnent comme avec n'importe quel mix.
+Retour du product owner (29 octobre 2026, soir) : le tonnerre synthétique sonnait artificiel, et « un tonnerre ne frappe jamais d'un coup seul : il y a des grondements qui suivent ou qui précèdent, des petits bruits qui vont avec ». Les dix variantes synthétiques sont remplacées par **17 parties tirées du vrai tonnerre** de la bande son de `pluie-ville`, pluie retirée (`tools/media/make_thunder.py`), que l'application assemble en **séquences** (contrat § 11, `orage` du catalogue).
+
+- `tonnerre` a `lecture: evenements` (`CatalogItem.events`, `EventSound`) et `orage` (`EventSound.storm`, `StormSpec` : parties par type, poids des genres de séquences, sons qui redoublent ou ont une rafale). Le contrôleur (`RealAppModel._prepare`) en fait une `EventLayer` (clé `son:tonnerre`, volume = niveau × gain de catégorie, 0 en sourdine) avec son `StormLayer` : les variantes publiées de chaque partie, et les clés des boucles du mix **audibles** qui redoublent (`orage.averse` : `son:ambiance-pluie-ville`, `son:ambiance-toits-pluie`, `son:pluie-douce`) ou ont une rafale (`orage.rafale` : `son:vent`). Recalculée à chaque changement du mix : une boucle retirée, à 0 ou en sourdine ne gonfle jamais. Chaque fichier n'est trouvé (embarqué, en cache) ou téléchargé qu'au début de l'événement qui en a besoin ; Premium hors connexion : toutes les parties sont téléchargées avec les autres sons (`prefetchForOffline`).
+- **Plans** (`StormRules.plan`, `lib/core/lightning.dart`, pur Dart) : un événement est un `StormPlan`, suite d'étapes datées depuis son début (`StormFlash`, `StormSound`, `StormSwell`). Genres (poids du catalogue : `lointain` 25, `orage` 55, `proche` 20) :
+
+| Genre | Déroulement |
+|---|---|
+| `lointain` | un roulement lointain seul ; 6 fois sur 10 sans éclair, sinon un éclair faible (0,12 à 0,25) et le roulement 3,5 à 6 s après |
+| `orage` | grondement doux (`avant`) dès le début ; éclair 2,5 à 5,5 s plus tard ; coup (`coup`) 1,2 à 3,5 s après l'éclair (intensité 0,83 à 0,35) ; 3 fois sur 10, une réplique 8 à 20 s après le coup |
+| `proche` | éclair dès le début (intensité 1 à 0,83) ; coup proche (`coup-proche`, claquement plus sec) 0,4 à 1,2 s après ; toujours une réplique 5 à 20 s après le coup |
+
+  - une réplique a, une fois sur deux, un éclair faible (0,15 à 0,3) 2 à 3,5 s avant elle, jamais moins de 3 s après l'éclair du coup (jamais de stroboscope) ;
+  - chaque partie : une variante de son type, jamais une des deux dernières jouées de ce type ; volume −3 à 0 dB (les fichiers portent déjà les écarts naturels), vitesse 0,92 à 1,08 ; une position stéréo par séquence (−0,4 à 0,4), chaque partie à ± 0,15 : l'orage vient d'une direction ;
+  - **petits bruits** après un coup joué : la pluie redouble de +1,5 à +3 dB (début 0,8 à 2,5 s après le coup, montée 2,5 à 4 s, palier 2 à 5 s, retour 6 à 10 s) ; le vent, s'il est dans le mix, a une rafale de +1,5 à +3 dB (début 0,3 à 1,5 s après, montée 0,8 à 1,5 s, palier 0,3 à 1 s, retour 3 à 5 s) ;
+  - sans `orage` dans le catalogue (ou si aucun genre n'a sa partie obligatoire publiée), chaque événement reste une variante seule après un éclair (`StormRules.singlePlan`, comportement d'avant).
+- **Ordonnanceur** (`EventSoundScheduler`, `lib/services/audio/event_scheduler.dart`), porté par `PlaybackHandler`, donc par le service audio en arrière-plan : l'orage continue **écran éteint** (éclairs annoncés, sons et gonflements passent par le moteur, sans l'interface). Règles :
+  - premier événement `premier_s` (20 à 60 s) après le début de l'écoute, une reprise après pause, l'ajout du son ou son retour d'un niveau 0 ou de la sourdine ; ensuite un écart tiré dans `intervalle_s` (70 à 170 s) du début d'un événement au début du suivant ;
+  - jamais deux événements en même temps : un événement dû pendant qu'un autre sonne attend une seconde après la fin de son dernier son ;
+  - au début d'un événement, ses fichiers sont demandés ; un éclair n'est annoncé qu'une fois prêt le fichier du son qu'il annonce (5 s d'attente au plus, le reste de la séquence est décalé d'autant) : le claquement suit toujours son éclair du délai tiré. Un fichier introuvable : ni ce son ni son éclair, la séquence continue ; le gonflement de la pluie n'a lieu qu'après un coup réellement joué ;
+  - rien pendant une pause (la pause arrête aussi ce qui sonne et abandonne la séquence), pendant le fondu de fin du minuteur, ni une fois arrêté ; niveau 0 ou sourdine : plus d'événement, la séquence en cours est abandonnée et ce qui sonne s'éteint en fondu (`setEventVolume`) ; un changement de niveau s'applique aussi à ce qui sonne et aux parties suivantes.
+- **Moteur** : `AudioEngine.playEvent` (une voix non bouclée par-dessus les couches, avec son gain, sa vitesse et sa position, qui suit le volume global ; fichier lu depuis le disque, libéré à la fin) et `setEventVolume`, comme avant ; plusieurs parties d'une même séquence peuvent sonner ensemble (la réplique sur la fin du roulement). Nouveau : `AudioEngine.swell` monte une boucle à son volume × le gain (jamais au-dessus de 1, `MixRules.maxLayerVolume` ; le plafond général `masterCap` ne change pas), la garde, puis la ramène à son volume. Une boucle absente, garée (sourdine) ou à 0 n'est pas touchée ; un changement de niveau, une pause ou un arrêt mettent fin au gonflement (la boucle revient à son volume) ; la dérive lente des volumes laisse la boucle tranquille pendant ce temps.
+- **Le tonnerre seul** (toutes les autres couches retirées) : une voix silencieuse, garée (volume 0, jamais décodée), porte la séance (`carrier`), pour que pause, minuteur et carte de lecture fonctionnent comme avec n'importe quel mix ; pas de gonflement (rien à gonfler).
 
 ### 18.3 Éclair synchronisé
 
-- Avant chaque tonnerre, l'ordonnanceur annonce un `LightningStrike` (`AppModel.lightningStrikes`, flux du service audio) : l'éclair est dessiné tout de suite, le tonnerre suit 0,4 à 3,5 s plus tard ; plus le délai est court, plus l'éclair est vif (`intensity` 1 à 0,35).
+- L'ordonnanceur annonce chaque éclair (`LightningStrike`, `AppModel.lightningStrikes`, flux du service audio) au moment où il doit être dessiné ; le son qu'il annonce suit après `thunderDelay` : 0,4 à 1,2 s pour un coup proche, 1,2 à 3,5 s pour un coup, 2 à 3,5 s pour une réplique, 3,5 à 6 s pour un roulement lointain. Plus le délai est court, plus l'éclair est vif (`intensity` 1 à 0,35) ; une réplique ou un roulement lointain n'a qu'un éclair faible (0,12 à 0,3), ou aucun.
 - Le décor (`DecorLayer`, `lib/ui/landscape/decor_layer.dart`) ne le dessine que si « Éclairs lointains » est dans la scène et que le paysage est visible (Accueil au premier plan, aucun écran par-dessus) ; sinon le tonnerre gronde sans éclair.
-- **Un éclair** : vif mais bref, un flash principal (montée en 30 ms) et un second plus faible à 0,3 s, fini en 0,6 s ; jamais de stroboscope (deux flashs au plus, bien sous le seuil de 3 par seconde). La lumière vient d'un point du ciel tiré au hasard ; pour un éclair proche, toute l'image s'éclaire un peu.
+- **Un éclair** : vif mais bref, un flash principal (montée en 30 ms) et un second plus faible à 0,3 s, fini en 0,6 s ; jamais de stroboscope (deux flashs au plus, bien sous le seuil de 3 par seconde ; deux éclairs d'une même séquence sont à 3 s au moins). La lumière vient d'un point du ciel tiré au hasard ; pour un éclair proche, toute l'image s'éclaire un peu.
 - **« Réduire les animations »** : une simple lueur douce du ciel (montée et descente en 1,6 s, intensité 0,35 au plus).
 - **Sans tonnerre dans le mix** (aucun son à événements au-dessus de 0, `Catalog.hasEventSound`) : le décor fait ses propres éclairs, rares (un toutes les 2 à 5 minutes de paysage visible) et silencieux. Avec un tonnerre dans le mix, il n'en fait aucun de lui-même (même en pause : pas de tonnerre, pas d'éclair).
 
 ### 18.4 À vérifier sur le Galaxy S24
 
 1. `pluie-ville` : ambiance de pluie dense, sans tonnerre dans la boucle ni raccord audible (67 s) ; la vidéo n'a plus d'éclair.
-2. Premier tonnerre entre 20 s et 1 min après la lecture, puis toutes les 70 s à 3 min environ (resserré le 29 octobre 2026 à la demande du product owner), jamais deux fois le même de suite ; éclair juste avant, puis le grondement.
-3. Écran éteint 20 min : les tonnerres continuent (service au premier plan) ; pause : plus rien ; reprise : un nouveau délai.
-4. Sourdine des sons : plus de tonnerre ; « Réduire les animations » : lueur douce seulement.
-5. Mix « tonnerre seul » : la séance tient (minuteur, carte de lecture).
+2. **Naturel du tonnerre** (le point du retour du 29 octobre) : grondements avant et après, roulement qui s'éloigne au lieu de s'arrêter net, pas de pluie « fantôme » ni de gargouillis dans le roulement, pas de doublement de la pluie pendant le claquement ; la pluie qui redouble après un coup fort doit se sentir sans se remarquer.
+3. **Volume** au niveau 50 : le coup dépasse l'ambiance d'environ 7 LU (comme les anciens coups les plus forts), le roulement s'entend 8 à 13 s aux écouteurs, 5 à 12 s sur le haut-parleur ; grondements avant et roulements lointains sont discrets sur haut-parleur. Si c'est trop fort ou trop faible : `MASTER_GAIN_DB` de `make_thunder.py`, ou le niveau par défaut du tonnerre.
+4. Premier événement entre 20 s et 1 min après la lecture, puis toutes les 70 s à 3 min environ ; jamais deux fois la même séquence ; éclair juste avant chaque claquement, faible ou absent pour un roulement lointain.
+5. Écran éteint 20 min : les orages continuent (service au premier plan) ; pause : plus rien, et la pluie revient à son niveau ; reprise : un nouveau délai.
+6. Sourdine des sons : plus de tonnerre ni de gonflement ; « Réduire les animations » : lueur douce seulement.
+7. Mix « tonnerre seul » : la séance tient (minuteur, carte de lecture).
 
 ## 19. Plantage au défilement des paysages dessinés et garde-fou
 
