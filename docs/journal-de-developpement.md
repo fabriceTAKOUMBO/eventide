@@ -1,5 +1,23 @@
 # Journal de développement — Eventide
 
+## 29 octobre 2026 (nuit) — nom, icône, police, vrai tonnerre, scènes 3D
+
+**Décisions du product owner** :
+- **Nom : « Full Relax »** : aucune application ni marque trouvée sous ce nom (recherche web, à confirmer sur TMview/EUIPO). Titre Play envisagé : « Full Relax : Relaxing & Sleep ». Renommage à faire après l'intégration des scènes 3D : seulement ce que l'utilisateur voit. Les noms techniques et l'infrastructure (`eventide`, `ev-`) ne changent pas. **À trancher avant publication** : l'identifiant d'application (`be.cinaf.eventide`), définitif une fois sur Play.
+- **Icône** : photo d'orage générée par Gemini **à partir d'un texte seul** (confirmé ; source `medias-bruts/icone/`, outil `tools/media/make_icon_from_photo.py`), cadrage « A » avec l'éclair et les feuilles mouillées ; icône à thème : silhouette d'éclair et de feuille. Une image d'une vidéo YouTube de tiers a été écartée (droits).
+- **Police « Galerie »** (option 2) : Cormorant Garamond 500 (italique pour les noms de paysages) et Manrope 400/500, capitales espacées pour les boutons ; **beaucoup moins de texte**, surtout dans les réglages. Le logotype garde Fraunces en attendant le renommage.
+- **Décor non modifiable sur les vidéos réelles** ; nouvelle catégorie **« Imaginaire »** de scènes 3D (Three.js), où l'utilisateur ajoute des éléments ([contrat § 12](api/contrat-v1.md)). Les anciens paysages dessinés en 2D sont retirés.
+  - Six scènes : forêt aux lucioles (gratuite), lac sous la lune, aurore boréale, jardin zen, mer de nuages, ondes lumineuses.
+  - **L'intégration est prête mais pas fusionnée** : le product owner valide d'abord les scènes dans un aperçu (artifact) ; l'agent des scènes travaille encore.
+  - **Correction** : une scène WebGL tourne sur le processeur graphique du processus de l'app. Un plantage du pilote arrêterait donc l'app ; la garde de démarrage et l'affichage de l'image fixe ensuite limitent le problème.
+- **Tonnerre refait à partir du vrai enregistrement** de la vidéo `pluie-ville` (« un tonnerre ne frappe jamais d'un coup seul ») :
+  - tonnerre séparé de la pluie, roulements prolongés, 17 morceaux réels ;
+  - orages composés : grondement lointain seul (25 %), grondement puis éclair puis coup et roulement (55 %), coup proche suivi d'une réplique (20 %) ;
+  - la pluie forcit après un coup ; les faux tonnerres sont supprimés ([contrat § 11](api/contrat-v1.md)).
+- **Fond d'écran** : il disparaît à la désinstallation (comportement d'Android), ce qui convient au product owner.
+
+**Vérifications** : 494 tests de l'app, 204 de l'API ; CI 40946895427 verte. Démo S24 : artefact 12929833664 (tonnerre réel, police, icône ; sans les scènes 3D).
+
 ## 29 octobre 2026 (soir) — plantage au bout du thème Nature, tonnerre, police
 
 - **Plantage reproductible**, trouvé par le product owner : en faisant défiler le thème Nature jusqu'au dernier paysage (`lisiere-verte`), l'app s'arrêtait. Elle s'arrêtait ensuite **à chaque démarrage**, et il fallait la réinstaller.
