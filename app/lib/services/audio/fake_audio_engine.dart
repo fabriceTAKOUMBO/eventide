@@ -100,8 +100,64 @@ class FakeAudioEngine implements AudioEngine {
     this.ducked = ducked;
   }
 
+  /// Events played ([playEvent]), oldest first.
+  final List<FakeEvent> events = [];
+
+  /// Length of every event file (its duration is this / speed).
+  Duration eventLength = const Duration(seconds: 10);
+
+  /// Layer volume of each event key after [setEventVolume].
+  final Map<String, double> eventVolumes = {};
+
+  @override
+  Future<Duration?> playEvent(
+    String key,
+    AudioSourceRef source, {
+    required double volume,
+    double gain = 1.0,
+    double speed = 1.0,
+    double pan = 0.0,
+  }) async {
+    // Like the real engine: nothing while paused or stopped.
+    if (layers.isEmpty || _paused) return null;
+    final duration = Duration(microseconds: (eventLength.inMicroseconds / speed).round());
+    events.add(FakeEvent(key, source, volume: volume, gain: gain, speed: speed, pan: pan, duration: duration));
+    calls.add('event:$key');
+    return duration;
+  }
+
+  @override
+  Future<void> setEventVolume(String key, double volume, {Duration fade = MixRules.levelFade}) async {
+    calls.add('eventVolume:$key:${volume.toStringAsFixed(2)}');
+    eventVolumes[key] = volume;
+  }
+
   @override
   Future<void> dispose() async {
     layers = const [];
   }
+}
+
+/// One [FakeAudioEngine.playEvent] call.
+class FakeEvent {
+  const FakeEvent(
+    this.key,
+    this.source, {
+    required this.volume,
+    required this.gain,
+    required this.speed,
+    required this.pan,
+    required this.duration,
+  });
+
+  final String key;
+  final AudioSourceRef source;
+  final double volume;
+  final double gain;
+  final double speed;
+  final double pan;
+  final Duration duration;
+
+  @override
+  String toString() => 'FakeEvent($key, $source)';
 }

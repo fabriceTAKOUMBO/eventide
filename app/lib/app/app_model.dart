@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../core/catalog.dart';
 import '../core/landscape_media.dart';
+import '../core/lightning.dart';
 import '../core/plan.dart';
 import '../core/problem_report.dart' show AppExit;
 import '../core/scene.dart';
@@ -291,4 +292,11 @@ abstract class AppModel extends ChangeNotifier {
   /// Copies the landscape's looping video to the Gallery (`Movies/Eventide`), for lock screens
   /// that only take a Gallery video. Android 10+ only; false when nothing was saved.
   Future<bool> saveLandscapeVideoToGallery(String landscapeId) async => false;
+
+  // ---- Storm (contract § 11)
+
+  /// A lightning flash announced just before each thunder of the mix: the `eclairs` decor draws
+  /// it when the landscape is visible, the thunder follows [LightningStrike.thunderDelay] later.
+  /// Concrete default (no thunder) so that fakes and previews need not implement it.
+  Stream<LightningStrike> get lightningStrikes => const Stream.empty();
 }

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:eventide/core/catalog.dart';
 import 'package:eventide/core/scene.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -12,7 +14,7 @@ void main() {
     expect(catalog.themes.map((t) => t.id), ['nature', 'urbain', 'astral']);
     expect(catalog.themes.first.name, 'Nature');
     expect(catalog.landscapes, hasLength(12));
-    expect(catalog.sounds, hasLength(10));
+    expect(catalog.sounds, hasLength(13));
     expect(catalog.music, hasLength(8));
     expect(catalog.decors, hasLength(9));
   });
@@ -36,8 +38,9 @@ void main() {
     expect(cascade.free, isTrue);
     expect(cascade.style, 'cascade');
     expect(cascade.aliases, contains('cascade en forêt'));
+    // Its ambiance (the sound of its video) first (contract § 11).
     expect(cascade.defaultMix[LayerKind.son], const [
-      Layer(id: 'eau-vive', level: 60),
+      Layer(id: 'ambiance-cascade-foret', level: 60),
       Layer(id: 'oiseaux', level: 40),
       Layer(id: 'vent', level: 30),
     ]);
@@ -129,6 +132,97 @@ void main() {
       }
     },
   );
+
+  group('ambiances and sounds played by events (contract § 11)', () {
+    test('each landscape ambiance belongs to its landscape and comes first', () {
+      final ambiances = catalog.sounds.where((s) => s.isAmbiance).toList();
+      expect(ambiances.map((s) => s.id), [
+        'ambiance-cascade-foret',
+        'ambiance-pluie-ville',
+        'ambiance-toits-pluie',
+      ]);
+      for (final s in ambiances) {
+        final landscape = catalog.landscape(s.landscapeId!)!;
+        expect(s.free, landscape.free, reason: s.id);
+        expect(s.playback, Playback.loop);
+        expect(landscape.defaultMix[LayerKind.son]!.first.id, s.id);
+        expect(catalog.ambianceOf(landscape.id), same(s));
+      }
+      expect(catalog.item(LayerKind.son, 'ambiance-pluie-ville')!.name, 'Ambiance de la ville');
+      expect(catalog.ambianceOf('lune-lac'), isNull);
+      expect(catalog.item(LayerKind.son, 'vent')!.landscapeId, isNull);
+    });
+
+    test('an ambiance is offered with its landscape only', () {
+      final pluie = catalog.item(LayerKind.son, 'ambiance-pluie-ville')!;
+      expect(pluie.offeredWith('pluie-ville'), isTrue);
+      expect(pluie.offeredWith('cascade-foret'), isFalse);
+      expect(catalog.item(LayerKind.son, 'vent')!.offeredWith('pluie-ville'), isTrue);
+    });
+
+    test('tonnerre is played by events, with its variants and ranges', () {
+      final thunder = catalog.item(LayerKind.son, 'tonnerre')!;
+      expect(thunder.playback, Playback.events);
+      final events = thunder.events!;
+      expect(events.variants, [for (var i = 1; i <= 10; i++) 'tonnerre-${i.toString().padLeft(2, '0')}']);
+      expect(events.interval, const SecondsRange(120, 300));
+      expect(events.firstDelay, const SecondsRange(45, 120));
+      expect(() => events.variants.add('x'), throwsUnsupportedError);
+      for (final s in catalog.sounds) {
+        if (s.id != 'tonnerre') expect(s.events, isNull, reason: s.id);
+      }
+      // The storm landscapes: their ambiance, the thunder, the lightning decor.
+      for (final id in ['pluie-ville', 'toits-pluie']) {
+        final mix = catalog.landscape(id)!.defaultMix;
+        expect(mix[LayerKind.son]!.map((l) => l.id), ['ambiance-$id', 'tonnerre'], reason: id);
+        expect(mix[LayerKind.decor]!.map((l) => l.id), contains('eclairs'), reason: id);
+      }
+    });
+
+    test('defaults and lenient parsing', () {
+      CatalogItem parse(Map<String, dynamic> json) =>
+          CatalogItem.fromJson({'id': 'orage', 'nom': 'Orage', 'gratuit': false, ...json}, LayerKind.son);
+      expect(parse({}).playback, Playback.loop);
+      expect(parse({'lecture': 'boucle'}).events, isNull);
+      expect(parse({'paysage': ''}).landscapeId, isNull);
+      final bare = parse({'lecture': 'evenements'}).events!;
+      expect(bare.variants, ['orage'], reason: 'no variants: its own file');
+      expect(bare.interval, EventSound.defaultInterval);
+      expect(bare.firstDelay, EventSound.defaultFirstDelay);
+      final odd = parse({
+        'lecture': 'evenements',
+        'variantes': ['a', 3, 'b'],
+        'intervalle_s': [300, 120],
+        'premier_s': [0, 10],
+      }).events!;
+      expect(odd.variants, ['a', 'b']);
+      expect(odd.interval, EventSound.defaultInterval, reason: 'min > max');
+      expect(odd.firstDelay, EventSound.defaultFirstDelay, reason: 'min must be > 0');
+      expect(SecondsRange.fromJson([2, 2.5]), const SecondsRange(2, 2.5));
+      expect(SecondsRange.fromJson([1]), isNull);
+      // Music and decor are never played by events.
+      expect(
+        CatalogItem.fromJson({'id': 'x', 'nom': 'X', 'lecture': 'evenements'}, LayerKind.musique).events,
+        isNull,
+      );
+    });
+
+    test('SecondsRange.draw stays in the range', () {
+      const range = SecondsRange(45, 120);
+      final random = Random(3);
+      for (var i = 0; i < 200; i++) {
+        final d = range.draw(random).inMicroseconds / 1e6;
+        expect(d, inInclusiveRange(45, 120));
+      }
+    });
+
+    test('hasEventSound: thunder above level 0 in the scene', () {
+      final pluie = Scene.fromLandscape(catalog.landscape('pluie-ville')!);
+      expect(catalog.hasEventSound(pluie), isTrue);
+      expect(catalog.hasEventSound(pluie.withoutLayer(LayerKind.son, 'tonnerre')), isFalse);
+      expect(catalog.hasEventSound(Scene.fromLandscape(catalog.landscape('cascade-foret')!)), isFalse);
+    });
+  });
 
   test('LayerKind mapping', () {
     expect(LayerKind.son.cible, 'son');

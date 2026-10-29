@@ -54,9 +54,10 @@ class _MixSheetState extends State<MixSheet> {
     final active = scene.layers(_kind);
     final muted = model.categoryMuted(_kind);
     final activeIds = {for (final l in active) l.id};
+    // A landscape's ambiance (the sound of its video) is offered with that landscape only.
     final available = [
       for (final item in catalog.items(_kind))
-        if (!activeIds.contains(item.id)) item,
+        if (!activeIds.contains(item.id) && item.offeredWith(scene.landscapeId)) item,
     ];
 
     return VitreSheet(

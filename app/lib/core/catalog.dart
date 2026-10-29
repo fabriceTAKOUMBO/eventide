@@ -3,6 +3,8 @@
 // Source of truth: `assets/catalog.json` (shared with the API). The JSON keys
 // are French (`nom`, `gratuit`, `alias`, `limites`...), the Dart API is English.
 
+import 'dart:math' as math;
+
 import 'scene.dart';
 
 /// The three kinds of layers a scene can hold.
@@ -46,6 +48,65 @@ enum LayerKind {
   }
 }
 
+/// A `[min, max]` range of seconds of the catalog (`intervalle_s`, `premier_s`), `0 < min <= max`.
+class SecondsRange {
+  const SecondsRange(this.min, this.max);
+
+  final double min;
+  final double max;
+
+  /// A duration drawn uniformly in the range.
+  Duration draw(math.Random random) =>
+      Duration(microseconds: ((min + (max - min) * random.nextDouble()) * 1e6).round());
+
+  /// Parses `[min, max]`; null unless both are numbers with `0 < min <= max`.
+  static SecondsRange? fromJson(Object? json) {
+    if (json is! List || json.length != 2) return null;
+    final [lo, hi] = json;
+    if (lo is! num || hi is! num || lo <= 0 || lo > hi) return null;
+    return SecondsRange(lo.toDouble(), hi.toDouble());
+  }
+
+  @override
+  bool operator ==(Object other) => other is SecondsRange && other.min == min && other.max == max;
+
+  @override
+  int get hashCode => Object.hash(min, max);
+
+  @override
+  String toString() => '[$min, $max] s';
+}
+
+/// How a sound is played (`lecture`, contract § 11).
+enum Playback {
+  /// `boucle` (default): one seamless loop.
+  loop,
+
+  /// `evenements`: short sounds now and then ([EventSound]), never twice the same.
+  events,
+}
+
+/// The event part of a sound played by events (contract § 11): its variant files
+/// (`audio/sons/<variant>.ogg`), the random gap between two events and the delay of the first.
+class EventSound {
+  EventSound({
+    required List<String> variants,
+    this.interval = defaultInterval,
+    this.firstDelay = defaultFirstDelay,
+  }) : variants = List.unmodifiable(variants);
+
+  final List<String> variants;
+
+  /// `intervalle_s`: gap drawn at random between two events.
+  final SecondsRange interval;
+
+  /// `premier_s`: delay of the first event after the start, a resume or the addition of the sound.
+  final SecondsRange firstDelay;
+
+  static const SecondsRange defaultInterval = SecondsRange(120, 300);
+  static const SecondsRange defaultFirstDelay = SecondsRange(45, 120);
+}
+
 /// A sound, a music or a decor effect of the catalog.
 class CatalogItem {
   CatalogItem({
@@ -54,6 +115,8 @@ class CatalogItem {
     required this.free,
     required List<String> aliases,
     required this.kind,
+    this.landscapeId,
+    this.events,
   }) : aliases = List.unmodifiable(aliases);
 
   final String id;
@@ -69,13 +132,43 @@ class CatalogItem {
 
   final LayerKind kind;
 
+  /// `paysage`: the landscape this sound belongs to (its ambiance, the sound of its video,
+  /// contract § 11). « Mon mix » offers it only with that landscape. Null for every other item.
+  final String? landscapeId;
+
+  /// Played by events (`lecture: evenements`), or null for a loop.
+  final EventSound? events;
+
+  Playback get playback => events == null ? Playback.loop : Playback.events;
+
+  /// The ambiance of a landscape (see [landscapeId]).
+  bool get isAmbiance => landscapeId != null;
+
+  /// « Mon mix » lists this item next to [landscape]: everything except the ambiance of
+  /// another landscape.
+  bool offeredWith(String landscape) => landscapeId == null || landscapeId == landscape;
+
   factory CatalogItem.fromJson(Map<String, dynamic> json, LayerKind kind) {
+    final id = _string(json, 'id');
+    final landscape = json['paysage'];
+    EventSound? events;
+    if (kind == LayerKind.son && json['lecture'] == 'evenements') {
+      final variants = _stringList(json['variantes']);
+      events = EventSound(
+        // A sound by events without variants plays its own file.
+        variants: variants.isEmpty ? [id] : variants,
+        interval: SecondsRange.fromJson(json['intervalle_s']) ?? EventSound.defaultInterval,
+        firstDelay: SecondsRange.fromJson(json['premier_s']) ?? EventSound.defaultFirstDelay,
+      );
+    }
     return CatalogItem(
-      id: _string(json, 'id'),
+      id: id,
       name: _string(json, 'nom'),
       free: json['gratuit'] == true,
       aliases: _stringList(json['alias']),
       kind: kind,
+      landscapeId: landscape is String && landscape.isNotEmpty ? landscape : null,
+      events: events,
     );
   }
 
@@ -315,6 +408,20 @@ class Catalog {
   /// The landscape opened on first launch: the first free one.
   Landscape get defaultLandscape =>
       landscapes.firstWhere((l) => l.free, orElse: () => landscapes.first);
+
+  /// The ambiance of [landscapeId] (contract § 11), or null.
+  CatalogItem? ambianceOf(String landscapeId) {
+    for (final s in sounds) {
+      if (s.landscapeId == landscapeId) return s;
+    }
+    return null;
+  }
+
+  /// [scene] holds a sound played by events (thunder) above level 0: the `eclairs` decor then
+  /// follows its strikes instead of flashing on its own (contract § 11).
+  bool hasEventSound(Scene scene) => scene
+      .layers(LayerKind.son)
+      .any((l) => l.level > 0 && item(LayerKind.son, l.id)?.events != null);
 }
 
 String _string(Map<String, dynamic> json, String key) {

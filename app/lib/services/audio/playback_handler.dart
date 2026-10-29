@@ -10,15 +10,18 @@
 // (PlaybackHost.mediaCard); its buttons go back to the host, which uses the app's own paths.
 // Play/pause only ever changes the sound: nothing here touches the landscape video.
 import 'dart:async';
+import 'dart:math';
 
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 
+import '../../core/lightning.dart';
 import '../../core/media_card.dart';
 import '../../core/scene.dart';
 import '../native_bridge.dart';
 import 'audio_engine.dart';
 import 'audio_focus.dart';
+import 'event_scheduler.dart';
 import 'media_card_controls.dart';
 
 /// What to play, prepared by the app (content already resolved).
@@ -31,6 +34,7 @@ class PlayRequest {
     this.subtitle,
     this.rampUp = Duration.zero,
     this.scheduleId,
+    this.events = const [],
   });
 
   final String landscapeId;
@@ -49,6 +53,9 @@ class PlayRequest {
 
   /// Set when this playback was started by a schedule.
   final String? scheduleId;
+
+  /// Sounds played by events (thunder, contract § 11), scheduled by [EventSoundScheduler].
+  final List<EventLayer> events;
 }
 
 enum StopReason {
@@ -130,7 +137,9 @@ class PlaybackHandler extends BaseAudioHandler {
     required this._native,
     DateTime Function()? now,
     this._nightMaxHours = 10,
-  }) : _now = now ?? DateTime.now {
+    Random? random,
+  })  : _now = now ?? DateTime.now,
+        _events = EventSoundScheduler(engine: _engine, now: now ?? DateTime.now, random: random) {
     _focusSub = _focus.changes.listen(_onFocusChange);
     _noisySub = _focus.becomingNoisy.listen((_) {
       if (_status.playing) pause();
@@ -143,6 +152,13 @@ class PlaybackHandler extends BaseAudioHandler {
   final NativeBridge _native;
   final DateTime Function() _now;
   int _nightMaxHours;
+
+  /// Sounds played by events (thunder): here, in the background audio service, so they go on
+  /// with the screen off; nothing during a pause, the end-of-timer fade, or once stopped.
+  final EventSoundScheduler _events;
+
+  /// A lightning flash just before each thunder (contract § 11), for the `eclairs` decor.
+  Stream<LightningStrike> get lightningStrikes => _events.strikes;
 
   late final StreamSubscription<FocusChange> _focusSub;
   late final StreamSubscription<void> _noisySub;
@@ -339,7 +355,8 @@ class PlaybackHandler extends BaseAudioHandler {
     if (_ending != null) return;
     final ending = _ending = Completer<void>();
     final reason = _timerIsNightLimit ? StopReason.nightLimit : StopReason.timer;
-    // The bar stays full during the fade.
+    // The bar stays full during the fade; no new event during it (contract § 11).
+    _events.stop();
     _publish(_status);
     try {
       // Fade of 30 s, then a full stop; the screen is not woken up (nothing to do here for that).
@@ -363,6 +380,7 @@ class PlaybackHandler extends BaseAudioHandler {
       timer: setting,
       rampUp: current.rampUp,
       scheduleId: current.scheduleId,
+      events: current.events,
     );
     if (_status.playing) {
       _startTimer(setting);
@@ -405,6 +423,11 @@ class PlaybackHandler extends BaseAudioHandler {
     _publish(_copyStatus(playing: true, paused: false, loading: false, timerEndsAt: _endsAt()));
     try {
       await _engine.start(request.layers, rampUp: request.rampUp);
+      if (wasPlaying) {
+        _events.update(request.events);
+      } else {
+        _events.start(request.events);
+      }
     } catch (e) {
       // No audio device, broken file…: back to idle, the UI stays usable and says so.
       debugPrint('PlaybackHandler: start failed ($e)');
@@ -440,6 +463,7 @@ class PlaybackHandler extends BaseAudioHandler {
       timer: _current!.timer,
       rampUp: _current!.rampUp,
       scheduleId: _current?.scheduleId,
+      events: request.events,
     );
     _publishMedia();
     if (request.layers.isEmpty) {
@@ -447,6 +471,7 @@ class PlaybackHandler extends BaseAudioHandler {
       return;
     }
     await _engine.update(request.layers, fade: crossFade ? MixRules.crossFade : (fade ?? MixRules.levelFade));
+    _events.update(request.events);
     _publish(_copyStatus(timerEndsAt: _endsAt()));
   }
 
@@ -482,6 +507,7 @@ class PlaybackHandler extends BaseAudioHandler {
       if (!await _focus.activate()) return;
       await _engine.resume();
       if (_current == null) return; // stopped meanwhile
+      _events.resume();
       _pausedByInterruption = false;
       _listenResume();
       _resumeTimer();
@@ -526,6 +552,7 @@ class PlaybackHandler extends BaseAudioHandler {
   @override
   Future<void> pause() async {
     if (!_status.playing) return;
+    _events.pause();
     await _engine.pause();
     if (_current == null) return; // ended meanwhile (end-of-timer fade)
     _listenPause();
@@ -538,6 +565,7 @@ class PlaybackHandler extends BaseAudioHandler {
     _generation++;
     _timer?.cancel();
     _timer = null;
+    _events.stop();
     if (_current != null || _status.loading) {
       await _engine.stop();
       await _finish(StopReason.user);
@@ -591,6 +619,7 @@ class PlaybackHandler extends BaseAudioHandler {
   Future<void> seek(Duration position) async {}
 
   Future<void> _finish(StopReason reason) async {
+    _events.stop();
     _timer?.cancel();
     _timer = null;
     _timerRemaining = null;
@@ -636,6 +665,7 @@ class PlaybackHandler extends BaseAudioHandler {
     await _focusSub.cancel();
     await _noisySub.cancel();
     _timer?.cancel();
+    _events.dispose();
     await _engine.dispose();
   }
 }

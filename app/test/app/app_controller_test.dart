@@ -70,6 +70,7 @@ class Harness {
     bool demo = false,
     AudioEngine? engineOverride,
     Set<String> bundledMedia = const {},
+    Set<String> notBundled = const {},
     RemoteLandscapeMedia remoteMedia = RemoteLandscapeMedia.none,
     Directory? contentDirectory,
     MediaArtwork? artwork,
@@ -88,7 +89,7 @@ class Harness {
       directory: contentDirectory ?? Directory('/nonexistent/eventide-content'),
       client: client,
       api: api,
-      bundledAssets: () async => {...allBundledAudio(catalog), ...bundledMedia},
+      bundledAssets: () async => {...allBundledAudio(catalog), ...bundledMedia}.difference(notBundled),
       connectivity: connectivity,
       remoteMedia: () async => remoteMedia,
     );
@@ -142,8 +143,8 @@ void main() {
       expect(model.browsedLandscapeLocked, isFalse);
       await model.play();
       expect(model.playing, isTrue);
-      expect(h.engine.activeKeys, {'son:eau-vive', 'son:oiseaux', 'son:vent', 'musique:piano-doux'});
-      expect(h.engine.volumeOf('son:eau-vive'), closeTo(0.6, 1e-9));
+      expect(h.engine.activeKeys, {'son:ambiance-cascade-foret', 'son:oiseaux', 'son:vent', 'musique:piano-doux'});
+      expect(h.engine.volumeOf('son:ambiance-cascade-foret'), closeTo(0.6, 1e-9));
       // The default melody (20 %) sits under the sounds (music gain 0.8).
       expect(h.engine.volumeOf('musique:piano-doux'), closeTo(0.16, 1e-9));
       expect(model.timerEndsAt, h.now.add(const Duration(hours: 1)));
@@ -244,13 +245,13 @@ void main() {
       expect(model.scene.audioLayerCount, 6);
       model.setLayerLevel(LayerKind.musique, 'nappes-apaisantes', 30);
       expect((await h.got<ToastEvent>()).single.message, contains('6 sons au maximum'));
-      model.setLayerLevel(LayerKind.son, 'eau-vive', 80);
+      model.setLayerLevel(LayerKind.son, 'ambiance-cascade-foret', 80);
       await settle();
-      expect(h.engine.volumeOf('son:eau-vive'), closeTo(0.8, 1e-9));
+      expect(h.engine.volumeOf('son:ambiance-cascade-foret'), closeTo(0.8, 1e-9));
       expect(h.engine.volumeOf('musique:piano-doux'), closeTo(0.24, 1e-9));
-      model.setLayerLevel(LayerKind.son, 'eau-vive', 0);
+      model.setLayerLevel(LayerKind.son, 'ambiance-cascade-foret', 0);
       await settle();
-      expect(h.engine.activeKeys.contains('son:eau-vive'), isFalse);
+      expect(h.engine.activeKeys.contains('son:ambiance-cascade-foret'), isFalse);
       // Decor is visual only.
       model.setLayerLevel(LayerKind.decor, 'lucioles', 50);
       await settle();
@@ -272,7 +273,7 @@ void main() {
       expect(h.engine.activeKeys, contains('musique:piano-doux'));
       expect(h.engine.parkedKeys, {'musique:piano-doux'});
       expect(h.engine.lastFade, MixRules.muteFade);
-      expect(h.engine.volumeOf('son:eau-vive'), closeTo(0.6, 1e-9));
+      expect(h.engine.volumeOf('son:ambiance-cascade-foret'), closeTo(0.6, 1e-9));
       expect(model.scene.levelOf(LayerKind.musique, 'piano-doux'), 20);
       expect(model.playing, isTrue);
 
@@ -307,7 +308,7 @@ void main() {
       expect(model.playing, isTrue);
       expect(model.soundsMuted || model.musicMuted, isFalse);
       expect(h.engine.parkedKeys, isEmpty);
-      expect(h.engine.volumeOf('son:eau-vive'), closeTo(0.6, 1e-9));
+      expect(h.engine.volumeOf('son:ambiance-cascade-foret'), closeTo(0.6, 1e-9));
     });
 
     test('a muted category with the other one audible still starts muted', () async {
@@ -380,10 +381,10 @@ void main() {
       final model = await h.start();
       await model.play();
       expect(h.engine.entryFades['musique:piano-doux'], MixRules.musicEntry);
-      expect(h.engine.entryFades['son:eau-vive'], const Duration(seconds: 2));
+      expect(h.engine.entryFades['son:ambiance-cascade-foret'], const Duration(seconds: 2));
       // Every music layer comes back over 3 s after a pause; the sounds follow the master.
       final music = h.engine.layers.firstWhere((l) => l.key == 'musique:piano-doux');
-      final sound = h.engine.layers.firstWhere((l) => l.key == 'son:eau-vive');
+      final sound = h.engine.layers.firstWhere((l) => l.key == 'son:ambiance-cascade-foret');
       expect(music.resumeFade, MixRules.musicResume);
       expect(sound.resumeFade, isNull);
 
@@ -529,7 +530,7 @@ void main() {
       await settle();
       expect(model.playing, isTrue);
       expect(h.handler.mediaItem.value?.displayDescription, 'C’est l’heure de vous détendre');
-      expect(h.handler.mediaItem.value?.artist, 'Eau vive · Oiseaux · Vent · Piano doux');
+      expect(h.handler.mediaItem.value?.artist, 'Ambiance de la cascade · Oiseaux · Vent · Piano doux');
     });
 
     test('a scheduled « dormir » start opens a night when tracking is on', () async {
@@ -903,14 +904,14 @@ void main() {
       final model = await h.start();
       expect(card().landscapeId, 'cascade-foret');
       expect(card().title, 'Cascade en forêt');
-      expect(card().artist, 'Eau vive · Oiseaux · Vent · Piano doux');
+      expect(card().artist, 'Ambiance de la cascade · Oiseaux · Vent · Piano doux');
       expect(card().previousId, isNull);
       expect(card().nextId, 'sous-bois');
       expect(card().favorite, isFalse);
       await model.play();
       final item = h.handler.mediaItem.value!;
       expect(item.title, 'Cascade en forêt');
-      expect(item.artist, 'Eau vive · Oiseaux · Vent · Piano doux');
+      expect(item.artist, 'Ambiance de la cascade · Oiseaux · Vent · Piano doux');
       expect(item.album, 'Eventide');
       expect(item.duration, const Duration(hours: 1));
       expect(actions(), [MediaAction.pause, MediaAction.skipToNext, MediaAction.custom, MediaAction.custom]);
@@ -968,7 +969,7 @@ void main() {
       expect(h.handler.mediaItem.value!.title, 'Sous-bois ensoleillé');
       expect(h.handler.mediaItem.value!.artist, 'Vent · Oiseaux · Nappes apaisantes');
       expect(model.scene.landscapeId, 'cascade-foret', reason: 'the sound waits for the browse pause');
-      expect(h.engine.activeKeys, contains('son:eau-vive'));
+      expect(h.engine.activeKeys, contains('son:ambiance-cascade-foret'));
       await settle(150);
       expect(model.scene.landscapeId, 'sous-bois');
       expect(h.engine.activeKeys, {'son:vent', 'son:oiseaux', 'musique:nappes-apaisantes'});
@@ -1006,10 +1007,10 @@ void main() {
       expect(await h.got<ToastEvent>(), isEmpty);
       // Three favourites (the free limit) of other mixes, from the app.
       for (final level in [10, 20, 30]) {
-        model.setLayerLevel(LayerKind.son, 'eau-vive', level);
+        model.setLayerLevel(LayerKind.son, 'ambiance-cascade-foret', level);
         await model.toggleFavorite();
       }
-      model.setLayerLevel(LayerKind.son, 'eau-vive', 45);
+      model.setLayerLevel(LayerKind.son, 'ambiance-cascade-foret', 45);
       await settle();
       h.events.clear();
       await h.handler.customAction(MediaCardActions.favorite);
@@ -1211,6 +1212,84 @@ void main() {
       await model.landscapeVideo('cascade-foret');
       expect(model.playing, isTrue);
       expect(h.engine.calls, calls);
+    });
+  });
+
+  group('storm: ambiance and thunder (contract § 11)', () {
+    test('pluie-ville plays its ambiance and schedules the thunder, flashes announced to the UI', () async {
+      final model = await h.start(plan: Plan.annual);
+      model.selectLandscape('pluie-ville');
+      await settle();
+      await model.play();
+      expect(model.playing, isTrue);
+      expect(h.engine.activeKeys, {'son:ambiance-pluie-ville', 'musique:piano-doux'},
+          reason: 'the thunder is not a loop');
+      expect(h.engine.volumeOf('son:ambiance-pluie-ville'), closeTo(0.7, 1e-9));
+      final events = h.handler.current!.events;
+      expect(events.map((e) => e.key), ['son:tonnerre']);
+      expect(events.single.volume, closeTo(0.5, 1e-9));
+      expect(events.single.variants.map((v) => v.id), [
+        for (var i = 1; i <= 10; i++) 'tonnerre-${i.toString().padLeft(2, '0')}',
+      ]);
+      expect(events.single.interval, const SecondsRange(120, 300));
+      expect(events.single.firstDelay, const SecondsRange(45, 120));
+      expect(
+        await events.single.variants.first.resolve(),
+        const AssetAudioSource('assets/audio/sons/tonnerre-01.ogg'),
+      );
+      expect(model.lightningStrikes, h.handler.lightningStrikes, reason: "the audio service's strikes");
+      expect(model.catalog.hasEventSound(model.scene), isTrue);
+    });
+
+    test('muting the sounds or level 0 silences the thunder', () async {
+      final model = await h.start(plan: Plan.annual);
+      model.selectLandscape('pluie-ville');
+      await settle();
+      await model.play();
+      model.setCategoryMuted(LayerKind.son, true);
+      await settle();
+      expect(h.handler.current!.events.single.volume, 0);
+      expect(h.engine.calls, contains('eventVolume:son:tonnerre:0.00'));
+      model.setCategoryMuted(LayerKind.son, false);
+      await settle();
+      expect(h.handler.current!.events.single.volume, closeTo(0.5, 1e-9));
+      model.setLayerLevel(LayerKind.son, 'tonnerre', 0);
+      await settle();
+      expect(h.handler.current!.events, isEmpty);
+    });
+
+    test('the thunder alone still plays: a silent parked voice carries the session', () async {
+      final model = await h.start(plan: Plan.annual);
+      model.selectLandscape('pluie-ville');
+      await settle();
+      model.setLayerLevel(LayerKind.son, 'ambiance-pluie-ville', 0);
+      model.setLayerLevel(LayerKind.musique, 'piano-doux', 0);
+      await settle();
+      await model.play();
+      expect(model.playing, isTrue);
+      expect(h.engine.activeKeys, {'carrier'});
+      expect(h.engine.volumeOf('carrier'), 0);
+      expect(h.handler.current!.events.single.key, 'son:tonnerre');
+    });
+
+    test('an ambiance the server does not have (test material) is left out without a message', () async {
+      final model = await h.start(
+        plan: Plan.annual,
+        notBundled: {
+          'assets/audio/sons/ambiance-toits-pluie.ogg',
+          for (var i = 4; i <= 10; i++) 'assets/audio/sons/tonnerre-${i.toString().padLeft(2, '0')}.ogg',
+        },
+        remoteMedia: const RemoteLandscapeMedia(sounds: {'ambiance-pluie-ville', 'tonnerre-01'}),
+      );
+      model.selectLandscape('toits-pluie');
+      await settle();
+      h.events.clear();
+      await model.play();
+      expect(model.playing, isTrue);
+      expect(h.engine.activeKeys, {'musique:cordes-lentes'});
+      expect(await h.got<ToastEvent>(), isEmpty);
+      expect(h.handler.current!.events.single.variants.map((v) => v.id), ['tonnerre-01', 'tonnerre-02', 'tonnerre-03'],
+          reason: 'bundled or listed variants are kept, the others are left out');
     });
   });
 }

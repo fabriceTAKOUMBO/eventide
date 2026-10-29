@@ -457,7 +457,13 @@ class _HomeScreenState extends State<HomeScreen>
                       current: false,
                     ),
                   Positioned.fill(
-                    child: DecorLayer(effects: decor, active: !dragging),
+                    child: DecorLayer(
+                      effects: decor,
+                      active: !dragging,
+                      // Contract § 11: a flash before each thunder, or rare silent ones.
+                      lightningStrikes: model.lightningStrikes,
+                      thunderInMix: model.catalog.hasEventSound(model.scene),
+                    ),
                   ),
                   const Positioned.fill(
                     child: IgnorePointer(

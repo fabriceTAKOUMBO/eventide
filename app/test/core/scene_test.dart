@@ -143,7 +143,7 @@ void main() {
       final scene = Scene.fromLandscape(catalog.landscape('cascade-foret')!);
       expect(scene.landscapeId, 'cascade-foret');
       expect(scene.moment, Moment.jour);
-      expect(scene.sounds.map((l) => l.id), ['eau-vive', 'oiseaux', 'vent']);
+      expect(scene.sounds.map((l) => l.id), ['ambiance-cascade-foret', 'oiseaux', 'vent']);
       expect(scene.music, const [Layer(id: 'piano-doux', level: 20)]);
       expect(scene.decor, const [Layer(id: 'brume', level: 30)]);
       expect(scene.timer, const TimerDuration(60));
@@ -180,7 +180,7 @@ void main() {
     test('updates, adds, clamps', () {
       final louder = base.withLevel(LayerKind.son, 'vent', 80);
       expect(louder.levelOf(LayerKind.son, 'vent'), 80);
-      expect(louder.sounds.map((l) => l.id), ['eau-vive', 'oiseaux', 'vent']);
+      expect(louder.sounds.map((l) => l.id), ['ambiance-cascade-foret', 'oiseaux', 'vent']);
       final added = base.withLevel(LayerKind.musique, 'piano-doux', 130);
       expect(added.music, const [Layer(id: 'piano-doux', level: 100)]);
       expect(base.withLevel(LayerKind.son, 'vent', 30), same(base));
@@ -230,7 +230,7 @@ void main() {
 
     test('withoutLayer', () {
       expect(base.withoutLayer(LayerKind.son, 'vent').sounds.map((l) => l.id), [
-        'eau-vive',
+        'ambiance-cascade-foret',
         'oiseaux',
       ]);
       expect(base.withoutLayer(LayerKind.son, '*').sounds, isEmpty);
@@ -254,7 +254,7 @@ void main() {
         expect(muted.music, base.music);
         expect(muted.levelOf(LayerKind.musique, 'piano-doux'), 20);
         expect(muted.effectiveLevelOf(LayerKind.musique, 'piano-doux'), 0);
-        expect(muted.effectiveLevelOf(LayerKind.son, 'eau-vive'), 60);
+        expect(muted.effectiveLevelOf(LayerKind.son, 'ambiance-cascade-foret'), 60);
         expect(muted.withMuted(LayerKind.musique, false), base);
         expect(muted.withMuted(LayerKind.musique, true), same(muted));
         expect(base.withMuted(LayerKind.musique, false), same(base));

@@ -23,10 +23,18 @@ Optional steps, per item (see ITEMS):
     is compressed (soft knee to +15 % of the baseline, at most +6 % per frame),
     pixel by pixel against a per-pixel baseline (median of the nearest quiet
     frames), so that only what the flash brightened is dimmed;
+  * ``remove_flashes``: lightning is **removed** from the picture (the app draws
+    its own flashes, in sync with the thunder: contract § 11). Every frame of a
+    flash (with a 2-frame margin) is replaced by the cross-fade of the two quiet
+    frames around it, on Y, U and V: the sky glow and the bolts disappear, the
+    drops on the glass stay where they are. Used with the ``fewest-flashes``
+    segment;
   * ``segment``: ``full`` (whole source, or the ``span`` of source frames given
     when the source has a defect, e.g. a generation discontinuity), ``avoid-flashes`` (longest loop whose
     two fade windows contain no flash, with a 2-frame margin, so that a flash is
-    never cut in half by the cross-fade) or ``best-match`` (loop length in a
+    never cut in half by the cross-fade), ``fewest-flashes`` (loop of at least
+    ``min_loop_s`` whose fade windows are quiet and that holds the fewest flash
+    frames, so that the fewest frames are replaced) or ``best-match`` (loop length in a
     range, fade windows chosen where the two moments look most alike on a
     blurred luma, to avoid ghosting).
 
@@ -58,12 +66,13 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+from remote_manifest import REMOTE_MANIFEST, write_remote_manifest
+
 REPO = Path(__file__).resolve().parents[2]
 CATALOG = REPO / "app" / "assets" / "catalog.json"
 BUNDLED_DIR = REPO / "app" / "assets" / "landscapes"      # free items (in the APK)
 CONTENT_DIR = REPO / "content"                             # Premium items (S3 keys)
 TEST_DIR = REPO / "medias-test"                            # test-only, non-distributable
-REMOTE_MANIFEST = BUNDLED_DIR / "remote.json"
 
 MAX_BYTES = 2_500_000
 POSTER_QUALITY = 85
@@ -77,6 +86,11 @@ FLASH_MARGIN = 2             # frames kept free around a flash in fade windows
 FLASH_CAP = 0.15             # max brightness rise, fraction of the baseline luma
 FLASH_MAX_RISE = 0.06        # max rise per frame, fraction of the baseline luma
 FLASH_BASELINE_FRAMES = 8    # quiet frames in the per-pixel baseline median
+FLASH_GLOW_RADIUS = 12       # remove_flashes: box radius (px) splitting glow from detail
+FLASH_BOLT_LEVEL = 14.0      # detail this much brighter than the reference: bolt or lit drop
+FLASH_BOLT_GROW = 3          # px added around a bolt
+FLASH_DETAIL_CAP = 6.0       # detail kept elsewhere, +- levels (drops, rain)
+FLASH_GLOW_FULL = 4.0        # glow (levels) above which only the reference is shown
 
 
 @dataclass(frozen=True)
@@ -85,10 +99,12 @@ class Item:
     source: str                                  # relative to the repository
     fade_s: float = 1.5
     min_fade_s: float | None = None              # avoid-flashes may shorten the fade
-    segment: str = "full"                        # full | avoid-flashes | best-match
+    segment: str = "full"                        # full | avoid-flashes | fewest-flashes | best-match
     span: tuple[int, int] | None = None          # full: source frames [start, end) to use
     loop_range_s: tuple[float, float] | None = None
     soften_flashes: bool = False
+    remove_flashes: bool = False                 # lightning drawn by the app, not the video
+    min_loop_s: float = 4.0                      # avoid-flashes / fewest-flashes: shortest loop
     crop_aspect: tuple[int, int] | None = None
     grade: dict = field(default_factory=dict)
     test_only: bool = False                      # third-party: medias-test/ only
@@ -102,12 +118,15 @@ ITEMS = [
     # jumps: luma difference 10.4 against 1.9 between other frames, then 4.0): only
     # frames 63-239 are used, so the loop never shows that jolt.
     Item("cascade-foret", "medias-bruts/videos/cascade-foret.mp4", span=(63, 240)),
+    # Seven flashes in 10 s, with bolts: removed from the picture (the app's `eclairs` decor
+    # draws the lightning, just before each thunder, contract § 11).
     Item(
         "pluie-ville",
         "medias-bruts/videos/pluie-ville.mp4",
         min_fade_s=0.8,
-        segment="avoid-flashes",
-        soften_flashes=True,
+        segment="fewest-flashes",
+        min_loop_s=7.0,              # as long as before (7.6 s): 88 frames replaced
+        remove_flashes=True,
     ),
     # Third-party test material (YouTube): internal tests only, demo build only.
     Item(
@@ -349,6 +368,104 @@ def soften_flashes(pl: Planes, fl: Flashes, lo: int, hi: int) -> list[dict]:
     return report
 
 
+def box_blur(x: np.ndarray, radius: int, passes: int = 2) -> np.ndarray:
+    """Separable box blur (edges clamped); two passes approximate a Gaussian."""
+    out = x.astype(np.float32)
+    for _ in range(passes):
+        for axis in (0, 1):
+            pad = [(0, 0), (0, 0)]
+            pad[axis] = (radius + 1, radius)
+            c = np.cumsum(np.pad(out, pad, mode="edge"), axis=axis, dtype=np.float64)
+            k = 2 * radius + 1
+            out = ((np.take(c, range(k, c.shape[axis]), axis=axis)
+                    - np.take(c, range(0, c.shape[axis] - k), axis=axis)) / k).astype(np.float32)
+    return out
+
+
+def dilate(mask: np.ndarray, radius: int) -> np.ndarray:
+    out = mask.copy()
+    for axis in (0, 1):
+        grown = out.copy()
+        for k in range(1, radius + 1):
+            grown |= np.roll(out, k, axis=axis) | np.roll(out, -k, axis=axis)
+        out = grown
+    return out
+
+
+def remove_flash_frames(pl: Planes, fl: Flashes, lo: int, hi: int) -> list[dict]:
+    """Removes the lightning from every frame of [lo, hi) that is not quiet (a flash, with its
+    margin), in place.
+
+    Reference: the cross-fade ``ref`` of the nearest quiet frames before and after the flash.
+    The difference ``d = frame - ref`` is split into a smooth part (blur: the sky glow, the
+    light on the whole scene) and a detail part (drops sliding on the glass, rain, flicker of
+    the city lights; but also the bolts and the drops lit by the flash):
+      * the smooth part is dropped where it brightens (the glow);
+      * the detail part is kept within +-FLASH_DETAIL_CAP where the flash does not reach (the
+        city below keeps moving: a plain cross-fade would freeze the whole picture for up to
+        2 s); where the glow exceeds FLASH_GLOW_FULL levels, and on the bolts and lit drops
+        (dilated mask), only the reference is shown. The glow is estimated without the bolts,
+        so no outline is left where a bolt was;
+      * chroma follows the reference, with its fine detail kept within +-2 levels where
+        the luma keeps its own detail.
+    """
+    quiet_idx = np.flatnonzero(fl.quiet)
+    report = []
+    for a, b in runs(~fl.quiet[lo:hi]):
+        a, b = a + lo, b + lo
+        before = quiet_idx[quiet_idx < a]
+        after = quiet_idx[quiet_idx >= b]
+        q0 = int(before[-1]) if before.size else None
+        q1 = int(after[0]) if after.size else None
+        if q0 is None and q1 is None:
+            raise SystemExit("remove_flashes: no quiet frame in the source")
+        q0 = q1 if q0 is None else q0
+        q1 = q0 if q1 is None else q1
+        peak = float(luma_means(pl.y[a:b]).max())
+        masked = []
+        for i in range(a, b):
+            w = 0.0 if q1 == q0 else (i - q0) / (q1 - q0)
+
+            def ref(plane, w=w, q0=q0, q1=q1):
+                return (1 - w) * plane[q0].astype(np.float32) + w * plane[q1].astype(np.float32)
+
+            ref_y = ref(pl.y)
+            d = pl.y[i].astype(np.float32) - ref_y
+            bolt = dilate(d - box_blur(d, FLASH_GLOW_RADIUS) > FLASH_BOLT_LEVEL, FLASH_BOLT_GROW)
+            masked.append(float(bolt.mean()))
+            # Glow estimated without the bolts (normalised convolution): no dark halo where a
+            # bolt was.
+            keep = (~bolt).astype(np.float32)
+            smooth = box_blur(d * keep, FLASH_GLOW_RADIUS) / np.maximum(
+                box_blur(keep, FLASH_GLOW_RADIUS), 1e-3)
+            # Where the flash lights the scene, the reference only (no lit outline is left);
+            # where it does not reach (the city below), the frame's own detail.
+            own = np.clip(1.0 - np.maximum(smooth, 0.0) / FLASH_GLOW_FULL, 0.0, 1.0)
+            detail = np.where(bolt, 0.0, own * np.clip(d - smooth, -FLASH_DETAIL_CAP, FLASH_DETAIL_CAP))
+            pl.y[i] = np.clip(np.rint(ref_y + np.minimum(smooth, 0.0) + detail), 0, 255)
+            h2, w2 = pl.u.shape[1:]
+            own_c = (np.where(bolt, 0.0, own)[: h2 * 2, : w2 * 2]
+                     .reshape(h2, 2, w2, 2).min(axis=(1, 3)))
+            for plane in (pl.u, pl.v):
+                ref_c = ref(plane)
+                dc = plane[i].astype(np.float32) - ref_c
+                dc -= box_blur(dc, max(1, FLASH_GLOW_RADIUS // 2))
+                plane[i] = np.clip(np.rint(ref_c + own_c * np.clip(dc, -2.0, 2.0)), 0, 255)
+        report.append({"frames": [a, b - 1], "quiet_before": q0, "quiet_after": q1,
+                       "peak_luma_before": round(peak, 1),
+                       "peak_luma_after": round(float(luma_means(pl.y[a:b]).max()), 1),
+                       "bolt_mask_max_pct": round(100 * max(masked), 2)})
+    return report
+
+
+def max_luma_jump(y: np.ndarray, circular: bool = False) -> float:
+    """Largest frame-to-frame change of the mean luma (a flash is a jump of tens of levels)."""
+    m = luma_means(y)
+    if circular:
+        m = np.concatenate([m, m[:1]])
+    return float(np.abs(np.diff(m)).max())
+
+
 def small_luma(y: np.ndarray, block: int = 16) -> np.ndarray:
     n, h, w = y.shape
     hb, wb = h // block, w // block
@@ -382,9 +499,34 @@ def choose_segment(item: Item, n: int, fps: Fraction, small: np.ndarray, fl: Fla
         return Segment(lo, fade, hi - lo - fade, window_cost(small, lo, hi - lo - fade, fade))
     if item.span:
         raise SystemExit(f"{item.id}: span is only used by the full segment mode")
+    if item.segment == "fewest-flashes":
+        # Every flash frame of the loop is replaced (remove_flashes): the fewest such frames,
+        # then the longest loop, then the most alike fade windows. A flash run must have a
+        # quiet frame on each side inside the segment (the cross-fade window is quiet).
+        min_fade = round((item.min_fade_s or item.fade_s) * fps)
+        min_loop = round(item.min_loop_s * fps)
+        noisy = np.concatenate([[0], np.cumsum(~fl.quiet)])
+        best_key, best = None, None
+        for f in range(fade, min_fade - 1, -1):
+            ok = [p for p in range(n - f + 1) if fl.quiet[p : p + f].all()]
+            for a in ok:
+                for c in ok:
+                    loop = c - a
+                    if loop < max(min_loop, f):
+                        continue
+                    count = int(noisy[a + loop] - noisy[a])
+                    key = (count, -loop, -f)
+                    if best_key is not None and key > best_key:
+                        continue
+                    cand = Segment(a, f, loop, window_cost(small, a, loop, f))
+                    if best_key is None or key < best_key or cand.cost < best.cost:
+                        best_key, best = key, cand
+        if best is None:
+            raise SystemExit(f"{item.id}: no loop of {item.min_loop_s} s with quiet fade windows")
+        return best
     if item.segment == "avoid-flashes":
         min_fade = round((item.min_fade_s or item.fade_s) * fps)
-        min_loop = round(4 * fps)
+        min_loop = round(item.min_loop_s * fps)
         best: Segment | None = None
         for f in range(fade, min_fade - 1, -1):
             ok = [p for p in range(n - f + 1) if fl.quiet[p : p + f].all()]
@@ -546,6 +688,8 @@ def measure(video: Path) -> dict:
         "join_over_median": round(join / med, 2) if med else None,
         "keyframe_step_mean": round(float(np.mean(key_steps)), 3) if key_steps else None,
         "mean_luma": round(float(luma_means(pl.y).mean()), 1),
+        # Largest frame-to-frame change of the mean luma, loop join included (lightning).
+        "max_luma_jump": round(max_luma_jump(pl.y, circular=True), 2),
         "planes": pl,
     }
 
@@ -626,6 +770,24 @@ def process(item: Item, free_ids: set[str], sheets: Path | None, check_only: boo
         result["segment"] = {"start": seg.start, "end": seg.end, "fade_frames": seg.fade,
                              "fade_s": round(seg.fade / float(p.fps), 3), "loop_frames": seg.loop,
                              "window_cost": round(seg.cost, 3)}
+        if item.remove_flashes:
+            seg_y = pl.y[seg.start : seg.start + seg.loop]
+            jump_before = max_luma_jump(seg_y)
+            removed = remove_flash_frames(pl, fl, seg.start, seg.end)
+            after = luma_means(pl.y)
+            loop_means = after[seg.start : seg.start + seg.loop]
+            result["flashes"] = {
+                "mode": "removed",
+                "baseline_median": round(float(np.median(fl.baseline)), 1),
+                "events_in_source": len(fl.events()),
+                "replaced": removed,
+                "frames_replaced": sum(r["frames"][1] - r["frames"][0] + 1 for r in removed),
+                "max_luma_jump_before": round(jump_before, 2),
+                "max_luma_jump_after": round(max_luma_jump(pl.y[seg.start : seg.start + seg.loop]), 2),
+                "max_excess_after": round(float((loop_means - fl.baseline[seg.start : seg.start + seg.loop]).max()), 2),
+                "fade_windows_quiet": bool(fl.quiet[seg.start : seg.start + seg.fade].all()
+                                           and fl.quiet[seg.start + seg.loop : seg.end].all()),
+            }
         if item.soften_flashes:
             events = [(a, b, round(float(means[a:b].max()), 1)) for a, b in fl.events()]
             softened = soften_flashes(pl, fl, seg.start, seg.end)
@@ -665,22 +827,6 @@ def process(item: Item, free_ids: set[str], sheets: Path | None, check_only: boo
     return result
 
 
-def write_remote_manifest() -> dict:
-    """Which Premium landscapes have a video / an image on S3 (content/): the app asks
-    for these keys only (POST /content/urls), never for missing ones."""
-    def ids(folder: Path, ext: str) -> list[str]:
-        return sorted(f.stem for f in folder.glob(f"*{ext}")) if folder.exists() else []
-
-    manifest = {
-        "version": 1,
-        "videos": ids(CONTENT_DIR / "videos" / "paysages", ".mp4"),
-        "images": ids(CONTENT_DIR / "images" / "paysages", ".jpg"),
-    }
-    BUNDLED_DIR.mkdir(parents=True, exist_ok=True)
-    REMOTE_MANIFEST.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    return manifest
-
-
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--only", nargs="*", help="landscape ids to process")
@@ -717,7 +863,16 @@ def main() -> int:
             s = r["segment"]
             print(f"  source frames {s['start']}..{s['end'] - 1}, fade {s['fade_frames']} frames "
                   f"({s['fade_s']} s), raw join was {r['source_join_diff']}")
-        if "flashes" in r:
+        if "flashes" in r and r["flashes"].get("mode") == "removed":
+            f = r["flashes"]
+            for e in f["replaced"]:
+                print(f"  flash {e['frames']} removed: luma {e['peak_luma_before']} -> {e['peak_luma_after']}"
+                      f" (cross-fade of frames {e['quiet_before']} and {e['quiet_after']})")
+            print(f"  {f['frames_replaced']} frames replaced; max frame-to-frame luma jump in the loop "
+                  f"{f['max_luma_jump_before']} -> {f['max_luma_jump_after']} (encoded, join included: "
+                  f"{o['max_luma_jump']}); max excess over the baseline {f['max_excess_after']}; "
+                  f"fade windows flash-free: {f['fade_windows_quiet']}")
+        elif "flashes" in r:
             f = r["flashes"]
             for e in f["events"]:
                 print(f"  flash {e['frames']}: luma {e['peak_luma_before']} -> {e['peak_luma_after']}"

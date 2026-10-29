@@ -80,7 +80,18 @@ class ContentRepository {
     return _cachedFile(contentKey(kind, id)).exists();
   }
 
-  /// Resolves a layer. [allowNetwork] false: only bundled or cached content.
+  /// The file of [id] can be had: bundled, already downloaded, or on the content server
+  /// (`remote.json` lists it, or has no list for that folder). False for a test-only ambiance
+  /// in the production build: it is then never requested (contract § 8 and § 11).
+  Future<bool> isPublished(LayerKind kind, String id) async {
+    if (await isAvailableOffline(kind, id)) return true;
+    final remote = await _remoteSet();
+    final listed = kind == LayerKind.son ? remote.sounds : remote.music;
+    return listed == null || listed.contains(id);
+  }
+
+  /// Resolves a layer (or a variant of an event sound: its file is `audio/sons/<variant>.ogg`).
+  /// [allowNetwork] false: only bundled or cached content.
   Future<AudioSourceRef> resolve(LayerKind kind, String id, {required bool allowNetwork}) async {
     final asset = assetKey(kind, id);
     if ((await _assetSet()).contains(asset)) return AssetAudioSource(asset);
@@ -88,6 +99,8 @@ class ContentRepository {
     final cached = _cachedFile(key);
     if (await cached.exists()) return FileAudioSource(cached.path);
     if (!allowNetwork) throw ContentUnavailableException(key, offline: true);
+    // Never a request for a file the server does not have.
+    if (!await isPublished(kind, id)) throw ContentUnavailableException(key);
     final file = await _download(key);
     return FileAudioSource(file.path);
   }
@@ -216,8 +229,9 @@ class ContentRepository {
     }
   }
 
-  /// Premium offline: downloads every audio item in the background, one at a time, then the
-  /// landscape posters (small; videos are fetched when their landscape is shown).
+  /// Premium offline: downloads every audio item in the background (the variants of the event
+  /// sounds included), one at a time, then the landscape posters (small; videos are fetched
+  /// when their landscape is shown).
   /// With « Téléchargements en Wi-Fi seulement », runs only on Wi-Fi/Ethernet.
   Future<int> prefetchForOffline(Catalog catalog, {required bool wifiOnly}) async {
     if (_prefetching) return 0;
@@ -227,13 +241,17 @@ class ContentRepository {
       if (wifiOnly && !await _connectivity.isUnmetered()) return 0;
       for (final kind in [LayerKind.son, LayerKind.musique]) {
         for (final item in catalog.items(kind)) {
-          if (await isAvailableOffline(kind, item.id)) continue;
-          if (wifiOnly && !await _connectivity.isUnmetered()) return downloaded;
-          try {
-            await _download(contentKey(kind, item.id));
-            downloaded++;
-          } on ContentUnavailableException catch (e) {
-            if (e.offline) return downloaded;
+          // A sound played by events is its variants' files (contract § 11).
+          for (final id in item.events?.variants ?? [item.id]) {
+            if (await isAvailableOffline(kind, id)) continue;
+            if (!await isPublished(kind, id)) continue;
+            if (wifiOnly && !await _connectivity.isUnmetered()) return downloaded;
+            try {
+              await _download(contentKey(kind, id));
+              downloaded++;
+            } on ContentUnavailableException catch (e) {
+              if (e.offline) return downloaded;
+            }
           }
         }
       }

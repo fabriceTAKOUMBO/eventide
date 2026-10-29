@@ -346,6 +346,8 @@ void main() {
       tester,
     ) async {
       usePhoneView(tester);
+      // A taller phone: the rows added below the sheet's first screen stay on screen.
+      tester.view.physicalSize = const Size(390 * 3, 1200 * 3);
       final model = FakeAppModel();
       await pumpApp(tester, model);
       await openRoute(tester, Routes.mix, (_) => const MixSheet());
@@ -390,16 +392,16 @@ void main() {
         expect(label('Sons de nature en sourdine'), findsOneWidget);
         expect(find.text('En sourdine, niveaux gardés'), findsOneWidget);
         // Rows stay, dimmed, with their level.
-        expect(model.scene.levelOf(LayerKind.son, 'eau-vive'), 60);
+        expect(model.scene.levelOf(LayerKind.son, 'ambiance-cascade-foret'), 60);
         expect(find.text('60 %'), findsOneWidget);
         expect(
           find.byWidgetPredicate((w) => w is Opacity && w.opacity == 0.5),
           findsNWidgets(3),
         );
-        expect(label(RegExp('Eau vive, en sourdine')), findsOneWidget);
+        expect(label(RegExp('Ambiance de la cascade, en sourdine')), findsOneWidget);
         // Still adjustable: a step unmutes the category.
-        await tapLabel(tester, 'Augmenter eau vive');
-        expect(model.scene.levelOf(LayerKind.son, 'eau-vive'), 70);
+        await tapLabel(tester, 'Augmenter ambiance de la cascade');
+        expect(model.scene.levelOf(LayerKind.son, 'ambiance-cascade-foret'), 70);
         expect(model.soundsMuted, isFalse);
         // (The header may have scrolled off while reaching the row.)
         expect(find.text('Activés', skipOffstage: false), findsOneWidget);
@@ -434,7 +436,7 @@ void main() {
         Offset(box.width - 20, 0),
       );
       await settle(tester);
-      expect(model.scene.levelOf(LayerKind.son, 'eau-vive'), 100);
+      expect(model.scene.levelOf(LayerKind.son, 'ambiance-cascade-foret'), 100);
       await tearDownApp(tester);
     });
 
@@ -706,7 +708,7 @@ void main() {
       expect(find.text('Réseau lent, encore un instant…'), findsOneWidget);
       model.loadingAudio = false;
       await settle(tester);
-      expect(find.text('Eau vive · Oiseaux · Vent'), findsOneWidget);
+      expect(find.text('Ambiance de la cascade · Oiseaux · Vent'), findsOneWidget);
       await tearDownApp(tester);
     });
 

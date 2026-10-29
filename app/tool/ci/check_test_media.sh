@@ -3,8 +3,9 @@
 # NON-DISTRIBUTABLE. Only the demo build copies it into its assets, at build time
 # (tool/ci/bundle_demo_media.sh). This check fails when any of it is committed where a
 # distributed build or the content server would pick it up: under content/ (S3) or app/assets/
-# (every APK), whether by name (videos/paysages/<id>.mp4, images/paysages/<id>.jpg) or as an
-# identical file anywhere in those trees.
+# (every APK), whether by name (videos/paysages/<id>.mp4, images/paysages/<id>.jpg, and the
+# ambiances audio/sons/<id>.ogg made from their soundtrack) or as an identical file anywhere in
+# those trees.
 #
 # Usage: check_test_media.sh [repo-root]   (run on a clean checkout, before any demo copy)
 set -euo pipefail
@@ -42,6 +43,13 @@ for poster in "$test_dir"/images/paysages/*.jpg; do
   done
 done
 
+for sound in "$test_dir"/audio/sons/*.ogg; do
+  id="$(basename "$sound" .ogg)"
+  for target in "content/audio/sons/$id.ogg" "app/assets/audio/sons/$id.ogg"; do
+    [[ -e "$repo/$target" ]] && problems+=("$target (same ambiance as medias-test/audio/sons/$id.ogg)")
+  done
+done
+
 # 2. By content: any file of medias-test/ (originals and processed loops) copied elsewhere.
 declare -A test_hashes=()
 while IFS= read -r -d '' file; do
@@ -56,7 +64,7 @@ for tree in content app/assets; do
     if [[ -n "${test_hashes[$hash]:-}" ]]; then
       problems+=("${file#"$repo"/} (identical to ${test_hashes[$hash]})")
     fi
-  done < <(find "$repo/$tree" -type f \( -name '*.mp4' -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.png' -o -name '*.webm' -o -name '*.mov' \) -print0)
+  done < <(find "$repo/$tree" -type f \( -name '*.mp4' -o -name '*.jpg' -o -name '*.jpeg' -o -name '*.png' -o -name '*.webm' -o -name '*.mov' -o -name '*.ogg' \) -print0)
 done
 
 echo "medias-test/: ${#test_hashes[@]} file(s), checked against content/ and app/assets/"

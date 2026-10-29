@@ -17,14 +17,14 @@ void main() {
 
   group('mix summary (card subtitle)', () {
     test('sounds then music, in mix order, with the catalog names', () {
-      expect(mixSummary(sceneOf('cascade-foret'), catalog), 'Eau vive · Oiseaux · Vent · Piano doux');
+      expect(mixSummary(sceneOf('cascade-foret'), catalog), 'Ambiance de la cascade · Oiseaux · Vent · Piano doux');
       expect(mixSummary(sceneOf('sous-bois'), catalog), 'Vent · Oiseaux · Nappes apaisantes');
     });
 
     test('a muted category is left out; everything muted: « Son en sourdine »', () {
       final scene = sceneOf('cascade-foret');
       expect(mixSummary(scene.withMuted(LayerKind.son, true), catalog), 'Piano doux');
-      expect(mixSummary(scene.withMuted(LayerKind.musique, true), catalog), 'Eau vive · Oiseaux · Vent');
+      expect(mixSummary(scene.withMuted(LayerKind.musique, true), catalog), 'Ambiance de la cascade · Oiseaux · Vent');
       final silent = scene.withMuted(LayerKind.son, true).withMuted(LayerKind.musique, true);
       expect(mixSummary(silent, catalog), mediaCardMutedSummary);
       expect(mediaCardMutedSummary, 'Son en sourdine');

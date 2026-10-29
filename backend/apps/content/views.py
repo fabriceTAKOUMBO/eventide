@@ -23,7 +23,8 @@ KEY_RE = re.compile(
     r"(audio/sons|audio/musiques|images/paysages|videos/paysages)/([a-z0-9-]{1,64})\.(ogg|jpg|mp4)"
 )
 # (prefix, extension) -> catalog section; any other pair is refused. A landscape's still image
-# and its video are both gated by the landscape's own ``gratuit`` flag.
+# and its video are both gated by the landscape's own ``gratuit`` flag; a variant of an event
+# sound (``audio/sons/tonnerre-01.ogg``, contract § 11) by its sound's.
 LAYOUT = {
     ("audio/sons", "ogg"): "sons",
     ("audio/musiques", "ogg"): "musiques",
@@ -55,9 +56,14 @@ def parse_keys(data: object) -> list[tuple[str, str, str]]:
     for key in keys:
         match = KEY_RE.fullmatch(key) if isinstance(key, str) else None
         section = LAYOUT.get((match.group(1), match.group(3))) if match else None
-        if section is None or not catalog.has(section, match.group(2)):
+        if section is None:
             raise InvalidRequest()
-        parsed.append((key, section, match.group(2)))
+        item = match.group(2)
+        if section == "sons":
+            item = catalog.sound_of_file(item)
+        if item is None or not catalog.has(section, item):
+            raise InvalidRequest()
+        parsed.append((key, section, item))
     return parsed
 
 
