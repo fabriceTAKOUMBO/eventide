@@ -1231,8 +1231,8 @@ void main() {
       expect(events.single.variants.map((v) => v.id), [
         for (var i = 1; i <= 10; i++) 'tonnerre-${i.toString().padLeft(2, '0')}',
       ]);
-      expect(events.single.interval, const SecondsRange(120, 300));
-      expect(events.single.firstDelay, const SecondsRange(45, 120));
+      expect(events.single.interval, const SecondsRange(70, 170));
+      expect(events.single.firstDelay, const SecondsRange(20, 60));
       expect(
         await events.single.variants.first.resolve(),
         const AssetAudioSource('assets/audio/sons/tonnerre-01.ogg'),

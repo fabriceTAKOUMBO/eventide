@@ -370,7 +370,7 @@ Retour du product owner après la démo sur le Galaxy S24 : le son ne correspond
 ### 18.4 À vérifier sur le Galaxy S24
 
 1. `pluie-ville` : ambiance de pluie dense, sans tonnerre dans la boucle ni raccord audible (67 s) ; la vidéo n'a plus d'éclair.
-2. Premier tonnerre entre 45 s et 2 min après la lecture, puis toutes les 2 à 5 min, jamais deux fois le même de suite ; éclair juste avant, puis le grondement.
+2. Premier tonnerre entre 20 s et 1 min après la lecture, puis toutes les 70 s à 3 min environ (resserré le 29 octobre 2026 à la demande du product owner), jamais deux fois le même de suite ; éclair juste avant, puis le grondement.
 3. Écran éteint 20 min : les tonnerres continuent (service au premier plan) ; pause : plus rien ; reprise : un nouveau délai.
 4. Sourdine des sons : plus de tonnerre ; « Réduire les animations » : lueur douce seulement.
 5. Mix « tonnerre seul » : la séance tient (minuteur, carte de lecture).

@@ -140,7 +140,7 @@ Ajouts du 29 octobre 2026 au catalogue (`app/assets/catalog.json`, copie de l'AP
 {"id": "tonnerre", "nom": "Tonnerre", "gratuit": false, "alias": ["tonnerre", "orage"],
  "lecture": "evenements",
  "variantes": ["tonnerre-01", "tonnerre-02", "tonnerre-03"],
- "intervalle_s": [120, 300], "premier_s": [45, 120]}
+ "intervalle_s": [70, 170], "premier_s": [20, 60]}
 ```
 
 | Champ | Règle |

@@ -165,8 +165,8 @@ void main() {
       expect(thunder.playback, Playback.events);
       final events = thunder.events!;
       expect(events.variants, [for (var i = 1; i <= 10; i++) 'tonnerre-${i.toString().padLeft(2, '0')}']);
-      expect(events.interval, const SecondsRange(120, 300));
-      expect(events.firstDelay, const SecondsRange(45, 120));
+      expect(events.interval, const SecondsRange(70, 170));
+      expect(events.firstDelay, const SecondsRange(20, 60));
       expect(() => events.variants.add('x'), throwsUnsupportedError);
       for (final s in catalog.sounds) {
         if (s.id != 'tonnerre') expect(s.events, isNull, reason: s.id);

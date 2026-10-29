@@ -50,7 +50,7 @@
     { "id": "tonnerre", "nom": "Tonnerre", "gratuit": false, "alias": ["tonnerre", "orage", "le tonnerre"],
       "lecture": "evenements",
       "variantes": ["tonnerre-01", "tonnerre-02", "tonnerre-03", "tonnerre-04", "tonnerre-05", "tonnerre-06", "tonnerre-07", "tonnerre-08", "tonnerre-09", "tonnerre-10"],
-      "intervalle_s": [120, 300], "premier_s": [45, 120] },
+      "intervalle_s": [70, 170], "premier_s": [20, 60] },
     { "id": "pluie-douce", "nom": "Pluie douce", "gratuit": true, "alias": ["pluie douce", "pluie", "la pluie"] },
     { "id": "ruisseau", "nom": "Ruisseau", "gratuit": true, "alias": ["ruisseau", "le ruisseau"] },
     { "id": "vagues", "nom": "Vagues", "gratuit": false, "alias": ["vagues", "vague", "mer", "océan", "les vagues"] },
