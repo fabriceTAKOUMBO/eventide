@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_model.dart';
 import '../../core/plan.dart';
+import '../../core/problem_report.dart' show exitSummary;
 import '../model_scope.dart';
 import '../navigation.dart';
 import '../theme/vitre.dart';
@@ -114,6 +115,7 @@ class SettingsScreen extends StatelessWidget {
             title: 'Confidentialité et données',
             onTap: () => Nav.privacy(context),
           ),
+          _ProblemReportRow(model: model),
           const SizedBox(height: 14),
           Text(
             'Eventide · Version 1.0',
@@ -252,6 +254,31 @@ class _SubscriptionCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: children,
       ),
+    );
+  }
+}
+
+/// « Signaler un problème »: the last abnormal end of the app (if Android recorded one) and the
+/// plain-text report, shared only if the user wants (docs/app/architecture.md « Rapport de
+/// problème »).
+class _ProblemReportRow extends StatelessWidget {
+  const _ProblemReportRow({required this.model});
+
+  final AppModel model;
+
+  @override
+  Widget build(BuildContext context) {
+    final last = model.lastAbnormalExit;
+    return LinkRow(
+      title: 'Signaler un problème',
+      subtitle: last == null
+          ? 'Envoyer un rapport technique, sans donnée personnelle'
+          : 'Dernier arrêt anormal : ${exitSummary(last)}',
+      onTap: () async {
+        final toasts = ToastHost.maybeOf(context);
+        final shared = await model.shareProblemReport();
+        if (!shared) toasts?.show('Le rapport n’a pas pu être préparé. Réessayez.');
+      },
     );
   }
 }

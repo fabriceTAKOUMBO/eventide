@@ -104,4 +104,10 @@ dependencies {
     implementation("com.google.android.gms:play-services-tasks:18.2.0")
     // NotificationCompat, ContextCompat (fallback notifications, foreground service start).
     implementation("androidx.core:core-ktx:1.13.1")
+    // MediaSessionCompat, MediaBrowserServiceCompat: same version as audio_service 0.18.19
+    // (MediaSessionLaunch.kt sets the media card's launch intent on its session).
+    implementation("androidx.media:media:1.7.0")
+    // Live wallpaper (LandscapeWallpaperService.kt): the same ExoPlayer as video_player_android
+    // 2.12.2 (media3 1.9.2), declared to be explicit.
+    implementation("androidx.media3:media3-exoplayer:1.9.2")
 }

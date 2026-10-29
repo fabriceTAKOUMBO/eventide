@@ -16,8 +16,21 @@ class MainActivity : AudioServiceActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Before audio_service's service can start: the media card always knows what to open.
+        MediaSessionLaunch.ensureActivityClassName(this)
         super.onCreate(savedInstanceState)
         handleLaunchIntent(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        MediaSessionLaunch.install(this)
+    }
+
+    override fun onStop() {
+        // Leaving for the lock screen or another app: the media card must open the app again.
+        MediaSessionLaunch.install(this)
+        super.onStop()
     }
 
     override fun onNewIntent(intent: Intent) {

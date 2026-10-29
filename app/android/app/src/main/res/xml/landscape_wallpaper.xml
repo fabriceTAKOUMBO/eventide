@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Live wallpaper of Eventide (LandscapeWallpaperService): author, description and thumbnail in
+     Android's wallpaper list. No settings screen: the landscape is chosen in the app. -->
+<wallpaper xmlns:android="http://schemas.android.com/apk/res/android"
+    android:author="@string/wallpaper_author"
+    android:description="@string/wallpaper_description"
+    android:thumbnail="@mipmap/ic_launcher" />

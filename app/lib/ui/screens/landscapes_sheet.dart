@@ -11,6 +11,7 @@ import '../widgets/glass.dart';
 import '../widgets/sheet_scaffold.dart';
 import '../widgets/vicons.dart';
 import 'home/home_menu.dart' show LandscapeThumbnail;
+import 'wallpaper_sheet.dart';
 
 class LandscapesSheet extends StatefulWidget {
   const LandscapesSheet({super.key, this.pickFor});
@@ -76,6 +77,15 @@ class _LandscapesSheetState extends State<LandscapesSheet> {
                 }
               },
             ),
+            // The selected landscape as the phone's wallpaper (only where the phone allows it).
+            if (!_picker && model.wallpaperSupport.any && selectedLandscape != null) ...[
+              const SizedBox(height: 18),
+              LinkRow(
+                title: 'Fond d’écran',
+                subtitle: 'Mettre « ${selectedLandscape.name} » sur l’écran d’accueil ou verrouillé',
+                onTap: () => WallpaperSheet.open(context, selectedLandscape.id),
+              ),
+            ],
             if (!premium) ...[
               const SizedBox(height: 18),
               SecondaryButton(

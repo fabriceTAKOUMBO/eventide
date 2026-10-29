@@ -16,3 +16,12 @@
 -keep class androidx.work.impl.WorkDatabase { *; }
 -keep class androidx.work.impl.WorkDatabase_Impl { *; }
 -keep class * extends androidx.room.RoomDatabase { <init>(); }
+
+# Media card (MediaSessionLaunch.kt): our launch intent is put on audio_service's media session
+# and in its static content intent by reflection (audio_service 0.18.19 exposes neither). Keep
+# these three fields under their names, or the lock screen card would not open the app again.
+-keepclassmembers class com.ryanheise.audioservice.AudioService {
+    static com.ryanheise.audioservice.AudioService instance;
+    private static android.app.PendingIntent contentIntent;
+    private android.support.v4.media.session.MediaSessionCompat mediaSession;
+}

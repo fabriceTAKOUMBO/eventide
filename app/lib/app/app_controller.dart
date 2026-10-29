@@ -13,11 +13,13 @@ import '../core/landscape_media.dart';
 import '../core/media_card.dart';
 import '../core/ops.dart';
 import '../core/plan.dart';
+import '../core/problem_report.dart' show AppExit;
 import '../core/scene.dart';
 import '../core/schedule.dart';
 import '../core/settings.dart';
 import '../core/share_codec.dart';
 import '../core/sleep.dart';
+import '../core/wallpaper.dart';
 import '../services/account_service.dart';
 import '../services/ads_service.dart';
 import '../services/api_client.dart';
@@ -27,12 +29,14 @@ import '../services/audio/playback_handler.dart';
 import '../services/billing_service.dart';
 import '../services/connectivity.dart';
 import '../services/content_repository.dart';
+import '../services/diagnostics.dart';
 import '../services/links_service.dart';
 import '../services/native_bridge.dart';
 import '../services/permissions_service.dart';
 import '../services/storage.dart';
 import '../services/voice/speech_recognizer.dart';
 import '../services/voice/voice_pipeline.dart';
+import '../services/wallpaper_service.dart';
 import 'app_model.dart';
 import 'demo_mode.dart';
 import 'sleep_tracker.dart';
@@ -142,6 +146,8 @@ class RealAppModel extends AppModel implements PlaybackHost {
     required this._urls,
     this._config = const AppConfig(),
     this._artwork,
+    this._problems,
+    this._wallpaper,
     DateTime Function()? now,
     Random? random,
   })  : _catalog = catalog,
@@ -174,6 +180,10 @@ class RealAppModel extends AppModel implements PlaybackHost {
 
   /// Pictures of the system media card (null in tests that do not need them).
   final MediaArtwork? _artwork;
+
+  /// Problem report and live wallpaper (null: not offered, e.g. tests that do not need them).
+  final ProblemReports? _problems;
+  final LandscapeWallpaper? _wallpaper;
   final DateTime Function() _now;
   final Random _random;
 
@@ -268,6 +278,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
     // Not awaited: file system only, the UI shows procedural pictures until it answers.
     unawaited(_refreshPosters());
     unawaited(_afterInit());
+    unawaited(_initReportAndWallpaper());
   }
 
   Future<void> _afterInit() async {
@@ -849,12 +860,15 @@ class RealAppModel extends AppModel implements PlaybackHost {
 
   @override
   void onPlaybackStarted(PlayRequest request) {
+    Breadcrumbs.add('écoute démarrée : ${request.landscapeId}, minuteur ${request.timer.toJson()}');
     final noTimer = request.timer is TimerNone;
     if (_foreground && _settings.blackScreenDuringTimer && !noTimer) _openStandby();
   }
 
   @override
   void onPlaybackStopped(StopReason reason, Duration listened) {
+    // Problem report: a timer ending (30 s fade, then silence) can look like the app stopping.
+    Breadcrumbs.add('écoute arrêtée : ${reason.name} après ${listened.inMinutes} min d’écoute');
     // A picture that failed may be made at the next session (the UI may be up by then).
     _artRequested.clear();
     final night = _tracker.onPlaybackStopped(_now(), listened);
@@ -1969,8 +1983,94 @@ class RealAppModel extends AppModel implements PlaybackHost {
     _adLastShown.clear();
     _hintsSeen.clear();
     await _syncSchedules();
+    await _problems?.clear();
+    await _wallpaper?.clear();
     notifyListeners();
     _emit(const ToastEvent(AppMessages.dataDeleted));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Problem report and landscape wallpaper (docs/app/architecture.md « Rapport de problème »,
+  // « Fond d'écran vidéo »)
+  // ---------------------------------------------------------------------------
+
+  Future<void> _initReportAndWallpaper() async {
+    final wallpaper = _wallpaper;
+    if (wallpaper != null) {
+      await wallpaper.init();
+      // The wallpaper follows the plan: a landscape no longer allowed shows its still picture.
+      addListener(_syncWallpaperAllowance);
+      _syncWallpaperAllowance();
+    }
+    await _problems?.load();
+    if (!_events.isClosed && (wallpaper != null || _problems?.lastAbnormal != null)) notifyListeners();
+  }
+
+  void _syncWallpaperAllowance() {
+    final wallpaper = _wallpaper;
+    if (wallpaper == null || _events.isClosed) return;
+    unawaited(wallpaper.syncAllowed((id) {
+      final landscape = _catalog.landscape(id);
+      return landscape != null && _rules.canUseLandscape(_plan, landscape);
+    }));
+  }
+
+  @override
+  AppExit? get lastAbnormalExit => _problems?.lastAbnormal;
+
+  @override
+  Future<bool> shareProblemReport() async {
+    final problems = _problems;
+    if (problems == null) return false;
+    try {
+      final text = await problems.report();
+      await _share.share(text, subject: 'Eventide — rapport de problème');
+      return true;
+    } catch (e) {
+      debugPrint('RealAppModel: problem report not shared ($e)');
+      return false;
+    }
+  }
+
+  @override
+  WallpaperSupport get wallpaperSupport => _wallpaper?.support ?? WallpaperSupport.none;
+
+  @override
+  Future<WallpaperResult> setLandscapeWallpaper(String landscapeId) async {
+    final wallpaper = _wallpaper;
+    final landscape = _catalog.landscape(landscapeId);
+    if (wallpaper == null) return WallpaperResult.unsupported;
+    if (landscape == null || !_rules.canUseLandscape(_plan, landscape)) return WallpaperResult.notAllowed;
+    try {
+      final result = await wallpaper.apply(
+        landscapeId: landscapeId,
+        name: landscape.name,
+        video: await landscapeVideo(landscapeId),
+        downloadedPoster: _content.cachedPath(LandscapeMediaKeys.image(landscapeId)),
+      );
+      Breadcrumbs.add('fond d’écran : $landscapeId → ${result.name}');
+      return result;
+    } catch (e) {
+      debugPrint('RealAppModel: wallpaper failed ($e)');
+      return WallpaperResult.failed;
+    }
+  }
+
+  @override
+  Future<bool> saveLandscapeVideoToGallery(String landscapeId) async {
+    final wallpaper = _wallpaper;
+    final landscape = _catalog.landscape(landscapeId);
+    if (wallpaper == null || landscape == null || !_rules.canUseLandscape(_plan, landscape)) return false;
+    try {
+      return await wallpaper.saveToGallery(
+        landscapeId: landscapeId,
+        name: landscape.name,
+        video: await landscapeVideo(landscapeId),
+      );
+    } catch (e) {
+      debugPrint('RealAppModel: video not saved to the Gallery ($e)');
+      return false;
+    }
   }
 
   // ---------------------------------------------------------------------------
