@@ -156,3 +156,21 @@ Lecture d'un son à événements (application) :
 - aucun événement pendant une pause, pendant le fondu de fin du minuteur, ni quand l'écoute est arrêtée ; une reprise retire un nouveau `premier_s` ;
 - **éclair synchronisé** : si le décor `eclairs` est dans la scène (niveau > 0) et que le paysage est visible, un éclair est dessiné, puis le tonnerre suit après 0,4 à 3,5 s (plus le délai est court, plus l'éclair est vif). Sans tonnerre dans le mix, le décor `eclairs` garde ses propres éclairs, rares (un toutes les 2 à 5 minutes) et silencieux. Les éclairs ne sont plus dans les vidéos : la vidéo d'un paysage d'orage est traitée pour les retirer, et seul le décor les dessine.
 
+## 12. Paysages réels et paysages imaginaires (3D)
+
+Décision du product owner (29 octobre 2026) : **le décor d'un paysage filmé ne se modifie pas** (pas de neige, d'oiseaux… ajoutés sur une vraie vidéo). Les décors deviennent propres à une quatrième catégorie, **« Imaginaire »**, dont les paysages sont des scènes 3D dessinées en direct par l'application (Three.js), où l'utilisateur ajoute ou retire des éléments. Champs ajoutés au catalogue (facultatifs, la `version` du document de scène reste 1) :
+
+| Champ | Règle |
+|---|---|
+| `themes` | quatrième thème `{"id": "imaginaire", "nom": "Imaginaire"}`, après `astral`. Un thème sans aucun paysage montrable par l'application est caché |
+| `paysages[].rendu` | `video` (vidéo réelle avec son propre son : décor **non modifiable**) ou `3d` (scène imaginaire : décor modifiable). Absent : `video` |
+| `paysages[].decors` | pour `3d` seulement : identifiants des décors que la scène sait montrer (sous-ensemble de `decors`) |
+| `paysages[].eclairs` | `true` pour un paysage d'orage filmé : l'éclair est dessiné avec chaque tonnerre (§ 11), ce n'est plus un décor de l'utilisateur. Le décor `eclairs` est retiré du catalogue |
+| `paysages[].periode_s` | pour `3d` : durée en secondes après laquelle la scène se répète exactement (vidéo de fond d'écran et image fixe en sont tirées) |
+
+Règle du décor (§ 1) : la couche `decor` d'une scène n'a de sens que sur un paysage `3d`, et seulement pour les identifiants de ses `decors`. **L'application et l'API retirent sans erreur** un élément de décor qui ne s'applique pas (comme un élément à `niveau` 0) : `POST /shares` l'enlève de la scène enregistrée.
+
+Les anciens paysages dessinés en 2D (`sous-bois`, `berge-mousseuse`, `torrent-montagne`, `pierres-eau`, `lisiere-verte`, `cafe-nuit`, `aurore-boreale`, `lune-lac`) sont retirés : ils sont remplacés par les scènes 3D de la catégorie « Imaginaire ». Un favori, une programmation ou un lien qui nomme un paysage disparu s'ouvre sur `cascade-foret` (sons, musique et minuteur gardés).
+
+Les scènes 3D sont embarquées dans l'application (`app/assets/imaginaire/`, hors ligne). Leur image fixe et leur vidéo de fond d'écran sont tirées de la scène elle-même (`images/paysages/<id>.jpg`, `videos/paysages/<id>.mp4`, § 8), embarquées ou téléchargées selon la règle gratuit / Premium.
+
