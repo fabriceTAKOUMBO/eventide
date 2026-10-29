@@ -2,6 +2,7 @@
 // handler is registered with audio_service first, so that a MEDIA_PLAY event queued by the
 // alarm receiver (headless engine start) reaches it as soon as possible; the handler then
 // publishes its loading state at once (foreground-service deadline) and waits for the model.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -24,11 +25,15 @@ import '../services/audio/soloud_audio_engine.dart';
 import '../services/billing_service.dart';
 import '../services/connectivity.dart';
 import '../services/content_repository.dart';
+import '../services/diagnostics.dart';
 import '../services/links_service.dart';
 import '../services/native_bridge.dart';
 import '../services/permissions_service.dart';
 import '../services/storage.dart';
+import '../services/wallpaper_service.dart';
+
 import '../ui/landscape/landscape_artwork.dart';
+import '../ui/landscape/landscape_video.dart' show LandscapeVideos;
 import 'app_controller.dart';
 import 'demo_mode.dart';
 import 'env.dart';
@@ -104,11 +109,34 @@ Future<({PlaybackHandler handler, RealAppModel model})> startEventide() async {
   final native = MethodChannelNativeBridge();
   // First: a scheduled start may have booted this engine without any activity.
   final handler = await initPlayback(native);
+  // Lock screen card: tapping it must open the app. Our own launch intent goes on the media
+  // session now, before it is first activated (docs/app/architecture.md § 15.3).
+  unawaited(MethodChannelDeviceDiagnostics().installMediaSessionActivity());
   final model = await createAppModel(handler: handler, native: native);
-  AppLifecycleListener(onStateChange: model.handleLifecycle);
+  final crumbs = _watchSession(handler, model);
+  AppLifecycleListener(onStateChange: (state) {
+    model.handleLifecycle(state);
+    crumbs.lifecycle(state);
+  });
   final initial = WidgetsBinding.instance.lifecycleState;
   if (initial != null) model.handleLifecycle(initial);
   return (handler: handler, model: model);
+}
+
+/// Breadcrumbs of the problem report: sound state, landscape, memory every 5 minutes.
+SessionBreadcrumbs _watchSession(PlaybackHandler handler, RealAppModel model) {
+  LandscapeVideos.log = Breadcrumbs.add;
+  final crumbs = SessionBreadcrumbs(log: Breadcrumbs.log, liveVideos: () => LandscapeVideos.hub.liveCount)
+    ..start();
+  void onStatus() {
+    final s = handler.status.value;
+    crumbs.playback(s.loading ? 'chargement' : (s.playing ? 'lecture' : (s.paused ? 'pause' : 'arrêt')));
+  }
+
+  handler.status.addListener(onStatus);
+  model.addListener(() => crumbs.landscape(model.scene.landscapeId));
+  crumbs.landscape(model.scene.landscapeId);
+  return crumbs;
 }
 
 Future<RealAppModel> createAppModel({required PlaybackHandler handler, required NativeBridge native}) async {
@@ -121,6 +149,14 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
   if (Env.demoModeRequested) debugPrint('Eventide: demo mode ${demo ? 'on' : 'off (not the demo package)'}');
   final catalog = await loadCatalog();
   final support = await getApplicationSupportDirectory();
+  // Problem report: the log file survives a crash; the exits recorded by Android are read once.
+  unawaited(Breadcrumbs.log.attach(Directory('${support.path}/diagnostics')));
+  Breadcrumbs.add('démarrage : Eventide ${Env.appVersion}${demo ? ' (version démo)' : ''}');
+  final problems = ProblemReports(
+    device: MethodChannelDeviceDiagnostics(),
+    log: Breadcrumbs.log,
+    directory: Directory('${support.path}/diagnostics'),
+  );
   final store = LocalStore(Directory('${support.path}/eventide'));
   final client = http.Client();
   final api = ApiClient(
@@ -155,6 +191,17 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
     downloadedPoster: (id) => content.cachedPath(LandscapeMediaKeys.image(id)),
     render: renderLandscapeArtwork,
   );
+  // Live wallpaper and Gallery copy of the landscape videos (files the wallpaper process reads).
+  final wallpaper = LandscapeWallpaper(
+    platform: MethodChannelWallpaperPlatform(),
+    directory: Directory('${support.path}/wallpaper'),
+    bundledAssets: () => bundled,
+    loadAsset: (asset) async {
+      final data = await rootBundle.load(asset);
+      return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
+    },
+  );
+
   final Billing billing = demo
       ? DemoBilling()
       : PlayBilling(api: api, localAcknowledgement: Env.localPurchaseAcknowledgement);
@@ -177,6 +224,8 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
     urls: PlatformUrlOpener(),
     config: AppConfig(shareHost: Env.shareHost, forcedPlan: Env.debugForcePlan, demo: demo),
     artwork: artwork,
+    problems: problems,
+    wallpaper: wallpaper,
   );
   await model.init();
   return model;

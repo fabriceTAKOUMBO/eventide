@@ -6,10 +6,12 @@ import 'package:flutter/foundation.dart';
 import '../core/catalog.dart';
 import '../core/landscape_media.dart';
 import '../core/plan.dart';
+import '../core/problem_report.dart' show AppExit;
 import '../core/scene.dart';
 import '../core/schedule.dart';
 import '../core/settings.dart';
 import '../core/sleep.dart';
+import '../core/wallpaper.dart';
 
 /// A saved selection: landscape and its full mix (dossier, screen 2: "le cœur enregistre la sélection").
 class Favorite {
@@ -264,4 +266,29 @@ abstract class AppModel extends ChangeNotifier {
   /// Downloaded poster of a Premium landscape (local file path), or null. Bundled posters
   /// (`assets/landscapes/<id>.jpg`) are found by the UI from the asset manifest.
   String? landscapePosterFile(String landscapeId) => null;
+
+  // ---- Problem report (docs/app/architecture.md « Rapport de problème »)
+
+  /// Last abnormal end of the app recorded by Android (crash, ANR, or killed while in use:
+  /// on screen, playing, or as the live wallpaper), or null. Known shortly after start.
+  AppExit? get lastAbnormalExit => null;
+
+  /// Opens the share sheet with the plain-text report (app and Android versions, phone model,
+  /// exits recorded by Android, recent log of the app; no personal data). False when nothing
+  /// could be shared.
+  Future<bool> shareProblemReport() async => false;
+
+  // ---- Landscape as wallpaper (docs/app/architecture.md « Fond d'écran vidéo »)
+
+  /// What this phone offers (live wallpaper, Gallery). Nothing by default.
+  WallpaperSupport get wallpaperSupport => WallpaperSupport.none;
+
+  /// Makes [landscapeId] the live wallpaper: its looping video (or its still picture), muted,
+  /// paused when not visible. Opens Android's preview, where the user confirms. Only for a
+  /// landscape the plan can use ([WallpaperResult.notAllowed] otherwise).
+  Future<WallpaperResult> setLandscapeWallpaper(String landscapeId) async => WallpaperResult.unsupported;
+
+  /// Copies the landscape's looping video to the Gallery (`Movies/Eventide`), for lock screens
+  /// that only take a Gallery video. Android 10+ only; false when nothing was saved.
+  Future<bool> saveLandscapeVideoToGallery(String landscapeId) async => false;
 }

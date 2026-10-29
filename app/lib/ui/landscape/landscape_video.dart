@@ -82,6 +82,9 @@ class VideoPlayerLandscapePlayer implements LandscapeVideoPlayer {
   bool _initialized = false;
   bool _disposed = false;
 
+  /// [start] until its initialize() has answered: dispose() waits for it.
+  Future<void>? _starting;
+
   @override
   ValueListenable<LandscapeVideoStatus> get status => _status;
 
@@ -89,7 +92,9 @@ class VideoPlayerLandscapePlayer implements LandscapeVideoPlayer {
   Size get size => _controller.value.size;
 
   @override
-  Future<void> start() async {
+  Future<void> start() => _starting ??= _start();
+
+  Future<void> _start() async {
     _controller.addListener(_onValue);
     try {
       await _controller.initialize();
@@ -139,6 +144,15 @@ class VideoPlayerLandscapePlayer implements LandscapeVideoPlayer {
     if (_disposed) return;
     _disposed = true;
     _controller.removeListener(_onValue);
+    // video_player lets initialize() go on after a dispose() that came during it: it then
+    // subscribes to the events of a player already released (a swipe cancelled quickly). Wait
+    // for the opening to answer first (bounded: a decoder that never answers is let go).
+    final starting = _starting;
+    if (starting != null) {
+      try {
+        await starting.timeout(const Duration(seconds: 5));
+      } catch (_) {}
+    }
     try {
       await _controller.dispose();
     } catch (_) {}
@@ -193,26 +207,40 @@ class _HubEntry {
 }
 
 /// Owns the players: one per video source, shared by the widgets that show it, disposed when
-/// the last one lets go, never more than [maxLive] at once.
+/// the last one lets go, never more than [maxLive] at once, counting the ones still being
+/// released (each holds a hardware decoder and its buffers until its release has answered).
 class LandscapeVideoHub extends ChangeNotifier {
-  LandscapeVideoHub({this.maxLive = 2, LandscapeVideoPlayerFactory? factory})
-    : factory = factory ?? VideoPlayerLandscapePlayer.new;
+  LandscapeVideoHub({
+    this.maxLive = 2,
+    LandscapeVideoPlayerFactory? factory,
+    this.releaseTimeout = const Duration(seconds: 3),
+  }) : factory = factory ?? VideoPlayerLandscapePlayer.new;
 
   final int maxLive;
   LandscapeVideoPlayerFactory factory;
+
+  /// A release that does not answer stops counting after this long.
+  final Duration releaseTimeout;
   final Map<LandscapeVideoSource, _HubEntry> _live = {};
+  int _releasing = 0;
+  int _created = 0;
 
   /// Players alive now (tests, logs).
   int get liveCount => _live.length;
+
+  /// Players released but whose decoder may not be freed yet.
+  int get releasingCount => _releasing;
 
   /// A hold on the player of [source], or null when [maxLive] players already exist (the
   /// caller keeps its still picture and retries when the hub notifies).
   LandscapeVideoLease? acquire(LandscapeVideoSource source) {
     var entry = _live[source];
     if (entry == null) {
-      if (_live.length >= maxLive) return null;
+      if (_live.length + _releasing >= maxLive) return null;
       final player = factory(source);
       entry = _live[source] = _HubEntry(this, source, player);
+      _created++;
+      LandscapeVideos.log?.call('vidéo : ouverte $source (en cours : ${_live.length}, ouvertes depuis le début : $_created)');
       // Starts paused: a lease asks for playing explicitly.
       unawaited(player.pause());
       unawaited(player.start());
@@ -228,7 +256,20 @@ class LandscapeVideoHub extends ChangeNotifier {
       return;
     }
     _live.remove(entry.source);
-    unawaited(entry.player.dispose());
+    _releasing++;
+    LandscapeVideos.log?.call('vidéo : libérée ${entry.source} (en cours : ${_live.length})');
+    var counted = true;
+    void done() {
+      if (!counted) return;
+      counted = false;
+      _releasing--;
+      // A widget waiting for a slot may take it.
+      notifyListeners();
+    }
+
+    unawaited(
+      entry.player.dispose().timeout(releaseTimeout).then((_) => done(), onError: (Object _) => done()),
+    );
     // After the current frame: a widget waiting for a slot may take it.
     scheduleMicrotask(notifyListeners);
   }
@@ -237,6 +278,9 @@ class LandscapeVideoHub extends ChangeNotifier {
 /// The app's hub. Tests replace its factory with a fake (no platform channel).
 abstract final class LandscapeVideos {
   static LandscapeVideoHub hub = LandscapeVideoHub();
+
+  /// Breadcrumbs of the problem report (set by the bootstrap; null in tests).
+  static void Function(String message)? log;
 
   @visibleForTesting
   static void debugReset({LandscapeVideoPlayerFactory? factory}) {

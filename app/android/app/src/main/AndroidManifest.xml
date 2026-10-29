@@ -15,6 +15,10 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- Landscape as live wallpaper: offered only where Android has live wallpapers. -->
+    <uses-feature
+        android:name="android.software.live_wallpaper"
+        android:required="false" />
 
     <!-- Label: « Eventide », or « Eventide Démo » for the demo build (appLabel placeholder,
          app/build.gradle.kts). -->
@@ -100,6 +104,24 @@
                 <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
             </intent-filter>
         </receiver>
+
+        <!-- Live wallpaper: the chosen landscape's looping video, muted, paused when not visible
+             (LandscapeWallpaperService.kt, docs/app/architecture.md « Fond d'écran vidéo »).
+             Its own process: it lives as long as the wallpaper is set, without the app's engine,
+             and a fault there never stops the sound. Bound only by the system (BIND_WALLPAPER). -->
+        <service
+            android:name=".LandscapeWallpaperService"
+            android:exported="true"
+            android:label="@string/wallpaper_label"
+            android:permission="android.permission.BIND_WALLPAPER"
+            android:process=":wallpaper">
+            <intent-filter>
+                <action android:name="android.service.wallpaper.WallpaperService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.wallpaper"
+                android:resource="@xml/landscape_wallpaper" />
+        </service>
 
         <!-- True only in the demo build (-Peventide.demo=true); read by BuildFlags.isDemoBuild. -->
         <meta-data

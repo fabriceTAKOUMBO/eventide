@@ -58,6 +58,8 @@ class ScheduleAlarmReceiver : BroadcastReceiver() {
     }
 
     private fun startPlayback(context: Context): Boolean {
+        // Headless start: no activity tells audio_service what its media card opens.
+        MediaSessionLaunch.ensureActivityClassName(context)
         val keyEvent = KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_PLAY)
         val serviceIntent = Intent(Intent.ACTION_MEDIA_BUTTON)
             .setClassName(context, AUDIO_SERVICE_CLASS)

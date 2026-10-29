@@ -156,6 +156,10 @@ class NativeBridgePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             if (!engine.plugins.has(NativeBridgePlugin::class.java)) {
                 engine.plugins.add(NativeBridgePlugin())
             }
+            // Problem report, media card launch intent, landscape wallpaper (DevicePlugin.kt).
+            if (!engine.plugins.has(DevicePlugin::class.java)) {
+                engine.plugins.add(DevicePlugin())
+            }
         }
 
         /** Creates (or reuses) audio_service's cached engine and registers this plugin on it. */
