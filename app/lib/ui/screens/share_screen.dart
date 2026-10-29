@@ -99,17 +99,15 @@ class _ShareScreenState extends State<ShareScreen> {
                       children: [
                         Text(
                           landscape.name,
-                          style: manrope(
-                            26,
-                            weight: 600,
-                            letterSpacingEm: -0.015,
-                            height: 1.2,
-                          ),
+                          style: VitreType.display(size: 32),
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(height: 6),
                         Text(
                           names.isEmpty ? 'Sans son' : names,
-                          style: manrope(17, color: p.text(0.82)),
+                          style: VitreType.small(
+                            size: 14,
+                            color: p.text(0.8),
+                          ),
                         ),
                       ],
                     ),
@@ -118,17 +116,10 @@ class _ShareScreenState extends State<ShareScreen> {
               ),
             ),
           ),
-          const SizedBox(height: 18),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
-            child: Text(
-              'Votre proche retrouve exactement vos sons et vos réglages.',
-              style: manrope(18, height: 1.4, color: p.text(0.84)),
-            ),
-          ),
           const SizedBox(height: 24),
           PrimaryButton(
-            label: 'Envoyer à un proche',
+            label: 'Envoyer',
+            semanticLabel: 'Envoyer mon ambiance à un proche',
             icon: VIcons.share,
             busy: _sending,
             onPressed: _send,
@@ -141,12 +132,6 @@ class _ShareScreenState extends State<ShareScreen> {
               icon: _copied ? VIcons.check : VIcons.copy,
               onPressed: _copy,
             ),
-          ),
-          const SizedBox(height: 24),
-          Text(
-            'Le lien ouvre l’application, ou la page de téléchargement si elle n’est pas encore installée.',
-            textAlign: TextAlign.center,
-            style: manrope(16, height: 1.35, color: p.text(0.72)),
           ),
         ],
       ),

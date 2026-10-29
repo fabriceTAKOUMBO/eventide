@@ -176,7 +176,7 @@ class _ToastPill extends StatelessWidget {
                   child: Text(
                     message.text,
                     textAlign: TextAlign.center,
-                    style: manrope(17, weight: 600),
+                    style: VitreType.label(size: 15),
                   ),
                 ),
               ],

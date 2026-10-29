@@ -24,5 +24,5 @@ abstract final class DemoMode {
   static const String premiumActive = 'Version démo : Premium est déjà actif.';
 
   /// « Restaurer mes achats » in demo mode.
-  static const String nothingToRestore = 'Version démo : Premium est déjà actif, il n’y a rien à restaurer.';
+  static const String nothingToRestore = 'Version démo : rien à restaurer.';
 }

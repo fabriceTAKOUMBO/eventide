@@ -129,7 +129,7 @@ void main() {
           final result = explainAndRequestPermission(context, model2, kind);
           await settle(tester);
           expect(tester.takeException(), isNull, reason: kind.name);
-          expect(find.text('Continuer'), findsOneWidget);
+          expect(findCaps('Continuer'), findsOneWidget);
           await tester.ensureVisible(find.text('Plus tard'));
           await tester.tap(find.text('Plus tard'));
           await settle(tester);
@@ -141,9 +141,9 @@ void main() {
           final result = explainAndRequestPermission(context, model3, kind);
           await settle(tester);
           expect(tester.takeException(), isNull, reason: '${kind.name} denied');
-          expect(find.text('Continuer'), findsNothing);
-          await tester.ensureVisible(find.text('Ouvrir les réglages'));
-          await tester.tap(find.text('Ouvrir les réglages'));
+          expect(findCaps('Continuer'), findsNothing);
+          await tester.ensureVisible(findCaps('Ouvrir les réglages'));
+          await tester.tap(findCaps('Ouvrir les réglages'));
           await settle(tester);
           expect(await result, isFalse);
           expect(model3.calls, ['openAppSettings']);

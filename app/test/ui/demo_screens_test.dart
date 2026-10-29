@@ -18,13 +18,13 @@ void main() {
     await pumpApp(tester, model);
     await openRoute(tester, Routes.premium, (_) => const PremiumScreen());
     expect(find.text(kDemoPremiumNote), findsOneWidget);
-    expect(find.text('Premium est déjà actif'), findsOneWidget);
+    expect(findCaps('Premium est déjà actif'), findsOneWidget);
     expect(find.bySemanticsLabel('Version démo : Premium est déjà actif'), findsOneWidget);
     // Every plan card shows the same disabled button.
     await tester.tap(find.bySemanticsLabel(RegExp('^Mensuel')));
     await settle(tester);
     expect(find.text(kDemoPremiumNote), findsOneWidget);
-    await tester.tap(find.text('Premium est déjà actif'));
+    await tester.tap(findCaps('Premium est déjà actif'));
     await settle(tester);
     expect(model.calls.where((c) => c.startsWith('buy')), isEmpty);
     // « Restaurer » only asks the model (which answers with its demo message).
@@ -32,7 +32,7 @@ void main() {
     await tester.tap(find.text('Restaurer mes achats'));
     await settle(tester);
     expect(model.calls, contains('restorePurchases'));
-    expect(find.text('Vérification de vos achats terminée'), findsNothing);
+    expect(find.text('Achats vérifiés'), findsNothing);
     await tearDownApp(tester);
   });
 
@@ -42,9 +42,9 @@ void main() {
     await pumpApp(tester, model);
     await openRoute(tester, Routes.settings, (_) => const SettingsScreen());
     expect(find.text('Version démo'), findsOneWidget);
-    expect(find.text('Mon abonnement · Version démo'), findsOneWidget);
+    expect(findCaps('Abonnement · Version démo'), findsOneWidget);
     expect(find.text(kDemoPremiumNote), findsOneWidget);
-    expect(find.text('Gérer mon abonnement sur Google Play'), findsNothing);
+    expect(findCaps('Gérer sur Google Play'), findsNothing);
     await tearDownApp(tester);
   });
 
@@ -54,7 +54,7 @@ void main() {
     await pumpApp(tester, model);
     await openRoute(tester, Routes.settings, (_) => const SettingsScreen());
     expect(find.text('Version démo'), findsNothing);
-    expect(find.text('Gérer mon abonnement sur Google Play'), findsOneWidget);
+    expect(findCaps('Gérer sur Google Play'), findsOneWidget);
     await tearDownApp(tester);
   });
 }

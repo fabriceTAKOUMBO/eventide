@@ -35,7 +35,7 @@ ProductOffer offerFor(AppModel model, PurchaseChoice choice) {
   if (!offer.available) {
     return (
       cta: _ctaLabel(offer),
-      note: 'Cette formule n’est pas disponible pour le moment. Réessayez plus tard.',
+      note: 'Indisponible pour le moment. Réessayez plus tard.',
     );
   }
   return switch (offer.choice) {
@@ -44,7 +44,7 @@ ProductOffer offerFor(AppModel model, PurchaseChoice choice) {
           ? (
               cta: 'Essayer 3 jours gratuits',
               note:
-                  'Rien à payer aujourd’hui. Ensuite ${offer.price} par an, annulable à tout moment.',
+                  '3 jours gratuits, puis ${offer.price} par an. Annulable à tout moment.',
             )
           : (
               cta: 'S’abonner',
@@ -63,8 +63,7 @@ ProductOffer offerFor(AppModel model, PurchaseChoice choice) {
 
 /// Demo build (« Eventide Démo »): what the purchase button and the note say instead.
 const String kDemoPremiumButton = 'Premium est déjà actif';
-const String kDemoPremiumNote =
-    'Version démo : Premium est déjà actif. Aucun achat n’est possible ni nécessaire.';
+const String kDemoPremiumNote = 'Version démo : Premium est déjà actif.';
 
 String _ctaLabel(ProductOffer offer) => switch (offer.choice) {
   PurchaseChoice.annual =>
@@ -124,7 +123,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
 
     return VitreSheet(
       title: 'Premium',
-      titleSize: 30,
+      titleSize: 36,
       top: 60,
       headerTop: 24,
       panelAlpha: 0.72,
@@ -134,11 +133,11 @@ class _PremiumScreenState extends State<PremiumScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           for (final text in const [
-            'Tous les paysages et leurs ambiances (2 en gratuit)',
-            'Toutes les mélodies et tous les sons',
-            'Favoris et programmations sans limite',
-            'Écoute sans connexion',
-            'Aucune publicité',
+            'Tous les paysages',
+            'Tous les sons et mélodies',
+            'Favoris et programmations illimités',
+            'Écoute hors connexion',
+            'Sans publicité',
           ])
             ConstrainedBox(
               constraints: const BoxConstraints(minHeight: 32),
@@ -160,7 +159,7 @@ class _PremiumScreenState extends State<PremiumScreen> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Expanded(child: Text(text, style: manrope(18, weight: 500))),
+                  Expanded(child: Text(text, style: VitreType.body(size: 16))),
                 ],
               ),
             ),
@@ -188,25 +187,25 @@ class _PremiumScreenState extends State<PremiumScreen> {
             label: demo
                 ? kDemoPremiumButton
                 : current
-                ? 'Votre formule actuelle'
+                ? 'Formule actuelle'
                 : action.cta,
             semanticLabel: demo ? 'Version démo : $kDemoPremiumButton' : null,
             busy: _buying,
             onPressed: demo || current || !offer.available ? null : _buy,
           ),
-          const SizedBox(height: 12),
-          Semantics(
-            liveRegion: true,
-            child: Text(
-              demo
-                  ? kDemoPremiumNote
-                  : current
-                  ? 'Vous profitez déjà de cette formule.'
-                  : action.note,
-              textAlign: TextAlign.center,
-              style: manrope(16, height: 1.35, color: p.text(0.76)),
+          // Price and trial terms under the button (Google Play); nothing to add on the
+          // current plan, whose button already says so.
+          if (demo || !current) ...[
+            const SizedBox(height: 12),
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                demo ? kDemoPremiumNote : action.note,
+                textAlign: TextAlign.center,
+                style: VitreType.small(color: p.text(0.74)),
+              ),
             ),
-          ),
+          ],
           const SizedBox(height: 8),
           LinkButton(
             label: _restoring ? 'Vérification…' : 'Restaurer mes achats',
@@ -250,7 +249,7 @@ class _PlanCard extends StatelessWidget {
       ),
       PurchaseChoice.lifetime => (
         'À vie',
-        'Paiement unique, sans abonnement',
+        'Paiement unique',
         'une seule fois',
         null,
       ),
@@ -279,7 +278,7 @@ class _PlanCard extends StatelessWidget {
           borderRadius: radius,
           onTap: onTap,
           child: Container(
-            constraints: const BoxConstraints(minHeight: 88),
+            constraints: const BoxConstraints(minHeight: 76),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             child: Row(
               children: [
@@ -315,7 +314,7 @@ class _PlanCard extends StatelessWidget {
                         runSpacing: 4,
                         crossAxisAlignment: WrapCrossAlignment.center,
                         children: [
-                          Text(name, style: manrope(20, weight: 700)),
+                          Text(name, style: VitreType.label(size: 17)),
                           if (badge != null)
                             Container(
                               padding: const EdgeInsets.symmetric(
@@ -328,9 +327,9 @@ class _PlanCard extends StatelessWidget {
                               ),
                               child: Text(
                                 badge,
-                                style: manrope(
-                                  15,
-                                  weight: 700,
+                                style: VitreType.label(
+                                  size: 13,
+                                  weight: 600,
                                   color: VitreColors.ink,
                                 ),
                               ),
@@ -340,14 +339,17 @@ class _PlanCard extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         sub,
-                        style: manrope(16, height: 1.25, color: p.text(0.76)),
+                        style: VitreType.small(
+                          height: 1.25,
+                          color: p.text(0.72),
+                        ),
                       ),
                       // Large text: the price goes under the name.
                       if (stacked) ...[
                         const SizedBox(height: 6),
                         Text(
                           '${offer.price} $unit',
-                          style: manrope(20, weight: 700),
+                          style: VitreType.label(size: 17),
                         ),
                       ],
                     ],
@@ -358,8 +360,11 @@ class _PlanCard extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(offer.price, style: manrope(20, weight: 700)),
-                      Text(unit, style: manrope(16, color: p.text(0.76))),
+                      Text(offer.price, style: VitreType.label(size: 17)),
+                      Text(
+                        unit,
+                        style: VitreType.small(color: p.text(0.72)),
+                      ),
                     ],
                   ),
                 ],

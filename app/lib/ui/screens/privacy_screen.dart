@@ -37,7 +37,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
     if (data.isEmpty) {
       ToastHost.show(
         context,
-        'L’export n’a pas pu être préparé. Réessayez plus tard.',
+        'Export impossible. Réessayez plus tard.',
       );
       return;
     }
@@ -45,7 +45,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
       context,
       icon: VIcons.download,
       title: 'Vos données',
-      message: 'Voici tout ce qu’Eventide garde à votre sujet. Vous pouvez le copier pour le conserver.',
+      message: 'Tout ce qu’Eventide garde à votre sujet.',
       confirm: 'Copier',
       cancel: 'Fermer',
       extra: Container(
@@ -58,7 +58,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
         child: SingleChildScrollView(
           child: SelectableText(
             data,
-            style: manrope(14, color: VitreColors.whiteA(0.86)),
+            style: VitreType.small(size: 13, color: VitreColors.whiteA(0.86)),
           ),
         ),
       ),
@@ -75,7 +75,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
       context,
       icon: VIcons.trash,
       title: 'Supprimer mes données ?',
-      message: 'Vos favoris, vos programmations et vos nuits seront effacés de ce téléphone et de nos serveurs. Vos achats restent liés à votre compte Google Play.',
+      message: 'Favoris, programmations et nuits seront effacés de ce téléphone et de nos serveurs. Vos achats restent liés à Google Play.',
       confirm: 'Supprimer',
       cancel: 'Garder mes données',
     );
@@ -83,7 +83,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
     setState(() => _deleting = true);
     try {
       await model.deleteAccountData();
-      if (mounted) ToastHost.show(context, 'Vos données ont été supprimées');
+      if (mounted) ToastHost.show(context, 'Données supprimées');
     } finally {
       if (mounted) setState(() => _deleting = false);
     }
@@ -101,16 +101,15 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: manrope(19, weight: 700)),
+            CapsText(title, style: VitreType.eyebrow(color: p.text(0.74))),
             const SizedBox(height: 6),
-            Text(body, style: manrope(17, height: 1.4, color: p.text(0.84))),
+            Text(body, style: VitreType.body(color: p.text(0.86))),
           ],
         ),
       ),
     );
     return VitreSheet(
-      title: 'Confidentialité et données',
-      titleSize: 24,
+      title: 'Confidentialité',
       top: 70,
       panelAlpha: 0.74,
       backgroundBrightness: 0.5,
@@ -118,28 +117,28 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           section(
-            'Sur votre téléphone',
-            'Vos mix, vos favoris, vos programmations et vos nuits restent sur ce téléphone. Les mesures du sommeil sont calculées ici.',
+            'Sur ce téléphone',
+            'Mix, favoris, programmations et nuits.',
           ),
           section(
-            'Ce qui passe par nos serveurs',
-            'Vos achats sont vérifiés avec Google Play. Un mix partagé est enregistré sans donnée personnelle.',
+            'Sur nos serveurs',
+            'Vos achats, vérifiés avec Google Play. Les mix partagés, sans donnée personnelle.',
           ),
           section(
             'Jamais',
-            'Aucune vente de vos données. Aucune publicité pendant l’écoute. Aucun accès au micro.',
+            'Ni vente de données, ni publicité pendant l’écoute, ni micro.',
           ),
           const SizedBox(height: 4),
           LinkRow(
             title: 'Politique de confidentialité',
-            subtitle: 'Le texte complet, en ligne',
             onTap: model.openPrivacyPolicy,
           ),
-          // Ads only exist in the free version (Google's consent form).
+          // Ads only exist in the free version (Google's consent form). The subtitle says
+          // what the entry is for (UMP privacy options entry point): kept on purpose.
           if (!model.plan.isPremium)
             LinkRow(
               title: 'Choix publicitaires',
-              subtitle: 'Revoir votre consentement aux publicités',
+              subtitle: 'Modifier votre consentement',
               onTap: model.openAdPrivacyOptions,
             ),
           const SizedBox(height: 18),

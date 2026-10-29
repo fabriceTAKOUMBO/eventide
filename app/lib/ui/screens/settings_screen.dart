@@ -57,22 +57,17 @@ class SettingsScreen extends StatelessWidget {
           const SectionLabel('Écoute'),
           LinkRow(
             title: 'Programmations',
-            subtitle: 'Démarrer un son chaque jour à l’heure choisie',
             onTap: () => Nav.schedules(context),
           ),
           SwitchRow(
             title: 'Écran noir pendant le minuteur',
-            subtitle: 'Pour ne pas être gêné la nuit',
             value: settings.blackScreenDuringTimer,
             onChanged: (v) => model.updateSettings(
               settings.copyWith(blackScreenDuringTimer: v),
             ),
           ),
           SwitchRow(
-            title: 'Téléchargements en Wi-Fi seulement',
-            subtitle: premium
-                ? 'Pour économiser vos données'
-                : 'Avec Premium, pour l’écoute sans connexion',
+            title: 'Télécharger en Wi-Fi seulement',
             value: settings.wifiOnly,
             locked: !premium,
             onLockedTap: () => Nav.premium(context),
@@ -83,7 +78,6 @@ class SettingsScreen extends StatelessWidget {
           _TextSizeCard(model: model),
           SwitchRow(
             title: 'Contraste renforcé',
-            subtitle: 'Textes et boutons plus marqués',
             value: settings.highContrast,
             onChanged: (v) =>
                 model.updateSettings(settings.copyWith(highContrast: v)),
@@ -92,7 +86,6 @@ class SettingsScreen extends StatelessWidget {
           if (!model.signedIn)
             LinkRow(
               title: 'Se connecter avec Google',
-              subtitle: 'Retrouver vos réglages sur un autre téléphone',
               leading: const VIcon(
                 VIcons.google,
                 size: 24,
@@ -106,21 +99,19 @@ class SettingsScreen extends StatelessWidget {
               final toasts = ToastHost.maybeOf(context);
               await model.restorePurchases();
               // Demo build: the model already said that there is nothing to restore.
-              if (!model.demoMode) {
-                toasts?.show('Vérification de vos achats terminée');
-              }
+              if (!model.demoMode) toasts?.show('Achats vérifiés');
             },
           ),
           LinkRow(
-            title: 'Confidentialité et données',
+            title: 'Confidentialité',
             onTap: () => Nav.privacy(context),
           ),
           _ProblemReportRow(model: model),
-          const SizedBox(height: 14),
+          const SizedBox(height: 18),
           Text(
             'Eventide · Version 1.0',
             textAlign: TextAlign.center,
-            style: manrope(16, color: p.text(0.6)),
+            style: VitreType.small(size: 13, color: p.text(0.56)),
           ),
           if (model.demoMode)
             Padding(
@@ -128,7 +119,7 @@ class SettingsScreen extends StatelessWidget {
               child: Text(
                 'Version démo',
                 textAlign: TextAlign.center,
-                style: manrope(15, color: p.text(0.5)),
+                style: VitreType.small(size: 13, color: p.text(0.5)),
               ),
             ),
         ],
@@ -151,32 +142,22 @@ class _SubscriptionCard extends StatelessWidget {
     if (!plan.isPremium) {
       final annual = offerFor(model, PurchaseChoice.annual);
       children.addAll([
-        Text(
-          'Mon abonnement · Version gratuite',
-          style: manrope(16, weight: 700, color: p.text(0.8)),
+        CapsText(
+          'Version gratuite',
+          style: VitreType.eyebrow(color: p.text(0.74)),
         ),
-        const SizedBox(height: 4),
-        Text(
-          'Passez à Premium',
-          style: manrope(27, weight: 600, letterSpacingEm: -0.015, height: 1.2),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Tous les paysages et leurs ambiances, toutes les mélodies, sans publicité et même sans connexion.',
-          style: manrope(17, height: 1.38, color: p.text(0.88)),
-        ),
+        const SizedBox(height: 6),
+        Text('Passez à Premium', style: VitreType.title(size: 30)),
         const SizedBox(height: 16),
         PrimaryButton(
           label: 'Essayer 3 jours gratuits',
-          height: 60,
-          fontSize: 19,
           onPressed: () => Nav.premium(context),
         ),
         const SizedBox(height: 10),
         Text(
           'Puis ${annual.price} par an. Annulable à tout moment.',
           textAlign: TextAlign.center,
-          style: manrope(16, color: p.text(0.78)),
+          style: VitreType.small(color: p.text(0.74)),
         ),
       ]);
     } else {
@@ -201,26 +182,22 @@ class _SubscriptionCard extends StatelessWidget {
         status = 'Se termine le ${_date(e.expiresAt!)}, sans renouvellement.';
       }
       children.addAll([
-        Text(
-          'Mon abonnement · $planName',
-          style: manrope(16, weight: 700, color: p.text(0.8)),
+        CapsText(
+          'Abonnement · $planName',
+          style: VitreType.eyebrow(color: p.text(0.74)),
         ),
-        const SizedBox(height: 4),
-        Text(
-          'Premium',
-          style: manrope(27, weight: 600, letterSpacingEm: -0.015),
-        ),
-        const SizedBox(height: 8),
-        Text(status, style: manrope(17, height: 1.38, color: p.text(0.88))),
+        const SizedBox(height: 6),
+        Text('Premium', style: VitreType.title(size: 30)),
+        const SizedBox(height: 6),
+        Text(status, style: VitreType.small(size: 14, color: p.text(0.82))),
         const SizedBox(height: 14),
         // Demo build and lifetime: nothing to manage on Google Play.
         if (model.demoMode || plan == Plan.lifetime)
           const SizedBox.shrink()
         else
           SecondaryButton(
-            label: 'Gérer mon abonnement sur Google Play',
-            height: 56,
-            fontSize: 17,
+            label: 'Gérer sur Google Play',
+            semanticLabel: 'Gérer mon abonnement sur Google Play',
             onPressed: model.openManageSubscription,
           ),
       ]);
@@ -264,13 +241,11 @@ class _ProblemReportRow extends StatelessWidget {
     final last = model.lastAbnormalExit;
     return LinkRow(
       title: 'Signaler un problème',
-      subtitle: last == null
-          ? 'Envoyer un rapport technique, sans donnée personnelle'
-          : 'Dernier arrêt anormal : ${exitSummary(last)}',
+      subtitle: last == null ? null : 'Dernier arrêt : ${exitSummary(last)}',
       onTap: () async {
         final toasts = ToastHost.maybeOf(context);
         final shared = await model.shareProblemReport();
-        if (!shared) toasts?.show('Le rapport n’a pas pu être préparé. Réessayez.');
+        if (!shared) toasts?.show('Rapport impossible. Réessayez.');
       },
     );
   }
@@ -309,7 +284,7 @@ class _TextSizeCard extends StatelessWidget {
             child: Text(
               text,
               textScaler: TextScaler.noScaling,
-              style: manrope(size, weight: 700),
+              style: VitreType.label(size: size),
             ),
           ),
         ),
@@ -319,45 +294,32 @@ class _TextSizeCard extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+        padding: const EdgeInsets.fromLTRB(16, 8, 12, 8),
         decoration: BoxDecoration(
           color: p.fill(0.07),
           borderRadius: BorderRadius.circular(22),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        child: Row(
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Semantics(
-                    liveRegion: true,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Taille du texte',
-                          style: manrope(18, weight: 700),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          s.textSizeLabel,
-                          style: manrope(16, color: p.text(0.72)),
-                        ),
-                      ],
+            Expanded(
+              child: Semantics(
+                liveRegion: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Taille du texte', style: VitreType.label()),
+                    const SizedBox(height: 2),
+                    Text(
+                      s.textSizeLabel,
+                      style: VitreType.small(color: p.text(0.7)),
                     ),
-                  ),
+                  ],
                 ),
-                button('A−', 16, 'Réduire le texte', -1),
-                const SizedBox(width: 8),
-                button('A+', 22, 'Agrandir le texte', 1),
-              ],
+              ),
             ),
-            const SizedBox(height: 12),
-            Text(
-              'Voici un exemple de texte.',
-              style: manrope(18, weight: 500, color: p.text(0.92)),
-            ),
+            button('A−', 15, 'Réduire le texte', -1),
+            const SizedBox(width: 8),
+            button('A+', 20, 'Agrandir le texte', 1),
           ],
         ),
       ),

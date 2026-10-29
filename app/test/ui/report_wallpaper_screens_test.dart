@@ -8,6 +8,7 @@ import 'package:eventide/ui/screens/landscapes_sheet.dart';
 import 'package:eventide/ui/screens/settings_screen.dart';
 import 'package:eventide/ui/screens/wallpaper_sheet.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/widgets.dart' show RichText;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'app_harness.dart';
@@ -56,7 +57,8 @@ void main() {
       await pumpApp(tester, model);
       await openRoute(tester, Routes.settings, (_) => const SettingsScreen());
       await tester.ensureVisible(find.text('Signaler un problème'));
-      expect(find.text('Envoyer un rapport technique, sans donnée personnelle'), findsOneWidget);
+      // A plain entry: no subtitle when Android recorded no abnormal end.
+      expect(find.textContaining('Dernier arrêt'), findsNothing);
       await tester.tap(find.text('Signaler un problème'));
       await settle(tester);
       expect(model.shares, 1);
@@ -72,12 +74,12 @@ void main() {
       await openRoute(tester, Routes.settings, (_) => const SettingsScreen());
       await tester.ensureVisible(find.text('Signaler un problème'));
       expect(
-        find.text('Dernier arrêt anormal : Plantage natif (moteur, son ou vidéo), le 29 octobre à 22 h 14'),
+        find.text('Dernier arrêt : Plantage natif (moteur, son ou vidéo), le 29 octobre à 22 h 14'),
         findsOneWidget,
       );
       await tester.tap(find.text('Signaler un problème'));
       await settle(tester);
-      expect(find.text('Le rapport n’a pas pu être préparé. Réessayez.'), findsOneWidget);
+      expect(find.text('Rapport impossible. Réessayez.'), findsOneWidget);
       await tearDownApp(tester);
     });
   });
@@ -95,7 +97,6 @@ void main() {
       await pumpApp(tester, able);
       await openRoute(tester, Routes.landscapes, (_) => const LandscapesSheet());
       await tester.ensureVisible(find.text('Fond d’écran'));
-      expect(find.text('Mettre « Cascade en forêt » sur l’écran d’accueil ou verrouillé'), findsOneWidget);
       await tester.tap(find.text('Fond d’écran'));
       await settle(tester);
       expect(find.byType(WallpaperSheet), findsOneWidget);
@@ -110,16 +111,18 @@ void main() {
       final model = _Model();
       await pumpApp(tester, model);
       await openRoute(tester, WallpaperSheet.routeName, (_) => const WallpaperSheet(landscapeId: 'cascade-foret'));
-      expect(find.text(WallpaperMessages.liveTitle), findsOneWidget);
+      expect(findCaps(WallpaperMessages.liveTitle), findsOneWidget);
       expect(find.text(WallpaperMessages.liveText), findsOneWidget);
       expect(find.textContaining('Galerie'), findsNothing);
       expect(find.textContaining('15 secondes'), findsNothing);
       // The main button's label holds on one line on the S24 (it wrapped on two before).
-      final label = tester.renderObject<RenderParagraph>(find.text(WallpaperMessages.liveTitle));
+      final label = tester.renderObject<RenderParagraph>(
+        find.descendant(of: findCaps(WallpaperMessages.liveTitle), matching: find.byType(RichText)),
+      );
       final oneLine = label.getFullHeightForCaret(const TextPosition(offset: 0));
       expect(label.size.height, lessThan(oneLine * 1.5));
       expect(label.didExceedMaxLines, isFalse);
-      await tester.tap(find.text(WallpaperMessages.liveTitle));
+      await tester.tap(findCaps(WallpaperMessages.liveTitle));
       await settle(tester);
       expect(model.wallpapers, ['cascade-foret']);
       await tearDownApp(tester);
@@ -130,7 +133,7 @@ void main() {
       final model = _Model()..result = WallpaperResult.unavailable;
       await pumpApp(tester, model);
       await openRoute(tester, WallpaperSheet.routeName, (_) => const WallpaperSheet(landscapeId: 'cascade-foret'));
-      await tester.tap(find.text(WallpaperMessages.liveTitle));
+      await tester.tap(findCaps(WallpaperMessages.liveTitle));
       await settle(tester);
       expect(find.text(WallpaperMessages.unavailable), findsOneWidget);
       await tearDownApp(tester);
@@ -142,7 +145,7 @@ void main() {
       await pumpApp(tester, model);
       // berge-mousseuse: no video and no poster on this test setup.
       await openRoute(tester, WallpaperSheet.routeName, (_) => const WallpaperSheet(landscapeId: 'berge-mousseuse'));
-      expect(find.text(WallpaperMessages.liveTitle), findsNothing);
+      expect(findCaps(WallpaperMessages.liveTitle), findsNothing);
       expect(find.text(WallpaperMessages.nothingText), findsOneWidget);
       await tearDownApp(tester);
     });
@@ -153,8 +156,8 @@ void main() {
       await pumpApp(tester, model);
       await openRoute(tester, WallpaperSheet.routeName, (_) => const WallpaperSheet(landscapeId: 'pluie-ville'));
       expect(find.text(WallpaperMessages.lockedText), findsOneWidget);
-      expect(find.text(WallpaperMessages.liveTitle), findsNothing);
-      expect(find.text('Découvrir Premium'), findsOneWidget);
+      expect(findCaps(WallpaperMessages.liveTitle), findsNothing);
+      expect(findCaps('Découvrir Premium'), findsOneWidget);
       await tearDownApp(tester);
     });
   });

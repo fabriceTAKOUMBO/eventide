@@ -32,12 +32,6 @@ class SchedulesScreen extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 0, 4, 16),
-            child: SheetText(
-              'Le son démarre doucement à l’heure choisie, pour vous rappeler de vous détendre ou d’aller dormir.',
-            ),
-          ),
           if (!model.exactAlarmAllowed)
             Padding(
               padding: const EdgeInsets.only(bottom: 16),
@@ -45,15 +39,15 @@ class SchedulesScreen extends StatelessWidget {
                 child: Builder(
                   builder: (context) {
                     final text = Text(
-                      'Pour démarrer à l’heure, Android demande votre autorisation.',
-                      style: manrope(16, height: 1.35, color: p.text(0.88)),
+                      'Autorisez le démarrage à l’heure.',
+                      style: VitreType.small(size: 14, color: p.text(0.86)),
                     );
                     final button = _AllowButton(
                       onTap: () =>
                           model.requestPermission(PermissionKind.exactAlarm),
                     );
                     // Side by side like the mockup; stacked when the text is large.
-                    if (MediaQuery.textScalerOf(context).scale(16) > 21) {
+                    if (MediaQuery.textScalerOf(context).scale(14) > 19) {
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [text, const SizedBox(height: 12), button],
@@ -73,7 +67,7 @@ class SchedulesScreen extends StatelessWidget {
           for (final s in schedules) _ScheduleRow(schedule: s),
           const SizedBox(height: 4),
           SecondaryButton(
-            label: 'Ajouter une programmation',
+            label: 'Ajouter',
             icon: limitReached ? VIcons.lock : VIcons.plus,
             semanticLabel: limitReached
                 ? 'Ajouter une programmation, avec Premium'
@@ -89,17 +83,15 @@ class SchedulesScreen extends StatelessWidget {
           if (max != null) ...[
             const SizedBox(height: 12),
             Text(
-              'Version gratuite : $max programmation. Premium n’a pas de limite.',
+              '$max programmation en version gratuite',
               textAlign: TextAlign.center,
-              style: manrope(16, height: 1.35, color: p.text(0.72)),
+              style: VitreType.small(color: p.text(0.7)),
             ),
           ],
           const SizedBox(height: 18),
           LinkButton(
-            label: 'Le son ne démarre pas ? Voir le guide',
+            label: 'Le son ne démarre pas ?',
             underline: true,
-            fontSize: 17,
-            alpha: 0.88,
             onPressed: () => Nav.batteryGuide(context),
           ),
         ],
@@ -131,9 +123,9 @@ class _AllowButton extends StatelessWidget {
             constraints: const BoxConstraints(minHeight: 48),
             padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
             alignment: Alignment.center,
-            child: Text(
+            child: CapsText(
               'Autoriser',
-              style: manrope(17, weight: 700, color: VitreColors.ink),
+              style: VitreType.button(color: VitreColors.ink),
             ),
           ),
         ),
@@ -155,7 +147,7 @@ class _ScheduleRow extends StatelessWidget {
     final landscape = model.catalog.landscape(schedule.landscapeId)?.name ?? '';
     final ramp = formatDuration(Duration(minutes: schedule.rampMinutes));
     final line1 = '${schedule.daysSummary()} · ${schedule.reminder.label}';
-    final line2 = '$landscape · monte doucement sur $ramp';
+    final line2 = '$landscape · montée $ramp';
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: Container(
@@ -186,19 +178,14 @@ class _ScheduleRow extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            time,
-                            style: manrope(
-                              40,
-                              weight: 300,
-                              letterSpacingEm: -0.02,
-                              height: 1.1,
-                            ),
-                          ),
+                          Text(time, style: VitreType.figure(40)),
                           const SizedBox(height: 4),
-                          Text(line1, style: manrope(17, weight: 600)),
+                          Text(line1, style: VitreType.label(size: 15)),
                           const SizedBox(height: 2),
-                          Text(line2, style: manrope(16, color: p.text(0.76))),
+                          Text(
+                            line2,
+                            style: VitreType.small(color: p.text(0.72)),
+                          ),
                         ],
                       ),
                     ),

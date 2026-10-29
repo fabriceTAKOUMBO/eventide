@@ -23,22 +23,10 @@ class MixSheet extends StatefulWidget {
   State<MixSheet> createState() => _MixSheetState();
 }
 
-const Map<LayerKind, (String, String, String)> _texts = {
-  LayerKind.son: (
-    'Dans mon mix',
-    'Ajouter un son',
-    'Baissez à 0 % pour retirer un son.',
-  ),
-  LayerKind.musique: (
-    'Musique de fond',
-    'Ajouter une musique',
-    'Baissez à 0 % pour retirer une musique.',
-  ),
-  LayerKind.decor: (
-    'Sur l’image',
-    'Ajouter à l’image',
-    'Baissez à 0 % pour retirer un effet.',
-  ),
+const Map<LayerKind, (String, String)> _texts = {
+  LayerKind.son: ('Dans mon mix', 'Ajouter un son'),
+  LayerKind.musique: ('Musique de fond', 'Ajouter une musique'),
+  LayerKind.decor: ('Sur l’image', 'Ajouter à l’image'),
 };
 
 class _MixSheetState extends State<MixSheet> {
@@ -105,7 +93,7 @@ class _MixSheetState extends State<MixSheet> {
                   ),
                 if (_kind == LayerKind.decor) ...[
                   const SectionLabel(
-                    'Moment de la journée',
+                    'Moment',
                     padding: EdgeInsets.fromLTRB(4, 4, 4, 10),
                   ),
                   Semantics(
@@ -139,8 +127,8 @@ class _MixSheetState extends State<MixSheet> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(4, 4, 4, 14),
                     child: Text(
-                      'Rien pour l’instant. Ajoutez un élément dans la liste ci-dessous.',
-                      style: manrope(17, height: 1.35, color: p.text(0.78)),
+                      'Rien pour l’instant',
+                      style: VitreType.small(color: p.text(0.74)),
                     ),
                   ),
                 for (final layer in active)
@@ -150,14 +138,6 @@ class _MixSheetState extends State<MixSheet> {
                     level: layer.level,
                     muted: muted,
                     onChanged: (v) => model.setLayerLevel(_kind, layer.id, v),
-                  ),
-                if (active.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
-                    child: Text(
-                      texts.$3,
-                      style: manrope(16, height: 1.35, color: p.text(0.66)),
-                    ),
                   ),
                 SectionLabel(
                   texts.$2,
@@ -200,9 +180,8 @@ class _MuteSwitch extends StatelessWidget {
     final name = music ? 'Musique' : 'Sons de nature';
     final object = music ? 'la musique' : 'les sons de nature';
     final state = muted ? 'en sourdine' : (music ? 'activée' : 'activés');
-    final subtitle = muted
-        ? 'En sourdine, niveaux gardés'
-        : (music ? 'Activée' : 'Activés');
+    // Only the muted state needs words: the switch already shows « on ».
+    final subtitle = muted ? 'En sourdine' : null;
     final radius = BorderRadius.circular(22);
     void toggle() => onChanged(!muted);
     return Padding(
@@ -233,9 +212,14 @@ class _MuteSwitch extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(name, style: manrope(18, weight: 700)),
-                        const SizedBox(height: 2),
-                        Text(subtitle, style: manrope(16, color: p.text(0.72))),
+                        Text(name, style: VitreType.label()),
+                        if (subtitle != null) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            subtitle,
+                            style: VitreType.small(color: p.text(0.7)),
+                          ),
+                        ],
                       ],
                     );
                     final control = VitreSwitchVisual(value: !muted);
@@ -311,11 +295,11 @@ class _AddRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 14),
-              Expanded(child: Text(item.name, style: manrope(18, weight: 600))),
+              Expanded(child: Text(item.name, style: VitreType.label())),
               if (locked && !isLargeText(context))
-                Text(
+                CapsText(
                   'Premium',
-                  style: manrope(16, weight: 600, color: p.text(0.7)),
+                  style: VitreType.eyebrow(color: p.text(0.7)),
                 ),
             ],
           ),
@@ -374,9 +358,12 @@ class _LevelRowState extends State<_LevelRow> {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Expanded(
-                    child: Text(widget.name, style: manrope(19, weight: 700)),
+                    child: Text(widget.name, style: VitreType.label(size: 17)),
                   ),
-                  Text('$_value %', style: manrope(17, color: p.text(0.78))),
+                  Text(
+                    '$_value %',
+                    style: VitreType.small(size: 14, color: p.text(0.76)),
+                  ),
                 ],
               ),
             ),

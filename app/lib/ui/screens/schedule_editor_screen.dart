@@ -97,7 +97,7 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
     final confirmed = await showVitreDialog<bool>(
       context,
       icon: VIcons.trash,
-      title: 'Supprimer cette programmation ?',
+      title: 'Supprimer ?',
       message:
           'Le son ne démarrera plus à ${formatClock(draft.hour, draft.minute)}.',
       confirm: 'Supprimer',
@@ -123,7 +123,7 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
       title: widget.existing == null
           ? 'Nouvelle programmation'
           : 'Modifier la programmation',
-      titleSize: 24,
+      titleSize: 28,
       top: 60,
       headerTop: 24,
       panelAlpha: 0.74,
@@ -138,10 +138,7 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const SectionLabel(
-            'Heure de départ',
-            padding: EdgeInsets.fromLTRB(4, 2, 4, 2),
-          ),
+          const SectionLabel('Heure', padding: EdgeInsets.fromLTRB(4, 2, 4, 2)),
           Semantics(
             label: 'Heure de départ : ${formatClock(draft.hour, draft.minute)}',
             container: true,
@@ -161,7 +158,7 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
                 ExcludeSemantics(
                   child: Padding(
                     padding: const EdgeInsets.only(bottom: 4),
-                    child: Text(':', style: manrope(52, weight: 300)),
+                    child: Text(':', style: VitreType.figure(48, weight: 200)),
                   ),
                 ),
                 const SizedBox(width: 6),
@@ -204,7 +201,6 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
                           selected: draft.days.contains(d),
                           radio: false,
                           height: 48,
-                          fontSize: 17,
                           onTap: () {
                             final days = {...draft.days};
                             if (!days.remove(d)) days.add(d);
@@ -219,10 +215,13 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(4, 10, 4, 0),
-            child: Text(summary, style: manrope(17, color: p.text(0.84))),
+            child: Text(
+              summary,
+              style: VitreType.small(size: 14, color: p.text(0.8)),
+            ),
           ),
           const SectionLabel(
-            'Le son monte doucement pendant',
+            'Montée du son',
             padding: EdgeInsets.fromLTRB(4, 18, 4, 8),
           ),
           Semantics(
@@ -250,9 +249,9 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
                 ),
                 const SizedBox(width: 8),
                 Expanded(
-                  flex: 17,
+                  flex: 10,
                   child: ChoiceChipButton(
-                    label: 'Personnalisé',
+                    label: 'Autre',
                     selected: _ramp == _Ramp.custom,
                     onTap: () => setState(() => _ramp = _Ramp.custom),
                   ),
@@ -280,7 +279,7 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
                       child: Text(
                         '$_custom min',
                         textAlign: TextAlign.center,
-                        style: manrope(28, weight: 700),
+                        style: VitreType.figure(28, weight: 400),
                       ),
                     ),
                   ),
@@ -333,7 +332,7 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
                   Expanded(
                     child: Text(
                       landscape.name,
-                      style: manrope(19, weight: 700),
+                      style: VitreType.display(size: 22),
                     ),
                   ),
                   VIcon(VIcons.chevronRight, size: 20, color: p.text(0.7)),
@@ -341,7 +340,7 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
               ),
             ),
           ),
-          const SectionLabel('Message de rappel'),
+          const SectionLabel('Rappel'),
           Semantics(
             label: 'Message de rappel',
             container: true,
@@ -361,17 +360,10 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
               ],
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 10, 4, 0),
-            child: Text(
-              '« ${draft.reminder.notificationText} »',
-              style: manrope(17, color: p.text(0.8)),
-            ),
-          ),
           if (widget.existing != null) ...[
             const SizedBox(height: 20),
             LinkButton(
-              label: 'Supprimer la programmation',
+              label: 'Supprimer',
               underline: true,
               onPressed: _delete,
             ),
@@ -415,12 +407,7 @@ class _Stepper extends StatelessWidget {
               textAlign: TextAlign.center,
               textScaler: MediaQuery.textScalerOf(context)
                   .clamp(maxScaleFactor: 1.5),
-              style: manrope(
-                56,
-                weight: 300,
-                letterSpacingEm: -0.02,
-                height: 1.1,
-              ),
+              style: VitreType.figure(54, weight: 200),
             ),
           ),
         ),

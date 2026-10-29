@@ -96,24 +96,18 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                                   header: true,
                                   child: Text(
                                     'Bienvenue',
-                                    style: manrope(
-                                      34,
-                                      weight: 600,
-                                      letterSpacingEm: -0.02,
-                                      height: 1.15,
-                                    ),
+                                    style: VitreType.title(size: 42),
                                   ),
                                 ),
-                                const SizedBox(height: 10),
+                                const SizedBox(height: 8),
                                 Text(
-                                  'Des sons de nature pour vous détendre et mieux dormir.',
-                                  style: manrope(
-                                    19,
-                                    height: 1.4,
+                                  'Sons de nature, pour se détendre et mieux dormir.',
+                                  style: VitreType.body(
+                                    size: 16,
                                     color: p.text(0.84),
                                   ),
                                 ),
-                                const SizedBox(height: 26),
+                                const SizedBox(height: 24),
                                 PrimaryButton(
                                   label: 'Commencer',
                                   busy: _busy,
@@ -123,9 +117,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                                 const SizedBox(height: 8),
                                 LinkButton(
                                   label: 'J’ai déjà un compte',
-                                  fontSize: 18,
+                                  fontSize: 15,
                                   alpha: 1,
-                                  height: 56,
+                                  height: 52,
                                   onPressed: _busy
                                       ? null
                                       : () => _run(() async {
@@ -139,9 +133,9 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                                 Padding(
                                   padding: const EdgeInsets.only(bottom: 6),
                                   child: Text(
-                                    'Gratuit pour commencer, sans carte bancaire.',
+                                    'Gratuit, sans carte bancaire',
                                     textAlign: TextAlign.center,
-                                    style: manrope(16, color: p.text(0.72)),
+                                    style: VitreType.small(color: p.text(0.7)),
                                   ),
                                 ),
                               ],
