@@ -1,5 +1,41 @@
 # Journal de développement — Eventide
 
+## 29 octobre 2026 (après-midi) — retours du test sur le S24, réorientation
+
+**Retours du product owner après la démo sur son Galaxy S24** :
+- le son ne correspondait pas à l'image (pas de tonnerre sur la vidéo d'orage) ;
+- arrêt de l'app au bout d'environ 30 minutes, **sans minuteur** ;
+- fond d'écran du téléphone changé au même moment, peut-être une coïncidence : l'app n'a pas la permission de le faire ;
+- toucher la carte de l'écran verrouillé n'ouvrait pas l'app ;
+- le micro comprenait les paroles mais n'agissait pas.
+
+**Décisions du product owner** :
+- **Micro et assistant vocal retirés** partout : app, API, infrastructure. Les opérations, Gemini, l'essai et le pack de crédits disparaissent ([contrat § 3 et § 7](api/contrat-v1.md)) ; le code reste dans l'historique git pour une éventuelle phase 2.
+- **Orage** : le tonnerre ne doit pas revenir à chaque boucle. Il tombe au hasard toutes les 2 à 5 minutes, jamais de la même façon, sur une pluie continue qui reste torrentielle ([contrat § 11](api/contrat-v1.md)).
+- **Fond d'écran** : la vidéo du paysage peut devenir le fond d'écran.
+- **Vidéos générées avec Higgsfield** : son serveur MCP officiel est `https://mcp.higgsfield.ai/mcp`, à ajouter comme connecteur personnalisé sur claude.ai. Il faut **une nouvelle session** pour qu'il soit chargé, et chaque génération consomme des crédits Higgsfield. Viser des clips d'au moins 30 s avec leur son ([consignes](medias/prompts-video.md)).
+- **Nom** : le product owner voulait « Relax Rain New » avec presque le même logo que « Relax Rain » de mikdroid. **Refusé** : risque d'usurpation d'identité au sens de Google Play, de sanction du compte développeur (qui pourrait toucher CINAF si le compte est partagé) et de contrefaçon de marque.
+  - Une recherche a vérifié 20 noms. **Rainlit, Rainlune et Rainfold** sont libres sur le web, et Ondée et Rainvale sont possibles.
+  - Le product owner veut les mots « Relaxing & Sleep » : proposition « <Nom> : Relaxing & Sleep » dans le titre Play.
+  - **Choix du nom en attente**, à faire suivre d'une vraie recherche de marques (TMview, EUIPO, classes 9, 41 et 42), du domaine et d'une icône originale (pas des gouttes sur une vitre).
+
+**Fait** (trois agents en parallèle, fusionnés et vérifiés : `flutter analyze` sans remarque, 420 tests de l'app, 202 tests de l'API, ruff, migrations, Terraform validate et test, garde-fous) :
+- **Retrait de la voix** : 4 migrations qui suppriment les tables et colonnes de la voix et des crédits (tables d'Eventide seulement) ; le secret Gemini et les alarmes de l'assistant sont retirés du Terraform (rien n'est appliqué) ; coûts recalculés : environ 8 USD par mois en phase 1, 18 au lancement. L'ancien fichier `voice_trial` est effacé du téléphone.
+- **Ambiance de chaque paysage** : le son d'origine de la vidéo, sans le tonnerre, recomposé en boucle de plus de 60 s.
+  - Pour `pluie-ville`, il n'y avait que 2,85 s de pluie sans tonnerre dans la source : **à écouter sur le S24**.
+- **Tonnerre** : 10 variantes **provisoires**, fabriquées par ordinateur, à remplacer par de vrais enregistrements ou par Higgsfield. Pour chaque coup, l'éclair est dessiné par l'app de 0,4 à 3,5 s avant ; les éclairs sont retirés de la vidéo `pluie-ville`.
+- **Rapport de problème** : raisons de sortie données par Android, journal des erreurs et de la mémoire, envoyé depuis Réglages › « Signaler un problème ».
+  - Deux fuites de lecteurs vidéo, quand on fait défiler vite les paysages, sont corrigées. Ce n'est pas forcément la cause de l'arrêt.
+- **Carte de l'écran verrouillé** : cause probable trouvée. `audio_service` ne donnait l'intention d'ouverture à la session qu'après l'avoir activée ; la nôtre est maintenant posée dès le démarrage du service.
+- **Fond d'écran vidéo** : service de fond d'écran animé (muet, en pause quand il est caché), et « Enregistrer dans la Galerie » pour l'écran verrouillé de One UI.
+
+**À vérifier à la main sur le S24** (détail dans [architecture § 15.6, § 16.4, § 17.5 et § 18.4](app/architecture.md)) :
+- toucher la carte de l'écran verrouillé ;
+- 30 à 40 minutes d'écoute, puis envoyer le rapport ;
+- volume du tonnerre et naturel de l'ambiance ;
+- fond d'écran animé, et vidéo enregistrée dans la Galerie ;
+- version optimisée (R8).
+
 ## 29 octobre 2026 — carte de lecture, vérification sur émulateurs
 
 - **Fait** : carte de lecture de l'écran verrouillé et des notifications, comme Spotify (`8df69fd`, [architecture § 15](app/architecture.md)) ; l'API accepte la clé `videos/paysages/<id>.mp4` (`f259325`).
