@@ -2,24 +2,22 @@
 
 /// What this phone offers.
 class WallpaperSupport {
-  const WallpaperSupport({this.liveWallpaper = false, this.gallery = false});
+  const WallpaperSupport({this.liveWallpaper = false});
 
-  /// Android live wallpapers (`FEATURE_LIVE_WALLPAPER`): the looping video on the home screen.
+  /// Android live wallpapers (`FEATURE_LIVE_WALLPAPER`): the looping video on the home screen
+  /// (and on the lock screen when the phone allows it, as One UI does).
   final bool liveWallpaper;
 
-  /// Saving a video to the Gallery without any permission (MediaStore, Android 10+).
-  final bool gallery;
-
-  bool get any => liveWallpaper || gallery;
+  bool get any => liveWallpaper;
 
   static const WallpaperSupport none = WallpaperSupport();
 
   @override
   bool operator ==(Object other) =>
-      other is WallpaperSupport && other.liveWallpaper == liveWallpaper && other.gallery == gallery;
+      other is WallpaperSupport && other.liveWallpaper == liveWallpaper;
 
   @override
-  int get hashCode => Object.hash(liveWallpaper, gallery);
+  int get hashCode => liveWallpaper.hashCode;
 }
 
 /// Outcome of « Mettre en fond d'écran ».

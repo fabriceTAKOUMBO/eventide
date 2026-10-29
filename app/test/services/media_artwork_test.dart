@@ -4,6 +4,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:eventide/core/crash_guard.dart';
 import 'package:eventide/core/scene.dart';
 import 'package:eventide/services/audio/media_artwork.dart';
 import 'package:eventide/ui/landscape/landscape_artwork.dart';
@@ -137,8 +138,80 @@ void main() {
       downloadedPoster: (id) => '/content/images/paysages/$id.jpg',
       render: renderer.call,
     );
-    expect(await artwork.resolve(cascade, Moment.jour), Uri.file('/cache/media_art/cascade-foret-jour-v1.png'));
+    expect(await artwork.resolve(cascade, Moment.jour), Uri.file('/cache/media_art/cascade-foret-jour-v${MediaArtwork.renderVersion}.png'));
     expect(renderer.calls.single.$1, 'cascade');
+  });
+
+  test('two pictures asked together are drawn one after the other, never at once', () async {
+    final gate = Completer<void>();
+    var running = 0, most = 0;
+    final artwork = MediaArtwork(
+      files: files,
+      bundledAssets: () async => const {},
+      loadAsset: (asset) async => poster,
+      downloadedPoster: (id) => '/content/images/paysages/$id.jpg',
+      render: ({required String style, required Moment moment, required int size}) async {
+        running++;
+        most = running > most ? running : most;
+        if (style == 'berge') await gate.future;
+        running--;
+        return Uint8List.fromList([1]);
+      },
+    );
+    final first = artwork.resolve(berge, Moment.jour);
+    final second = artwork.resolve(catalog.landscape('lisiere-verte')!, Moment.jour);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(running, 1);
+    gate.complete();
+    expect(await first, isNotNull);
+    expect(await second, isNotNull);
+    expect(most, 1);
+  });
+
+  test('a style drawn simplified (crash guard) gets its own file name', () async {
+    final artwork = MediaArtwork(
+      files: files,
+      bundledAssets: () async => const {},
+      loadAsset: (asset) async => poster,
+      downloadedPoster: (id) => '/content/images/paysages/$id.jpg',
+      render: renderer.call,
+      simplified: (style) => style == 'berge',
+    );
+    expect(
+      await artwork.resolve(berge, Moment.nuit),
+      Uri.file('/cache/media_art/berge-mousseuse-nuit-v${MediaArtwork.renderVersion}-s.png'),
+    );
+  });
+
+  group('guarded renderer (crash guard, § 19)', () {
+    late MemoryGuardStore store;
+    late List<String> log;
+    setUp(() {
+      store = MemoryGuardStore();
+      log = [];
+    });
+    tearDown(() => CrashGuard.current = CrashGuard());
+
+    testWidgets('marked and noted before drawing, cleared once the PNG is ready', (tester) async {
+      CrashGuard.current = CrashGuard(store: store, build: 'b', log: log.add)..load();
+      final png = await tester.runAsync(
+        () => renderGuardedLandscapeArtwork(style: 'lisiere', moment: Moment.nuit, size: 64),
+      );
+      expect(png!.sublist(0, 4), [0x89, 0x50, 0x4E, 0x47]);
+      expect(log, ['dessin : image de la carte lisiere 64×64 nuit']);
+      expect(store.writes, 3, reason: 'load, mark, clear');
+      expect(CrashGuard(store: store, build: 'b').deadStyles, isEmpty);
+    });
+
+    testWidgets('a style interrupted by a crash before is drawn simplified', (tester) async {
+      store.content = '{"build":"b","starts":0,"dead":[],"drawing":[{"what":"paysage","style":"lisiere","detail":"672×1456"}]}';
+      CrashGuard.current = CrashGuard(store: store, build: 'b', log: log.add)..load();
+      final png = await tester.runAsync(
+        () => renderGuardedLandscapeArtwork(style: 'lisiere', moment: Moment.jour, size: 64),
+      );
+      expect(png, isNotNull);
+      expect(log.last, 'dessin : image de la carte lisiere 64×64 jour simplifiée');
+    });
   });
 
   testWidgets('the real renderer draws a square PNG of the landscape at its moment', (tester) async {

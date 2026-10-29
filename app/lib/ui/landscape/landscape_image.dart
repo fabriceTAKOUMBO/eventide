@@ -6,8 +6,10 @@ import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+import '../../core/crash_guard.dart';
 import '../../core/landscape_media.dart';
 import '../../core/scene.dart' show Moment;
 import '../theme/vitre.dart';
@@ -253,7 +255,9 @@ class LandscapeImage extends StatelessWidget {
   }
 }
 
-/// Procedural picture rasterised once per size and reused (cheap to animate).
+/// Procedural picture rasterised once per size and reused (cheap to animate). A style whose
+/// drawing was interrupted by a crash (crash guard, docs/app/architecture.md § 19) is shown
+/// simplified, drawn directly (three gradients, nothing offscreen).
 class ProceduralLandscape extends StatelessWidget {
   const ProceduralLandscape({super.key, required this.style});
 
@@ -265,6 +269,12 @@ class ProceduralLandscape extends StatelessWidget {
       builder: (context, constraints) {
         final size = constraints.biggest;
         if (!size.isFinite || size.isEmpty) return const SizedBox.shrink();
+        if (CrashGuard.current.isDead(style)) {
+          return CustomPaint(
+            size: size,
+            painter: SimplifiedLandscapePainter(style: style),
+          );
+        }
         final ratio = (MediaQuery.maybeDevicePixelRatioOf(context) ?? 2).clamp(
           1.0,
           1.75,
@@ -291,22 +301,39 @@ class ProceduralLandscape extends StatelessWidget {
 }
 
 /// LRU cache of rasterised procedural landscapes.
+///
+/// Each new picture is drawn offscreen on the GPU (`toImageSync`, on the raster thread). The
+/// crash guard marks it before (style and size, also written to the problem report's log) and
+/// clears the mark once it is surely done: after the next frame, which the raster thread draws
+/// after it, plus [settleDelay]. A process killed natively meanwhile leaves the mark, and the
+/// style is drawn simplified from the next start on.
 abstract final class LandscapeRasterCache {
   static final Map<String, ui.Image> _images = {};
   static int _pixels = 0;
   static const int _budget = 14 * 1000 * 1000;
   static bool _unsupported = false;
 
+  /// Margin after the next frame before the drawing counts as done.
+  static Duration settleDelay = const Duration(seconds: 2);
+
+  static bool contains(String style, Size size, double ratio) =>
+      _images.containsKey(_key(style, size, ratio));
+
+  static String _key(String style, Size size, double ratio) =>
+      '$style@${(size.width * ratio).ceil()}x${(size.height * ratio).ceil()}';
+
   static ui.Image? obtain(String style, Size size, double ratio) {
     if (_unsupported) return null;
     final w = (size.width * ratio).ceil();
     final h = (size.height * ratio).ceil();
-    final key = '$style@${w}x$h';
+    final key = _key(style, size, ratio);
     final hit = _images.remove(key);
     if (hit != null) {
       _images[key] = hit;
       return hit;
     }
+    final guard = CrashGuard.current;
+    final token = guard.beginDrawing('paysage', style, '$w×$h');
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
     canvas.scale(ratio);
@@ -315,6 +342,7 @@ abstract final class LandscapeRasterCache {
     try {
       final image = picture.toImageSync(w, h);
       picture.dispose();
+      _settle(guard, token);
       _images[key] = image;
       _pixels += w * h;
       while (_pixels > _budget && _images.length > 1) {
@@ -326,9 +354,19 @@ abstract final class LandscapeRasterCache {
       return image;
     } catch (_) {
       picture.dispose();
+      guard.endDrawing(token);
       _unsupported = true;
       return null;
     }
+  }
+
+  static void _settle(CrashGuard guard, int token) {
+    if (!guard.enabled) return;
+    final scheduler = SchedulerBinding.instance;
+    scheduler.addPostFrameCallback((_) {
+      Timer(settleDelay, () => guard.endDrawing(token));
+    });
+    scheduler.ensureVisualUpdate();
   }
 
   @visibleForTesting

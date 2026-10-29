@@ -1,7 +1,6 @@
 package be.cinaf.eventide
 
 import android.content.Context
-import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -51,12 +50,7 @@ class DevicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 "takeExitReasons" -> inBackground(result) { ExitReports.takeNew(ctx) }
                 "deviceDetails" -> result.success(ExitReports.deviceDetails(ctx))
                 "installMediaSessionActivity" -> result.success(MediaSessionLaunch.install(ctx))
-                "wallpaperSupport" -> result.success(
-                    mapOf(
-                        "live" to LiveWallpaper.isSupported(ctx),
-                        "gallery" to (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q),
-                    ),
-                )
+                "wallpaperSupport" -> result.success(mapOf("live" to LiveWallpaper.isSupported(ctx)))
                 "wallpaperSelection" -> result.success(WallpaperStore.read(ctx)?.landscapeId)
                 "setLiveWallpaper" -> {
                     val id = call.argument<String>("landscape_id")
@@ -77,15 +71,6 @@ class DevicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     WallpaperStore.setAllowed(ctx, call.arguments == true)
                     result.success(true)
                 }
-                "saveVideoToGallery" -> {
-                    val path = call.argument<String>("path")
-                    val title = call.argument<String>("title") ?: "Eventide"
-                    if (path.isNullOrEmpty()) {
-                        result.success(false)
-                        return
-                    }
-                    inBackground(result) { GallerySaver.saveVideo(ctx, path, title) }
-                }
                 "clearWallpaper" -> {
                     WallpaperStore.clear(ctx)
                     result.success(true)
@@ -97,7 +82,7 @@ class DevicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         }
     }
 
-    /** File and MediaStore work off the main thread; the answer goes back on it. */
+    /** File work off the main thread; the answer goes back on it. */
     private fun inBackground(result: MethodChannel.Result, work: () -> Any?) {
         val executor = io
         if (executor == null) {

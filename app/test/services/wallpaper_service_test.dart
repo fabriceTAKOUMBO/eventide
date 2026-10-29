@@ -1,5 +1,5 @@
-// Landscape as wallpaper: which files the wallpaper process gets, the selection, the Gallery
-// copy, and the native channel's contract.
+// Landscape as wallpaper: which files the wallpaper process gets, the selection, and the native
+// channel's contract.
 import 'dart:io';
 
 import 'package:eventide/core/landscape_media.dart';
@@ -104,7 +104,7 @@ void main() {
   });
 
   test('no live wallpaper on this phone: unsupported, nothing recorded', () async {
-    platform.supported = const WallpaperSupport(gallery: true);
+    platform.supported = const WallpaperSupport();
     await wallpaper.init();
     final result = await wallpaper.apply(
       landscapeId: 'cascade-foret',
@@ -137,30 +137,6 @@ void main() {
     expect(platform.allowed, [true, false]);
   });
 
-  test('Gallery: the video is copied there; a copy made only for it is not kept', () async {
-    final ok = await wallpaper.saveToGallery(
-      landscapeId: 'sous-bois',
-      name: 'Sous-bois ensoleillé',
-      video: const AssetLandscapeVideo('assets/landscapes/sous-bois.mp4'),
-    );
-    expect(ok, isTrue);
-    expect(platform.gallery.single.$2, 'Eventide - Sous-bois ensoleillé');
-    expect(File(platform.gallery.single.$1).existsSync(), isFalse);
-    // No video, or no Gallery on this phone (Android 9 and older): nothing saved.
-    expect(await wallpaper.saveToGallery(landscapeId: 'lune-lac', name: 'Lune', video: null), isFalse);
-    platform.supported = const WallpaperSupport(liveWallpaper: true);
-    await wallpaper.init();
-    expect(
-      await wallpaper.saveToGallery(
-        landscapeId: 'sous-bois',
-        name: 'Sous-bois',
-        video: const AssetLandscapeVideo('assets/landscapes/sous-bois.mp4'),
-      ),
-      isFalse,
-    );
-    expect(platform.gallery, hasLength(1));
-  });
-
   test('data deletion: selection and copies forgotten', () async {
     await wallpaper.apply(landscapeId: 'cascade-foret', name: 'Cascade', video: null);
     await wallpaper.clear();
@@ -179,10 +155,9 @@ void main() {
       messenger.setMockMethodCallHandler(channel, (call) async {
         calls.add(call);
         return switch (call.method) {
-          'wallpaperSupport' => {'live': true, 'gallery': false},
+          'wallpaperSupport' => {'live': true},
           'wallpaperSelection' => 'cascade-foret',
           'setLiveWallpaper' => 'opened',
-          'saveVideoToGallery' => true,
           _ => true,
         };
       });
@@ -209,7 +184,6 @@ void main() {
       await native.setAllowed(false);
       expect(calls[3].method, 'setWallpaperAllowed');
       expect(calls[3].arguments, false);
-      expect(await native.saveVideoToGallery(path: '/data/v.mp4', title: 'Eventide - Cascade'), isTrue);
       await native.clearSelection();
       expect(calls.last.method, 'clearWallpaper');
     });
@@ -224,7 +198,6 @@ void main() {
       );
       messenger.setMockMethodCallHandler(channel, null);
       expect(await native.setLiveWallpaper(landscapeId: 'a', name: 'A', allowed: true), WallpaperResult.failed);
-      expect(await native.saveVideoToGallery(path: 'p', title: 't'), isFalse);
     });
   });
 }

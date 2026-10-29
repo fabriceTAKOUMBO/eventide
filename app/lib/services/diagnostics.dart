@@ -6,6 +6,8 @@
 // - DeviceDiagnostics: the native side (channel be.cinaf.eventide/device): process exits
 //   recorded by Android (ApplicationExitInfo, Android 11+, each one given once), phone model.
 // - ProblemReports: keeps the last exits on the phone and builds the plain-text report.
+// - FileGuardStore: the crash guard's sentinels (lib/core/crash_guard.dart), written
+//   synchronously so that they are on disk before a native crash can happen.
 //
 // Nothing leaves the phone unless the user shares the report; no account, no identifier.
 import 'dart:async';
@@ -16,6 +18,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart' show AppLifecycleState;
 
+import '../core/crash_guard.dart';
 import '../core/problem_report.dart';
 
 /// Rotating log of the app: recent lines in memory, and in `log.txt` (rolled over to
@@ -75,6 +78,10 @@ class DiagnosticsLog {
 
   void info(String message) => add(message);
 
+  /// Like [add], but written to the file before returning (synchronously, flushed): for the
+  /// line that must survive a native crash happening right after it (what is about to be drawn).
+  void addDurable(String message) => add(message, durable: true);
+
   void error(String message, [StackTrace? stack]) {
     final frames = stack == null
         ? ''
@@ -82,7 +89,7 @@ class DiagnosticsLog {
     add('$message$frames', level: 'E');
   }
 
-  void add(String message, {String level = 'I'}) {
+  void add(String message, {String level = 'I', bool durable = false}) {
     final text = redactLogLine(message.trimRight());
     if (text == _lastMessage) {
       _repeats++;
@@ -106,10 +113,10 @@ class DiagnosticsLog {
       return;
     }
     _minuteCount++;
-    _write(now, level, text);
+    _write(now, level, text, durable: durable);
   }
 
-  void _write(DateTime at, String level, String text) {
+  void _write(DateTime at, String level, String text, {bool durable = false}) {
     final line = '${_stamp(at)} $level $text';
     _recent.add(line);
     if (_recent.length > memoryLines) _recent.removeRange(0, _recent.length - memoryLines);
@@ -118,7 +125,32 @@ class DiagnosticsLog {
       if (_unwritten.length > memoryLines) _unwritten.removeAt(0);
       return;
     }
+    if (durable) {
+      _appendNow(line);
+      return;
+    }
     _queue = _queue.then((_) => _append(line));
+  }
+
+  /// Synchronous append (lines still queued may land after it: their timestamps tell the order).
+  void _appendNow(String line) {
+    final file = _file;
+    if (file == null) return;
+    try {
+      final bytes = utf8.encode('$line\n');
+      file.parent.createSync(recursive: true);
+      var size = _size ?? (file.existsSync() ? file.lengthSync() : 0);
+      if (size + bytes.length > maxFileBytes && size > 0) {
+        final previous = _previous!;
+        if (previous.existsSync()) previous.deleteSync();
+        file.renameSync(previous.path);
+        size = 0;
+      }
+      file.writeAsBytesSync(bytes, mode: FileMode.append, flush: true);
+      _size = size + bytes.length;
+    } catch (_) {
+      _size = null;
+    }
   }
 
   Future<void> _append(String line) async {
@@ -189,6 +221,35 @@ abstract final class Breadcrumbs {
   static DiagnosticsLog log = DiagnosticsLog();
 
   static void add(String message) => log.add(message);
+}
+
+/// The crash guard's file (`diagnostics/guard.json`): written atomically and synchronously
+/// (temporary file flushed, then renamed), read once at start.
+class FileGuardStore implements GuardStore {
+  FileGuardStore(this.file);
+
+  final File file;
+
+  @override
+  String? read() {
+    try {
+      return file.existsSync() ? file.readAsStringSync() : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  void write(String content) {
+    try {
+      file.parent.createSync(recursive: true);
+      final tmp = File('${file.path}.tmp');
+      tmp.writeAsStringSync(content, flush: true);
+      tmp.renameSync(file.path);
+    } catch (e) {
+      debugPrint('FileGuardStore: cannot write ($e)');
+    }
+  }
 }
 
 /// Routes the app's errors to [log], then to whoever handled them before: Flutter still

@@ -74,6 +74,7 @@ class Harness {
     RemoteLandscapeMedia remoteMedia = RemoteLandscapeMedia.none,
     Directory? contentDirectory,
     MediaArtwork? artwork,
+    bool safeStart = false,
   }) async {
     handler = PlaybackHandler(engine: engineOverride ?? engine, focus: focus, native: native, now: () => now);
     final client = MockClient(backend ?? (request) async => http.Response('', 500));
@@ -113,6 +114,7 @@ class Harness {
         forcedPlan: plan,
         browseDebounce: const Duration(milliseconds: 60),
         demo: demo,
+        safeStart: safeStart,
       ),
       artwork: artwork,
       now: () => now,
@@ -720,6 +722,78 @@ void main() {
     });
   });
 
+  group('crash guard (docs/app/architecture.md § 19)', () {
+    /// A session that ends on lisiere-verte (Nature) after visiting lune-lac (Astral), with a
+    /// favourite, a schedule and a setting, all saved; then the app is started again.
+    Future<RealAppModel> restartAfterLisiere({required bool safeStart}) async {
+      final model = await h.start(plan: Plan.annual);
+      await model.toggleFavorite();
+      await model.saveSchedule(model.newScheduleDraft().copyWith(landscapeId: 'sous-bois'));
+      await model.updateSettings(model.settings.copyWith(wifiOnly: true, textSize: 2));
+      model.selectLandscape('lune-lac');
+      model.browseLandscape('lisiere-verte');
+      await settle(600);
+      expect(model.scene.landscapeId, 'lisiere-verte');
+      model.dispose();
+      final store = h.store;
+      h = Harness()..store = store;
+      return h.start(plan: Plan.annual, safeStart: safeStart);
+    }
+
+    test('without a crash, the app opens where it was left', () async {
+      final again = await restartAfterLisiere(safeStart: false);
+      expect(again.scene.landscapeId, 'lisiere-verte');
+      expect(again.lastLandscapeOfTheme('nature'), 'lisiere-verte');
+      expect(again.lastLandscapeOfTheme('astral'), 'lune-lac');
+    });
+
+    test('safe start: back on Cascade en forêt, landscapes per theme forgotten; favourites, schedules and settings kept', () async {
+      final again = await restartAfterLisiere(safeStart: true);
+      expect(again.scene.landscapeId, 'cascade-foret');
+      expect(again.browsedLandscapeId, 'cascade-foret');
+      expect(again.scene.sounds.map((l) => l.id), contains('ambiance-cascade-foret'));
+      expect(again.lastLandscapeOfTheme('nature'), 'cascade-foret');
+      expect(again.lastLandscapeOfTheme('astral'), 'ciel-etoile');
+      expect(again.favorites, hasLength(1));
+      expect(again.schedules.single.landscapeId, 'sous-bois');
+      expect(again.settings.wifiOnly, isTrue);
+      expect(again.settings.textSize, 2);
+      // Written at once: a new crash right away does not bring lisiere-verte back.
+      expect(jsonDecode(h.store.files[StoreKeys.scene]!)['data']['paysage'], 'cascade-foret');
+      expect(jsonDecode(h.store.files[StoreKeys.appState]!)['data']['last_landscape_by_theme'], isEmpty);
+    });
+
+    test('the card picture is drawn for the landscape the sound follows, not for each one swiped past', () async {
+      final renders = <String>[];
+      final artwork = MediaArtwork(
+        files: MemoryArtworkFiles(),
+        bundledAssets: () async => const {},
+        loadAsset: (asset) async => Uint8List(0),
+        downloadedPoster: (id) => '/content/images/paysages/$id.jpg',
+        render: ({required String style, required Moment moment, required int size}) async {
+          renders.add(style);
+          return Uint8List.fromList([1]);
+        },
+      );
+      final model = await h.start(plan: Plan.annual, artwork: artwork);
+      model.selectLandscape('sous-bois');
+      await model.play();
+      await settle(150);
+      expect(renders, ['sous-bois']);
+      // Swiping down Nature quickly: berge, torrent, pierres, then lisière where the user stays.
+      for (final id in ['berge-mousseuse', 'torrent-montagne', 'pierres-eau', 'lisiere-verte']) {
+        model.browseLandscape(id);
+        expect(h.handler.mediaItem.value!.title, model.catalog.landscape(id)!.name, reason: 'the card follows at once');
+        await settle(20);
+      }
+      expect(renders, ['sous-bois'], reason: 'no picture drawn while swiping');
+      await settle(200);
+      expect(model.scene.landscapeId, 'lisiere-verte');
+      expect(renders, ['sous-bois', 'lisiere']);
+      expect(h.handler.mediaItem.value!.artUri.toString(), endsWith('lisiere-verte-${model.scene.moment.name}-v${MediaArtwork.renderVersion}.png'));
+    });
+  });
+
   group('hints, permissions and outgoing pages', () {
     test('a hint stays seen after a restart, until the data is deleted', () async {
       final model = await h.start();
@@ -1103,11 +1177,11 @@ void main() {
       model.selectLandscape('berge-mousseuse');
       await settle();
       expect(renders, [('berge', Moment.soir)]);
-      expect(h.handler.mediaItem.value!.artUri, Uri.file('/cache/media_art/berge-mousseuse-soir-v1.png'));
+      expect(h.handler.mediaItem.value!.artUri, Uri.file('/cache/media_art/berge-mousseuse-soir-v${MediaArtwork.renderVersion}.png'));
       model.setMoment(Moment.nuit);
       await settle();
       expect(renders.last, ('berge', Moment.nuit));
-      expect(h.handler.mediaItem.value!.artUri, Uri.file('/cache/media_art/berge-mousseuse-nuit-v1.png'));
+      expect(h.handler.mediaItem.value!.artUri, Uri.file('/cache/media_art/berge-mousseuse-nuit-v${MediaArtwork.renderVersion}.png'));
       await sub.cancel();
     });
 

@@ -28,6 +28,24 @@ void main() {
     if (await dir.exists()) await dir.delete(recursive: true);
   });
 
+  group('FileGuardStore (crash guard sentinels)', () {
+    test('written synchronously and atomically, read back by the next process', () {
+      final file = File('${dir.path}/diagnostics/guard.json');
+      final store = FileGuardStore(file);
+      expect(store.read(), isNull);
+      store.write('{"starts":1}');
+      expect(file.readAsStringSync(), '{"starts":1}');
+      expect(File('${file.path}.tmp').existsSync(), isFalse);
+      expect(FileGuardStore(file).read(), '{"starts":1}');
+    });
+
+    test('an unwritable place never throws', () {
+      final store = FileGuardStore(File('/proc/eventide-no-such-dir/guard.json'));
+      expect(() => store.write('{}'), returnsNormally);
+      expect(store.read(), isNull);
+    });
+  });
+
   group('DiagnosticsLog', () {
     test('kept in memory until it has a folder, then written there and read back by a later run', () async {
       final log = DiagnosticsLog(now: () => clock);
@@ -48,6 +66,22 @@ void main() {
       final lines = await next.storedLines();
       expect(lines.first, contains('démarrage'));
       expect(lines.last, contains('redémarrage'));
+    });
+
+    test('a durable line is on disk before add returns (it must survive a native crash right after)', () async {
+      final log = DiagnosticsLog(maxFileBytes: 300, maxLinesPerMinute: 1000, now: () => clock);
+      await log.attach(dir);
+      log.addDurable('dessin : paysage lisiere 672×1456');
+      // No await, no flush: read synchronously, as if the process had just died.
+      final file = File('${dir.path}/log.txt');
+      expect(file.readAsStringSync(), contains('I dessin : paysage lisiere 672×1456'));
+      // It rolls over like the others.
+      for (var i = 0; i < 12; i++) {
+        log.addDurable('dessin : image de la carte n° $i');
+      }
+      expect(file.lengthSync(), lessThanOrEqualTo(300));
+      expect(File('${dir.path}/log.1.txt').existsSync(), isTrue);
+      expect((await log.storedLines()).last, contains('n° 11'));
     });
 
     test('two files at most: the oldest lines go first', () async {

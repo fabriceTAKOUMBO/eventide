@@ -7,7 +7,7 @@
 // content folder) → procedural picture of the landscape at its moment of the day, rendered
 // once to a square PNG and kept in the app's cache folder. Never blocks playback: the
 // controller publishes the card first and adds the picture when [MediaArtwork.resolve]
-// answers.
+// answers. Renders run one at a time (each is a GPU drawing, docs/app/architecture.md § 19).
 import 'dart:async';
 import 'dart:io';
 
@@ -70,18 +70,25 @@ class MediaArtwork {
     required this._loadAsset,
     required this._downloadedPoster,
     required this._render,
+    bool Function(String style)? simplified,
     this.size = 720,
     this.renderTimeout = const Duration(seconds: 10),
-  });
+  }) : _simplified = simplified ?? _never;
+
+  static bool _never(String style) => false;
 
   /// Bumped when the procedural pictures change (a new file name, never a stale picture).
-  static const int renderVersion = 1;
+  /// 2: the GPU-budget painter (29 Oct 2026).
+  static const int renderVersion = 2;
 
   final ArtworkFiles _files;
   final Future<Set<String>> Function() _bundledAssets;
   final Future<Uint8List> Function(String asset) _loadAsset;
   final String Function(String landscapeId) _downloadedPoster;
   final ArtworkRenderer _render;
+
+  /// The style is drawn simplified (crash guard): its picture gets its own file name.
+  final bool Function(String style) _simplified;
 
   /// Side of the rendered square picture, in pixels.
   final int size;
@@ -93,6 +100,7 @@ class MediaArtwork {
   final Map<String, Uri> _done = {};
   final Map<String, Future<Uri?>> _pending = {};
   final Map<String, String> _bundledCopies = {};
+  Future<void> _renders = Future.value();
 
   static String _key(String landscapeId, Moment moment) => '$landscapeId|${moment.name}';
 
@@ -130,13 +138,12 @@ class MediaArtwork {
     }
     // 3. Procedural picture at the moment of the day.
     try {
+      final variant = _simplified(landscape.style) ? '-s' : '';
       final path =
-          '${_files.directory}/${landscape.id}-${moment.name}-v$renderVersion.png';
+          '${_files.directory}/${landscape.id}-${moment.name}-v$renderVersion$variant.png';
       if (!await _files.exists(path)) {
-        final png = await _render(
-          style: landscape.style,
-          moment: moment,
-          size: size,
+        final png = await _oneAtATime(
+          () => _render(style: landscape.style, moment: moment, size: size),
         ).timeout(renderTimeout);
         await _files.write(path, png);
       }
@@ -145,6 +152,17 @@ class MediaArtwork {
       debugPrint('MediaArtwork: no picture for ${landscape.id} ($e)');
       return null;
     }
+  }
+
+  /// Never two offscreen drawings at once: a quick series of landscapes (swipes, lock screen
+  /// buttons) is drawn one after the other. A drawing that never answers holds the queue for
+  /// [renderTimeout] at most.
+  Future<T> _oneAtATime<T>(Future<T> Function() work) {
+    final result = _renders.then((_) => work());
+    _renders = result
+        .then<void>((_) {}, onError: (Object _) {})
+        .timeout(renderTimeout, onTimeout: () {});
+    return result;
   }
 
   Future<String?> _bundledPoster(String landscapeId) async {

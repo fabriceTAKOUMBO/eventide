@@ -3,13 +3,9 @@ package be.cinaf.eventide
 import android.app.WallpaperManager
 import android.content.ActivityNotFoundException
 import android.content.ComponentName
-import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Build
-import android.os.Environment
-import android.provider.MediaStore
 import android.util.Log
 import org.json.JSONObject
 import java.io.File
@@ -142,42 +138,4 @@ object LiveWallpaper {
         } catch (e: SecurityException) {
             false
         }
-}
-
-/** « Enregistrer dans la Galerie »: a copy in Movies/Eventide (MediaStore, Android 10+, no permission). */
-object GallerySaver {
-    fun saveVideo(context: Context, path: String, title: String): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
-        val source = WallpaperStore.usableFile(context, path) ?: return false
-        val resolver = context.contentResolver
-        val name = title.replace(Regex("[^\\p{L}\\p{N} ._-]"), "").trim().ifEmpty { "Eventide" }
-        val values = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, "$name.mp4")
-            put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
-            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/Eventide")
-            put(MediaStore.MediaColumns.IS_PENDING, 1)
-        }
-        val collection = MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-        val inserted = try {
-            resolver.insert(collection, values)
-        } catch (e: Exception) {
-            null
-        }
-        val uri = inserted ?: return false
-        return try {
-            val output = resolver.openOutputStream(uri) ?: throw IOException("no output stream")
-            output.use { out -> source.inputStream().use { it.copyTo(out) } }
-            val done = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
-            resolver.update(uri, done, null, null)
-            true
-        } catch (e: Exception) {
-            Log.w("EventideWallpaper", "video not saved to the Gallery: $e")
-            try {
-                resolver.delete(uri, null, null)
-            } catch (ignored: Exception) {
-                // Nothing more to undo.
-            }
-            false
-        }
-    }
 }

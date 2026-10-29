@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 
 import '../../../app/app_model.dart';
 import '../../../core/catalog.dart';
+import '../../../core/crash_guard.dart';
 import '../../../core/format.dart';
 import '../../../core/scene.dart';
 import '../../landscape/decor_layer.dart';
@@ -635,7 +636,9 @@ class _HomeScreenState extends State<HomeScreen>
   String? _prewarmedFor;
 
   /// Rasterises the neighbouring landscapes (or decodes their posters) after the frame, so
-  /// that a swipe never waits for the first paint of the incoming picture.
+  /// that a swipe never waits for the first paint of the incoming picture. Procedural ones are
+  /// drawn one per frame, never together (GPU work, docs/app/architecture.md § 19); a style the
+  /// crash guard draws simplified needs nothing.
   void _prewarmNeighbors(AppModel model, String id, double dpr) {
     if (_prewarmedFor == id || _size.isEmpty) return;
     _prewarmedFor = id;
@@ -643,8 +646,10 @@ class _HomeScreenState extends State<HomeScreen>
     final h = _horizontal(model, id);
     final ids = {v.previous, v.next, h.left, h.right}.whereType<String>();
     final size = _size;
+    final ratio = dpr.clamp(1.0, 1.75);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      final styles = <String>[];
       for (final other in ids) {
         final l = model.catalog.landscape(other);
         if (l == null) continue;
@@ -653,9 +658,25 @@ class _HomeScreenState extends State<HomeScreen>
           unawaited(precacheImage(poster, context, onError: (_, _) {}));
           continue;
         }
-        LandscapeRasterCache.obtain(l.style, size, dpr.clamp(1.0, 1.75));
+        if (CrashGuard.current.isDead(l.style) ||
+            LandscapeRasterCache.contains(l.style, size, ratio)) {
+          continue;
+        }
+        styles.add(l.style);
       }
+      _rasteriseInTurn(styles, size, ratio);
     });
+  }
+
+  void _rasteriseInTurn(List<String> styles, Size size, double ratio) {
+    if (styles.isEmpty || !mounted) return;
+    LandscapeRasterCache.obtain(styles.first, size, ratio);
+    if (styles.length == 1) return;
+    WidgetsBinding.instance
+      ..addPostFrameCallback(
+        (_) => _rasteriseInTurn(styles.sublist(1), size, ratio),
+      )
+      ..ensureVisualUpdate();
   }
 }
 

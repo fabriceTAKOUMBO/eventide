@@ -49,9 +49,15 @@ class AppConfig {
     this.browseDebounce = const Duration(milliseconds: 1500),
     this.subscriptionOfflineGrace = const Duration(days: 7),
     this.demo = false,
+    this.safeStart = false,
   });
 
   final String shareHost;
+
+  /// Crash guard (docs/app/architecture.md § 19): the previous start died before running
+  /// stably. The app starts on the default free landscape and forgets the landscapes being
+  /// browsed; favourites, schedules and settings are kept.
+  final bool safeStart;
 
   /// Demo build (DemoMode.resolve): Premium forced on the phone, no purchase, no ads, no
   /// entitlement request to the server.
@@ -295,6 +301,24 @@ class RealAppModel extends AppModel implements PlaybackHost {
         if (at != null) _adLastShown[placement] = at;
       }
     }
+    if (_config.safeStart) await _applySafeStart();
+  }
+
+  /// The previous start died before running stably (crash guard, docs/app/architecture.md
+  /// § 19): back to the default free landscape (bundled video and poster, never drawn by the
+  /// painter), with no landscape remembered per theme, so that nothing drawn at the previous
+  /// start is drawn again. Favourites, schedules, settings, and the scene's moment, timer and
+  /// mutes are kept. Written at once: a new crash before the usual save delay must not bring
+  /// the old landscape back.
+  Future<void> _applySafeStart() async {
+    final fallback = _catalog.defaultLandscape;
+    final previous = _scene.landscapeId;
+    if (previous != fallback.id) _scene = _scene.withLandscape(fallback);
+    _browsedId = fallback.id;
+    _lastByTheme.clear();
+    Breadcrumbs.add('démarrage protégé : paysage $previous remplacé par ${fallback.id}, paysages par thème oubliés');
+    await _store.write(StoreKeys.scene, _scene.toJson());
+    await _writeState();
   }
 
   static T? _tryParse<T>(T Function() parse) {
@@ -1115,10 +1139,13 @@ class RealAppModel extends AppModel implements PlaybackHost {
   }
 
   /// Makes the card's picture in the background, only while the card can be seen; the card
-  /// is published without it first and updated when it is ready.
+  /// is published without it first and updated when it is ready. Not while a swipe or a
+  /// previous/next tap is pending: a quick series of landscapes would otherwise draw a picture
+  /// for each one passed (GPU work, docs/app/architecture.md § 19); the picture comes when the
+  /// sound follows ([browseLandscape] refreshes the card then).
   void _requestArtwork(Landscape landscape, Moment moment) {
     final art = _artwork;
-    if (art == null || !_audioActive || art.peek(landscape.id, moment) != null) return;
+    if (art == null || !_audioActive || _browsePending || art.peek(landscape.id, moment) != null) return;
     if (!_artRequested.add('${landscape.id}|${moment.name}')) return;
     unawaited(art.resolve(landscape, moment).then((uri) {
       if (uri != null) _refreshMediaCard();
@@ -1751,23 +1778,6 @@ class RealAppModel extends AppModel implements PlaybackHost {
     } catch (e) {
       debugPrint('RealAppModel: wallpaper failed ($e)');
       return WallpaperResult.failed;
-    }
-  }
-
-  @override
-  Future<bool> saveLandscapeVideoToGallery(String landscapeId) async {
-    final wallpaper = _wallpaper;
-    final landscape = _catalog.landscape(landscapeId);
-    if (wallpaper == null || landscape == null || !_rules.canUseLandscape(_plan, landscape)) return false;
-    try {
-      return await wallpaper.saveToGallery(
-        landscapeId: landscapeId,
-        name: landscape.name,
-        video: await landscapeVideo(landscapeId),
-      );
-    } catch (e) {
-      debugPrint('RealAppModel: video not saved to the Gallery ($e)');
-      return false;
     }
   }
 

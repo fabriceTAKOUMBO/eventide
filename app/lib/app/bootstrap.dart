@@ -9,11 +9,12 @@ import 'dart:io';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart' show AppLifecycleListener, WidgetsBinding, WidgetsFlutterBinding;
+import 'package:flutter/widgets.dart' show AppLifecycleListener, AppLifecycleState, WidgetsBinding, WidgetsFlutterBinding;
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../core/catalog.dart';
+import '../core/crash_guard.dart';
 import '../core/landscape_media.dart';
 import '../services/account_service.dart';
 import '../services/ads_service.dart';
@@ -33,6 +34,7 @@ import '../services/storage.dart';
 import '../services/wallpaper_service.dart';
 
 import '../ui/landscape/landscape_artwork.dart';
+import '../ui/landscape/landscape_painter.dart' show kLandscapePainterVersion;
 import '../ui/landscape/landscape_video.dart' show LandscapeVideos;
 import 'app_controller.dart';
 import 'demo_mode.dart';
@@ -117,6 +119,10 @@ Future<({PlaybackHandler handler, RealAppModel model})> startEventide() async {
   AppLifecycleListener(onStateChange: (state) {
     model.handleLifecycle(state);
     crumbs.lifecycle(state);
+    // Crash guard: reaching the background normally ends the start (§ 19).
+    if (state == AppLifecycleState.hidden || state == AppLifecycleState.paused) {
+      CrashGuard.current.markStable();
+    }
   });
   final initial = WidgetsBinding.instance.lifecycleState;
   if (initial != null) model.handleLifecycle(initial);
@@ -152,6 +158,15 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
   // Problem report: the log file survives a crash; the exits recorded by Android are read once.
   unawaited(Breadcrumbs.log.attach(Directory('${support.path}/diagnostics')));
   Breadcrumbs.add('démarrage : Eventide ${Env.appVersion}${demo ? ' (version démo)' : ''}');
+  // Crash guard (docs/app/architecture.md § 19): what the previous run left decides a safe start
+  // and which styles are drawn simplified. Its breadcrumbs are written before returning: they
+  // must be on the phone if a native crash follows.
+  final guard = CrashGuard(
+    store: FileGuardStore(File('${support.path}/diagnostics/guard.json')),
+    build: '${Env.appVersion}+p$kLandscapePainterVersion',
+    log: Breadcrumbs.log.addDurable,
+  )..load();
+  CrashGuard.current = guard;
   final problems = ProblemReports(
     device: MethodChannelDeviceDiagnostics(),
     log: Breadcrumbs.log,
@@ -189,9 +204,10 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
       return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
     },
     downloadedPoster: (id) => content.cachedPath(LandscapeMediaKeys.image(id)),
-    render: renderLandscapeArtwork,
+    render: renderGuardedLandscapeArtwork,
+    simplified: guard.isDead,
   );
-  // Live wallpaper and Gallery copy of the landscape videos (files the wallpaper process reads).
+  // Live wallpaper of the landscape videos (files the wallpaper process reads).
   final wallpaper = LandscapeWallpaper(
     platform: MethodChannelWallpaperPlatform(),
     directory: Directory('${support.path}/wallpaper'),
@@ -222,7 +238,12 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
     share: PlatformShareSheet(),
     permissions: PlatformPermissions(native),
     urls: PlatformUrlOpener(),
-    config: AppConfig(shareHost: Env.shareHost, forcedPlan: Env.debugForcePlan, demo: demo),
+    config: AppConfig(
+      shareHost: Env.shareHost,
+      forcedPlan: Env.debugForcePlan,
+      demo: demo,
+      safeStart: guard.safeStart,
+    ),
     artwork: artwork,
     problems: problems,
     wallpaper: wallpaper,

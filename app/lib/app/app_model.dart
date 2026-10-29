@@ -281,17 +281,13 @@ abstract class AppModel extends ChangeNotifier {
 
   // ---- Landscape as wallpaper (docs/app/architecture.md « Fond d'écran vidéo »)
 
-  /// What this phone offers (live wallpaper, Gallery). Nothing by default.
+  /// What this phone offers (live wallpaper). Nothing by default.
   WallpaperSupport get wallpaperSupport => WallpaperSupport.none;
 
   /// Makes [landscapeId] the live wallpaper: its looping video (or its still picture), muted,
   /// paused when not visible. Opens Android's preview, where the user confirms. Only for a
   /// landscape the plan can use ([WallpaperResult.notAllowed] otherwise).
   Future<WallpaperResult> setLandscapeWallpaper(String landscapeId) async => WallpaperResult.unsupported;
-
-  /// Copies the landscape's looping video to the Gallery (`Movies/Eventide`), for lock screens
-  /// that only take a Gallery video. Android 10+ only; false when nothing was saved.
-  Future<bool> saveLandscapeVideoToGallery(String landscapeId) async => false;
 
   // ---- Storm (contract § 11)
 

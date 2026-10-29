@@ -20,6 +20,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../../app/app_model.dart';
+import '../../core/crash_guard.dart';
 import '../../core/landscape_media.dart';
 import '../../core/scene.dart' show Moment;
 import '../model_scope.dart';
@@ -80,6 +81,9 @@ class _LandscapeBackgroundState extends State<LandscapeBackground>
   @override
   void initState() {
     super.initState();
+    // Crash guard (docs/app/architecture.md § 19): the start counts as unfinished from the
+    // first landscape on, until the app has run stably (once per process).
+    CrashGuard.current.uiStarting();
     WidgetsBinding.instance.addObserver(this);
     _lifecycle =
         WidgetsBinding.instance.lifecycleState ?? AppLifecycleState.resumed;

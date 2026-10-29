@@ -128,29 +128,24 @@ void main() {
       expect(await model.shareProblemReport(), isFalse);
       expect(model.wallpaperSupport, WallpaperSupport.none);
       expect(await model.setLandscapeWallpaper('cascade-foret'), WallpaperResult.unsupported);
-      expect(await model.saveLandscapeVideoToGallery('cascade-foret'), isFalse);
     });
   });
 
   group('Fond d’écran', () {
     test('a free landscape: its bundled video and poster, then Android\'s preview', () async {
       final model = await setup.start();
-      expect(model.wallpaperSupport, const WallpaperSupport(liveWallpaper: true, gallery: true));
+      expect(model.wallpaperSupport, const WallpaperSupport(liveWallpaper: true));
       expect(await model.setLandscapeWallpaper('cascade-foret'), WallpaperResult.opened);
       final sent = setup.platform.set.single;
       expect(sent['name'], 'Cascade en forêt');
       expect(sent['video'], endsWith('/wallpaper/cascade-foret.mp4'));
       expect(sent['poster'], endsWith('/wallpaper/cascade-foret.jpg'));
-      expect(await model.saveLandscapeVideoToGallery('cascade-foret'), isTrue);
-      expect(setup.platform.gallery.single.$2, 'Eventide - Cascade en forêt');
     });
 
     test('a Premium landscape on the free plan: refused, nothing asked to Android', () async {
       final model = await setup.start(plan: Plan.free);
       expect(await model.setLandscapeWallpaper('pluie-ville'), WallpaperResult.notAllowed);
-      expect(await model.saveLandscapeVideoToGallery('pluie-ville'), isFalse);
       expect(setup.platform.set, isEmpty);
-      expect(setup.platform.gallery, isEmpty);
     });
 
     test('the wallpaper follows the plan: a Premium landscape shows its still picture on the free plan', () async {

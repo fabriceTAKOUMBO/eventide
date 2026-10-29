@@ -1,6 +1,17 @@
 // Procedural stand-ins for the licensed landscape photos (one composition per catalog
 // `style`). Everything is deterministic: the same style always paints the same picture.
 // Compositions are drawn in a portrait 390 × 844 frame and cropped like `object-fit: cover`.
+//
+// GPU budget (docs/app/architecture.md § 19, crash of 29 Oct 2026 on the Galaxy S24): these
+// pictures are rasterised on the phone's GPU (Impeller/Vulkan), at full screen, for the
+// neighbours, the menu thumbnail and the media card. Version 1 asked for up to 5,000 mask-filter
+// blurs (each an offscreen pass) and 262 path clips (stencil passes) per picture; `lisiere` was
+// the only one clipping to a 26-oval outline with 260 blurred dots and a blurred copy of that
+// outline inside it. Since version 2: no clipPath at all (details are kept inside their shape by
+// a point-in-shape test when recorded), no mask filter on dots, ovals, rectangles or strokes
+// (soft radial or linear gradients instead), and at most [kMaxBlurredShapesPerLandscape] large
+// blurred shapes per picture (merged when they were many). test/ui/landscape_budget_test.dart
+// holds every style to that budget.
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -9,6 +20,14 @@ import 'package:flutter/widgets.dart';
 
 /// Reference frame of the mockup.
 const Size kLandscapeFrame = Size(390, 844);
+
+/// Version of the procedural pictures (2: GPU budget, see the top of this file). Part of the
+/// media card file names, and of the crash guard (a style that died with an older painter is
+/// tried again with this one).
+const int kLandscapePainterVersion = 2;
+
+/// Large mask-filter blurs a picture may ask for (distant woods, cliff, mist, waterfall).
+const int kMaxBlurredShapesPerLandscape = 6;
 
 /// Vertical focus used when a landscape is cropped to a wide box (thumbnails),
 /// like the mockup's `object-position`.
@@ -40,6 +59,78 @@ class LandscapePainter extends CustomPainter {
   @override
   bool shouldRepaint(LandscapePainter oldDelegate) =>
       oldDelegate.style != style;
+}
+
+/// Paints the simplified picture of [style] (crash guard, docs/app/architecture.md § 19).
+class SimplifiedLandscapePainter extends CustomPainter {
+  const SimplifiedLandscapePainter({required this.style});
+
+  final String style;
+
+  @override
+  void paint(Canvas canvas, Size size) =>
+      paintSimplifiedLandscape(canvas, size, style);
+
+  @override
+  bool shouldRepaint(SimplifiedLandscapePainter oldDelegate) =>
+      oldDelegate.style != style;
+}
+
+/// Colours of the simplified pictures: the sky-to-ground gradient of each composition and the
+/// place and colour of its light.
+typedef _Simple = ({List<int> colors, List<double> stops, int light, double lx, double ly});
+
+const Map<String, _Simple> _simplified = {
+  'cascade': (colors: [0xFF2C4A40, 0xFF1A3229, 0xFF5F8A80, 0xFF24453E, 0xFF0A1511], stops: [0, 0.3, 0.66, 0.75, 1], light: 0xFFDCEFE2, lx: 0.55, ly: 0.06),
+  'sous-bois': (colors: [0xFFB9C48A, 0xFF889A5A, 0xFF4D6034, 0xFF243019, 0xFF141B0E], stops: [0, 0.25, 0.5, 0.75, 1], light: 0xFFFFF1C2, lx: 0.66, ly: 0.2),
+  'berge': (colors: [0xFF3D5A44, 0xFF233A2B, 0xFF4C6D66, 0xFF1B3330, 0xFF122019], stops: [0, 0.3, 0.55, 0.8, 1], light: 0xFFCFE5D2, lx: 0.4, ly: 0.05),
+  'torrent': (colors: [0xFF8EA4B6, 0xFFB8C6CC, 0xFF3E5263, 0xFF1F3127, 0xFF2C5559], stops: [0, 0.22, 0.4, 0.6, 1], light: 0xFFF2F6F6, lx: 0.5, ly: 0.4),
+  'pierres': (colors: [0xFF4E6A5E, 0xFF2C473F, 0xFF15271F], stops: [0, 0.5, 1], light: 0xFFE4F2EE, lx: 0.5, ly: 0.2),
+  'lisiere': (colors: [0xFF6E93B5, 0xFF9DB9CC, 0xFFDCE2CF, 0xFF27442D, 0xFF8FA65A, 0xFF22381A], stops: [0, 0.3, 0.45, 0.49, 0.53, 1], light: 0xFFFFE8B0, lx: 0.85, ly: 0.45),
+  'ville-pluie': (colors: [0xFF161B2C, 0xFF262B42, 0xFF3C3346, 0xFF0E111A, 0xFF0B0C12], stops: [0, 0.45, 0.62, 0.72, 1], light: 0xFFB0705A, lx: 0.5, ly: 0.62),
+  'cafe': (colors: [0xFF1E140E, 0xFF2A3346, 0xFF2E1F15, 0xFF5A3A22, 0xFF120B06], stops: [0, 0.3, 0.62, 0.76, 1], light: 0xFFFFA650, lx: 0.5, ly: 0.1),
+  'toits': (colors: [0xFF333D52, 0xFF56627A, 0xFF8A8E98, 0xFF4C586A, 0xFF1A1F27], stops: [0, 0.3, 0.45, 0.7, 1], light: 0xFFE7B88A, lx: 0.25, ly: 0.42),
+  'etoiles': (colors: [0xFF03060F, 0xFF0A1428, 0xFF1A2742, 0xFF2C3352, 0xFF03050A], stops: [0, 0.45, 0.72, 0.84, 0.9], light: 0xFF52618A, lx: 0.3, ly: 0.86),
+  'aurore': (colors: [0xFF030812, 0xFF07172A, 0xFF0C2638, 0xFF0F2A34, 0xFF02060A], stops: [0, 0.4, 0.62, 0.7, 1], light: 0xFF2AD08A, lx: 0.5, ly: 0.38),
+  'lune-lac': (colors: [0xFF070E1C, 0xFF12203A, 0xFF22344F, 0xFF1F3048, 0xFF060C16], stops: [0, 0.38, 0.56, 0.6, 1], light: 0xFFBFD0F0, lx: 0.62, ly: 0.2),
+};
+
+/// A picture of [style] made of three gradients only (no path, no blur, no clip): shown instead
+/// of the full composition for a style whose drawing was interrupted by a crash.
+void paintSimplifiedLandscape(Canvas canvas, Size size, String style) {
+  final p = _simplified[style] ?? _simplified['cascade']!;
+  final rect = Offset.zero & size;
+  if (rect.isEmpty) return;
+  canvas.drawRect(
+    rect,
+    Paint()
+      ..shader = ui.Gradient.linear(
+        rect.topCenter,
+        rect.bottomCenter,
+        [for (final c in p.colors) Color(c)],
+        p.stops,
+      ),
+  );
+  final light = Color(p.light);
+  final centre = Offset(size.width * p.lx, size.height * p.ly);
+  canvas.drawRect(
+    rect,
+    Paint()
+      ..shader = ui.Gradient.radial(centre, size.longestSide * 0.55, [
+        _a(light, 0.35),
+        _a(light, 0),
+      ]),
+  );
+  canvas.drawRect(
+    rect,
+    Paint()
+      ..shader = ui.Gradient.radial(
+        Offset(size.width / 2, size.height * 0.45),
+        size.longestSide * 0.62,
+        const [Color(0x00000000), Color(0x00000000), Color(0x8C000000)],
+        const [0, 0.55, 1],
+      ),
+  );
 }
 
 /// Paints [style] so that it covers [size], cropping around [landscapeFocusY].
@@ -162,6 +253,19 @@ ui.Gradient _linear(
   return ui.Gradient.linear(from, to, colors, st);
 }
 
+/// Point in polygon (even-odd), for details that must stay inside a shape without a GPU clip.
+bool _inside(List<Offset> polygon, Offset p) {
+  var inside = false;
+  for (var i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    final a = polygon[i], b = polygon[j];
+    if ((a.dy > p.dy) != (b.dy > p.dy) &&
+        p.dx < (b.dx - a.dx) * (p.dy - a.dy) / (b.dy - a.dy) + a.dx) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}
+
 Color _a(Color c, double alpha) =>
     c.withValues(alpha: (c.a * alpha).clamp(0.0, 1.0));
 Color _mix(Color a, Color b, double t) => Color.lerp(a, b, t)!;
@@ -232,32 +336,86 @@ class _K {
     canvas.restore();
   }
 
-  Paint fill(Color c, {double blur = 0, BlendMode blend = BlendMode.srcOver}) {
-    final paint = Paint()
-      ..color = c
-      ..blendMode = blend;
-    if (blur > 0) {
-      paint.maskFilter = MaskFilter.blur(BlurStyle.normal, blur * s);
-    }
-    return paint;
-  }
+  /// Plain fill. Never a mask filter: a blurred draw is an offscreen pass on the GPU. Soft dots,
+  /// ovals and bands use [softCircle], [softOval] and [softRect]; the few large soft shapes use
+  /// [blurredFill].
+  Paint fill(Color c, {BlendMode blend = BlendMode.srcOver}) => Paint()
+    ..color = c
+    ..blendMode = blend;
 
+  /// A large soft shape (distant woods, cliff, mist): the only mask-filter blur left, at most
+  /// [kMaxBlurredShapesPerLandscape] per picture, never inside a clip.
+  Paint blurredFill(Color c, double blur, {BlendMode blend = BlendMode.srcOver}) =>
+      fill(c, blend: blend)..maskFilter = MaskFilter.blur(BlurStyle.normal, blur * s);
+
+  /// Stroke. [blur] no longer blurs (no mask filter): the line is drawn a little wider and
+  /// lighter instead, which is what a slight blur of a thin line looks like.
   Paint stroke(
     Color c,
     double width, {
     double blur = 0,
     BlendMode blend = BlendMode.srcOver,
   }) {
-    final paint = Paint()
-      ..color = c
+    final spread = blur * 0.8;
+    return Paint()
+      ..color = spread > 0 ? _a(c, width / (width + spread)) : c
       ..style = PaintingStyle.stroke
-      ..strokeWidth = width * s
+      ..strokeWidth = (width + spread) * s
       ..strokeCap = StrokeCap.round
       ..blendMode = blend;
-    if (blur > 0) {
-      paint.maskFilter = MaskFilter.blur(BlurStyle.normal, blur * s);
+  }
+
+  /// A disc softened by [blur] (in frame units), as one radial gradient: half opacity at its
+  /// edge, like a Gaussian blur, without any offscreen pass.
+  void softCircle(Offset c, double radius, Color color, double blur) {
+    final b = blur * s;
+    if (radius <= 0) return;
+    if (b <= 0) {
+      canvas.drawCircle(c, radius, fill(color));
+      return;
     }
-    return paint;
+    final outer = radius + 2 * b;
+    canvas.drawCircle(
+      c,
+      outer,
+      Paint()
+        ..shader = ui.Gradient.radial(
+          c,
+          outer,
+          [color, color, _a(color, 0.5), _a(color, 0)],
+          [0, math.max(0.0, radius - b) / outer, radius / outer, 1],
+        ),
+    );
+  }
+
+  /// An oval softened by [blur] (contact shadows), as a stretched radial gradient.
+  void softOval(Rect r, Color color, double blur) {
+    final rx = r.width / 2, ry = r.height / 2;
+    if (rx <= 0 || ry <= 0) return;
+    canvas.save();
+    canvas.translate(r.center.dx, r.center.dy);
+    canvas.scale(1, ry / rx);
+    softCircle(Offset.zero, rx, color, blur);
+    canvas.restore();
+  }
+
+  /// A vertical band softened on its sides by [blur] (light streaks, reflections).
+  void softRect(Rect r, Color color, double blur) {
+    final b = blur * s;
+    final o = Rect.fromLTRB(r.left - 2 * b, r.top, r.right + 2 * b, r.bottom);
+    if (o.width <= 0 || o.height <= 0) return;
+    final edge = 2 * b / o.width;
+    final full = math.min(3 * b / o.width, 0.5);
+    canvas.drawRect(
+      o,
+      Paint()
+        ..shader = _linear(
+          o.centerLeft,
+          o.centerRight,
+          [_a(color, 0), _a(color, 0.5), color, color, _a(color, 0.5), _a(color, 0)],
+          [0, edge, full, 1 - full, 1 - edge, 1],
+        ),
+    );
   }
 
   /// Noisy horizon filled down to the bottom of the frame.
@@ -354,7 +512,9 @@ class _K {
     return path;
   }
 
-  /// Irregular rock with light from the top left and optional moss cap.
+  /// Irregular rock with light from the top left and optional moss cap. No clip: the texture
+  /// and the moss dots are kept inside the outline by [_inside], the moss gradient is filled
+  /// through the outline itself.
   void rock(
     Offset c,
     double rx,
@@ -367,6 +527,7 @@ class _K {
   }) {
     final r = _Rng(seed + sd * 7919);
     final path = Path();
+    final outline = <Offset>[];
     const n = 28;
     for (var i = 0; i <= n; i++) {
       final a = i / n * math.pi * 2;
@@ -374,6 +535,7 @@ class _K {
       var y = math.sin(a) * ry * wobble;
       if (y > ry * 0.55) y = ry * 0.55 + (y - ry * 0.55) * 0.3; // flatter base
       final pt = Offset(c.dx + math.cos(a) * rx * wobble, c.dy + y);
+      outline.add(pt);
       if (i == 0) {
         path.moveTo(pt.dx, pt.dy);
       } else {
@@ -382,13 +544,14 @@ class _K {
     }
     path.close();
     // Contact shadow.
-    canvas.drawOval(
+    softOval(
       Rect.fromCenter(
         center: c.translate(rx * 0.1, ry * 0.55),
         width: rx * 2.3,
         height: ry * 0.7,
       ),
-      fill(const Color(0x8C000000), blur: 6),
+      const Color(0x8C000000),
+      6,
     );
     final hi = _mix(base, const Color(0xFFFFFFFF), 0.22 * light);
     final lo = _mix(base, const Color(0xFF000000), 0.6);
@@ -402,23 +565,21 @@ class _K {
           [0, 0.45, 1],
         ),
     );
-    canvas.save();
-    canvas.clipPath(path);
-    // Surface texture.
+    // Surface texture: fewer dots on small stones (pebbles of `pierres` are many).
+    final dots = (rx / s / 4).clamp(4, 18).round();
     for (var i = 0; i < 18; i++) {
       final o = c.translate(r.range(-rx, rx), r.range(-ry, ry));
-      canvas.drawCircle(
-        o,
-        r.range(0.05, 0.22) * rx,
-        fill(_a(r.chance(0.5) ? hi : lo, 0.18), blur: 2),
-      );
+      final radius = r.range(0.05, 0.22) * rx;
+      final color = _a(r.chance(0.5) ? hi : lo, 0.18);
+      if (i >= dots || !_inside(outline, o)) continue;
+      softCircle(o, radius, color, 2);
     }
     if (moss != null) {
       // Moss grows on the lit top and fades downwards, with a soft irregular edge.
       final top = c.dy - ry * 1.1;
       final depth = ry * 2 * mossAmount;
-      canvas.drawRect(
-        Rect.fromLTRB(c.dx - rx * 1.2, top, c.dx + rx * 1.2, top + depth * 1.3),
+      canvas.drawPath(
+        path,
         Paint()
           ..shader = _linear(
             Offset(c.dx, top),
@@ -432,29 +593,20 @@ class _K {
           c.dx + r.range(-rx, rx),
           top + r.range(0, depth * 1.2),
         );
-        canvas.drawCircle(
-          o,
-          r.range(0.8, 3.2) * s,
-          fill(
-            _a(
-              _mix(
-                moss,
-                r.chance(0.5)
-                    ? const Color(0xFFE6F2A0)
-                    : const Color(0xFF0E1A0A),
-                r.range(0.1, 0.5),
-              ),
-              0.45,
-            ),
+        final radius = r.range(0.8, 3.2) * s;
+        final color = _a(
+          _mix(
+            moss,
+            r.chance(0.5) ? const Color(0xFFE6F2A0) : const Color(0xFF0E1A0A),
+            r.range(0.1, 0.5),
           ),
+          0.45,
         );
+        if (!_inside(outline, o)) continue;
+        canvas.drawCircle(o, radius, fill(color));
       }
-      canvas.drawPath(
-        path,
-        stroke(_a(const Color(0xFF000000), 0.25), 2, blur: 2),
-      );
+      canvas.drawPath(path, stroke(_a(const Color(0xFF000000), 0.18), 1.2));
     }
-    canvas.restore();
   }
 
   /// Fern or grass tuft made of curved strokes.
@@ -665,7 +817,7 @@ class _K {
     );
   }
 
-  /// Light shafts from [origin] spreading downwards.
+  /// Light shafts from [origin] spreading downwards: one shape, one gradient, one blur.
   void rays(
     Offset origin,
     int count,
@@ -676,6 +828,8 @@ class _K {
     int sd = 0,
   }) {
     final r = _Rng(seed + 313 + sd);
+    final shafts = Path();
+    var alpha = 0.0;
     for (var i = 0; i < count; i++) {
       final a = baseAngle + r.range(-spread / 2, spread / 2);
       final wid = r.range(0.03, 0.09);
@@ -692,22 +846,22 @@ class _K {
               wid *
               w *
               2;
-      final path = Path()
+      shafts
         ..moveTo(origin.dx, origin.dy)
         ..lineTo(left.dx, left.dy)
         ..lineTo(right.dx, right.dy)
         ..close();
-      canvas.drawPath(
-        path,
-        Paint()
-          ..blendMode = BlendMode.screen
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, 10 * s)
-          ..shader = _linear(origin, end, [
-            _a(color, r.range(0.5, 1)),
-            _a(color, 0),
-          ]),
-      );
+      alpha += r.range(0.5, 1) / count;
     }
+    canvas.drawPath(
+      shafts,
+      // Opaque paint colour: its alpha would otherwise dim the gradient a second time.
+      blurredFill(const Color(0xFF000000), 10, blend: BlendMode.screen)
+        ..shader = ui.Gradient.radial(origin, length * h, [
+          _a(color, alpha),
+          _a(color, 0),
+        ]),
+    );
   }
 }
 
@@ -725,27 +879,30 @@ void _cascade(_K k) {
   // Far misty woods.
   c.drawPath(
     k.canopy(0.3, 0.08, 0.05, 0.1, k.seed + 1),
-    k.fill(_a(_c(0xFF6E8F80), 0.75), blur: 7),
+    k.blurredFill(_a(_c(0xFF6E8F80), 0.75), 7),
   );
   k.haze(0.3, 0.12, _a(_c(0xFFBFD8CB), 0.35));
   c.drawPath(
     k.canopy(0.38, 0.1, 0.06, 0.12, k.seed + 2),
-    k.fill(_a(_c(0xFF3F5E50), 0.92), blur: 4),
+    k.blurredFill(_a(_c(0xFF3F5E50), 0.92), 4),
   );
   // Cliff behind the fall.
   // Rock walls on both sides of the fall, rising out of the mist, with soft edges.
-  final cliff = Path()..moveTo(0.05 * k.w, 0.66 * k.h);
+  final cliffOutline = <Offset>[Offset(0.05 * k.w, 0.66 * k.h)];
   for (var y = 0.66; y >= -0.02; y -= 0.01) {
     final n = _fbm(y * 9, k.seed + 31, 4);
-    cliff.lineTo((0.1 + (0.66 - y) * 0.26 + (n - 0.5) * 0.1) * k.w, y * k.h);
+    cliffOutline.add(
+      Offset((0.1 + (0.66 - y) * 0.26 + (n - 0.5) * 0.1) * k.w, y * k.h),
+    );
   }
   for (var y = -0.02; y <= 0.66; y += 0.01) {
     final n = _fbm(y * 9, k.seed + 37, 4);
-    cliff.lineTo((0.9 - (0.66 - y) * 0.26 + (n - 0.5) * 0.1) * k.w, y * k.h);
+    cliffOutline.add(
+      Offset((0.9 - (0.66 - y) * 0.26 + (n - 0.5) * 0.1) * k.w, y * k.h),
+    );
   }
-  cliff
-    ..lineTo(0.95 * k.w, 0.66 * k.h)
-    ..close();
+  cliffOutline.add(Offset(0.95 * k.w, 0.66 * k.h));
+  final cliff = Path()..addPolygon(cliffOutline, true);
   c.drawPath(
     cliff,
     Paint()
@@ -757,35 +914,30 @@ void _cascade(_K k) {
       ]),
   );
   final r = _Rng(k.seed + 5);
-  c.save();
-  c.clipPath(cliff);
-  // Ledges and cracks.
+  // Ledges and cracks, kept on the cliff (no clip).
   for (var i = 0; i < 70; i++) {
     final y = r.range(0.14, 0.66);
     final x = r.range(0.15, 0.85);
     final len = r.range(0.02, 0.08);
-    c.drawLine(
-      k.p(x, y),
-      k.p(x + len, y + r.range(-0.006, 0.01)),
-      k.stroke(
-        _a(
-          r.chance(0.6) ? _c(0xFF070C09) : _c(0xFF6F8A6A),
-          r.range(0.15, 0.45),
-        ),
-        r.range(1, 3),
-        blur: 0.8,
+    final from = k.p(x, y), to = k.p(x + len, y + r.range(-0.006, 0.01));
+    final paint = k.stroke(
+      _a(
+        r.chance(0.6) ? _c(0xFF070C09) : _c(0xFF6F8A6A),
+        r.range(0.15, 0.45),
       ),
+      r.range(1, 3),
+      blur: 0.8,
     );
+    if (!_inside(cliffOutline, from) || !_inside(cliffOutline, to)) continue;
+    c.drawLine(from, to, paint);
   }
   for (var i = 0; i < 90; i++) {
     final o = k.p(r.range(0.12, 0.88), r.range(0.14, 0.66));
-    c.drawCircle(
-      o,
-      r.range(2, 7) * k.s,
-      k.fill(_a(_c(0xFF4C7A3A), r.range(0.15, 0.45)), blur: 2),
-    );
+    final radius = r.range(2, 7) * k.s;
+    final color = _a(_c(0xFF4C7A3A), r.range(0.15, 0.45));
+    if (!_inside(cliffOutline, o)) continue;
+    k.softCircle(o, radius, color, 2);
   }
-  c.restore();
   k.haze(0.2, 0.12, _a(_c(0xFFCFE3D8), 0.25));
   // Waterfall: soft core then streaks.
   final fallTop = 0.15 * k.h, fallBottom = 0.665 * k.h;
@@ -871,9 +1023,10 @@ void _cascade(_K k) {
         const [0, 0.35, 1],
       ),
   );
-  c.drawRect(
+  k.softRect(
     Rect.fromLTRB(0.34 * k.w, pool.top, 0.68 * k.w, pool.bottom),
-    k.fill(_a(_c(0xFFE7F3EE), 0.18), blur: 14),
+    _a(_c(0xFFE7F3EE), 0.18),
+    14,
   );
   k.glints(pool, 260, _c(0xFFF4FFFA), maxAlpha: 0.32, maxLen: 34);
   // Foreground boulders and ferns framing the pool.
@@ -952,7 +1105,7 @@ void _cascade(_K k) {
   );
   c.drawPath(
     k.canopy(0.04, 0.03, 0.05, 0.1, k.seed + 9, bottom: 0),
-    k.fill(_a(_c(0xFF0F1D16), 0.8), blur: 10),
+    k.blurredFill(_a(_c(0xFF0F1D16), 0.8), 10),
   );
   k.haze(0.5, 0.25, _a(_c(0xFFCFE3D8), 0.08));
 }
@@ -1010,6 +1163,8 @@ void _sousBois(_K k) {
   ];
   for (var li = 0; li < layers.length; li++) {
     final l = layers[li];
+    // Far trunks are soft: one shape and one blur per layer, not one per trunk.
+    final soft = Path();
     for (var i = 0; i < l.count; i++) {
       final x = li == 3
           ? [0.06, 0.88, 0.32][i] + r.range(-0.03, 0.03)
@@ -1035,7 +1190,11 @@ void _sousBois(_K k) {
           ground,
         )
         ..close();
-      c.drawPath(trunk, k.fill(_c(l.color), blur: l.blur));
+      if (l.blur > 0) {
+        soft.addPath(trunk, Offset.zero);
+      } else {
+        c.drawPath(trunk, k.fill(_c(l.color)));
+      }
       if (li >= 2) {
         // Bark light on the sun side.
         c.drawLine(
@@ -1049,6 +1208,7 @@ void _sousBois(_K k) {
         );
       }
     }
+    if (l.blur > 0) c.drawPath(soft, k.blurredFill(_c(l.color), l.blur));
     if (li == 0) k.haze(0.55, 0.3, _a(_c(0xFFE6E7C0), 0.35));
     if (li == 1) {
       k.rays(
@@ -1097,7 +1257,7 @@ void _sousBois(_K k) {
   // Foliage at the top with sun dapples.
   c.drawPath(
     k.canopy(0.04, 0.03, 0.05, 0.11, k.seed + 21, bottom: 0),
-    k.fill(_a(_c(0xFF2F4220), 0.9), blur: 3),
+    k.blurredFill(_a(_c(0xFF2F4220), 0.9), 3),
   );
   for (var i = 0; i < 30; i++) {
     k.glow(
@@ -1118,11 +1278,11 @@ void _berge(_K k) {
   // Dense foliage backdrop.
   c.drawPath(
     k.canopy(0.2, 0.06, 0.06, 0.12, k.seed + 1),
-    k.fill(_a(_c(0xFF4B6E4E), 0.8), blur: 6),
+    k.blurredFill(_a(_c(0xFF4B6E4E), 0.8), 6),
   );
   c.drawPath(
     k.canopy(0.3, 0.06, 0.05, 0.1, k.seed + 2),
-    k.fill(_a(_c(0xFF2C4A33), 0.95), blur: 3),
+    k.blurredFill(_a(_c(0xFF2C4A33), 0.95), 3),
   );
   k.haze(0.32, 0.1, _a(_c(0xFFBFD6C2), 0.2));
   // Stream flowing towards the viewer.
@@ -1172,20 +1332,17 @@ void _berge(_K k) {
         const [0, 0.4, 1],
       ),
   );
-  c.save();
-  c.clipPath(stream);
+  // Ripples, kept on the water (no clip).
   final r = _Rng(k.seed + 7);
   for (var i = 0; i < 220; i++) {
     final y = r.range(0.38, 1.0);
     final x = r.range(0.1, 0.9);
     final len = r.range(0.02, 0.09) * (0.5 + y);
-    c.drawLine(
-      k.p(x, y),
-      k.p(x + len * 0.35, y + len * 0.25),
-      k.stroke(_a(_c(0xFFEAF6F1), r.range(0.05, 0.3)), r.range(0.5, 1.8)),
-    );
+    final from = k.p(x, y), to = k.p(x + len * 0.35, y + len * 0.25);
+    final paint = k.stroke(_a(_c(0xFFEAF6F1), r.range(0.05, 0.3)), r.range(0.5, 1.8));
+    if (!stream.contains(from) || !stream.contains(to)) continue;
+    c.drawLine(from, to, paint);
   }
-  c.restore();
   // Stones in the water with foam.
   for (final st in const [
     (0.5, 0.66, 0.06),
@@ -1247,15 +1404,14 @@ void _berge(_K k) {
           _c(0xFF15270F),
         ]),
     );
-    c.save();
-    c.clipPath(bank);
-    // Moss cushions: many overlapping soft mounds with light tops.
+    // Moss cushions: many overlapping soft mounds with light tops, kept on the bank (no clip).
     for (var i = 0; i < 70; i++) {
       final o = Offset(
         b.left + r.next() * b.width,
         b.top + r.next() * b.height,
       );
       final rad = r.range(6, 22) * k.s;
+      if (!bank.contains(o)) continue;
       c.drawCircle(
         o,
         rad,
@@ -1277,18 +1433,14 @@ void _berge(_K k) {
         b.left + r.next() * b.width,
         b.top + r.next() * b.height,
       );
-      c.drawCircle(
-        o,
-        r.range(0.6, 2.2) * k.s,
-        k.fill(
-          _a(
-            r.chance(0.5) ? _c(0xFFC9E07A) : _c(0xFF0F1F0A),
-            r.range(0.15, 0.45),
-          ),
-        ),
+      final radius = r.range(0.6, 2.2) * k.s;
+      final color = _a(
+        r.chance(0.5) ? _c(0xFFC9E07A) : _c(0xFF0F1F0A),
+        r.range(0.15, 0.45),
       );
+      if (!bank.contains(o)) continue;
+      c.drawCircle(o, radius, k.fill(color));
     }
-    c.restore();
     // Shade where the bank meets the water.
     c.drawPath(bank, k.stroke(_a(_c(0xFF050B05), 0.5), 6, blur: 5));
   }
@@ -1314,23 +1466,21 @@ void _torrent(_K k) {
   // Far ranges with snow.
   final far = k.ridge(0.3, 0.14, 2.2, k.seed + 1, bottom: 0.6 * k.h);
   c.drawPath(far, k.fill(_c(0xFF7187A0)));
-  c.save();
-  c.clipPath(far);
+  // Snow on the far ranges, kept on them (no clip).
   final r = _Rng(k.seed + 2);
   for (var i = 0; i < 60; i++) {
     final x = r.next();
     final top = 0.3 - _fbm(x * 2.2, k.seed + 1, 5) * 0.14;
-    c.drawLine(
-      k.p(x, top + 0.003),
-      k.p(x + r.range(-0.02, 0.02), top + r.range(0.008, 0.035)),
-      k.stroke(
-        _a(_c(0xFFF1F5F8), r.range(0.25, 0.6)),
-        r.range(1, 3),
-        blur: 1.2,
-      ),
+    final from = k.p(x, top + 0.003);
+    final to = k.p(x + r.range(-0.02, 0.02), top + r.range(0.008, 0.035));
+    final paint = k.stroke(
+      _a(_c(0xFFF1F5F8), r.range(0.25, 0.6)),
+      r.range(1, 3),
+      blur: 1.2,
     );
+    if (!far.contains(from) || !far.contains(to)) continue;
+    c.drawLine(from, to, paint);
   }
-  c.restore();
   k.haze(0.36, 0.08, _a(_c(0xFFDCE4E6), 0.55));
   c.drawPath(k.ridge(0.4, 0.1, 2.8, k.seed + 3), k.fill(_c(0xFF3E5263)));
   k.haze(0.42, 0.05, _a(_c(0xFFCBD6D8), 0.35));
@@ -1400,23 +1550,20 @@ void _torrent(_K k) {
         _c(0xFF2C5559),
       ]),
   );
-  c.save();
-  c.clipPath(water);
+  // Foam streaks, kept on the water (no clip).
   for (var i = 0; i < 360; i++) {
     final y = r.range(0.47, 1.0);
     final x = 0.5 + (r.next() - 0.5) * (0.1 + (y - 0.47) * 1.6);
     final len = 0.01 + (y - 0.47) * 0.08;
-    c.drawLine(
-      k.p(x, y),
-      k.p(x + r.range(-0.01, 0.01), y + len),
-      k.stroke(
-        _a(_c(0xFFFFFFFF), r.range(0.15, 0.7)),
-        r.range(0.6, 2.4) * (0.4 + y),
-        blur: r.chance(0.3) ? 1.5 : 0,
-      ),
+    final from = k.p(x, y), to = k.p(x + r.range(-0.01, 0.01), y + len);
+    final paint = k.stroke(
+      _a(_c(0xFFFFFFFF), r.range(0.15, 0.7)),
+      r.range(0.6, 2.4) * (0.4 + y),
+      blur: r.chance(0.3) ? 1.5 : 0,
     );
+    if (!water.contains(from) || !water.contains(to)) continue;
+    c.drawLine(from, to, paint);
   }
-  c.restore();
   // Boulders.
   for (final b in const [
     (0.3, 0.74, 0.07),
@@ -1568,11 +1715,7 @@ void _lisiere(_K k) {
   );
   for (var i = 0; i < 50; i++) {
     final o = k.p(r.range(0, 1), r.range(0.4, 0.47));
-    c.drawCircle(
-      o,
-      r.range(3, 9) * k.s,
-      k.fill(_a(_c(0xFF5D7F45), 0.45), blur: 2),
-    );
+    k.softCircle(o, r.range(3, 9) * k.s, _a(_c(0xFF5D7F45), 0.45), 2);
   }
   // Big tree on the left.
   c.drawPath(
@@ -1584,33 +1727,31 @@ void _lisiere(_K k) {
       ..close(),
     k.fill(_c(0xFF1B2416)),
   );
+  // Crown: 26 overlapping discs. Version 1 clipped to this outline and drew 260 blurred dots
+  // and a blurred copy of it inside (the picture that crashed on the Galaxy S24, § 19 of the
+  // architecture document): now a plain shape, and the dots are kept in it by a disc test.
   final crown = Path();
+  final discs = <(Offset, double)>[];
   for (var i = 0; i < 26; i++) {
-    crown.addOval(
-      Rect.fromCircle(
-        center: k.p(r.range(-0.12, 0.34), r.range(0.1, 0.34)),
-        radius: r.range(0.06, 0.12) * k.w,
-      ),
+    final disc = (
+      k.p(r.range(-0.12, 0.34), r.range(0.1, 0.34)),
+      r.range(0.06, 0.12) * k.w,
     );
+    discs.add(disc);
+    crown.addOval(Rect.fromCircle(center: disc.$1, radius: disc.$2));
   }
-  c.drawPath(crown, k.fill(_c(0xFF1E3220), blur: 2));
-  c.save();
-  c.clipPath(crown);
+  c.drawPath(crown, k.fill(_c(0xFF1E3220)));
+  bool inCrown(Offset o) => discs.any((d) => (o - d.$1).distance <= d.$2);
   for (var i = 0; i < 260; i++) {
     final o = k.p(r.range(-0.12, 0.36), r.range(0.04, 0.36));
-    c.drawCircle(
-      o,
-      r.range(1.5, 5) * k.s,
-      k.fill(
-        _a(
-          r.chance(0.55) ? _c(0xFF6E8F4E) : _c(0xFF0C170C),
-          r.range(0.2, 0.55),
-        ),
-        blur: 0.8,
-      ),
+    final radius = r.range(1.5, 5) * k.s;
+    final color = _a(
+      r.chance(0.55) ? _c(0xFF6E8F4E) : _c(0xFF0C170C),
+      r.range(0.2, 0.55),
     );
+    if (!inCrown(o)) continue;
+    c.drawCircle(o, radius, k.fill(color));
   }
-  c.restore();
   // Meadow.
   final meadow = k.ridge(0.5, 0.01, 1.5, k.seed + 4);
   c.drawPath(
@@ -1726,14 +1867,15 @@ void _villePluie(_K k) {
     final rx = r.next();
     final warm = r.chance(0.7);
     final col = warm ? _c(0xFFFFB766) : _c(0xFF8FB8FF);
-    c.drawRect(
+    k.softRect(
       Rect.fromLTWH(
         rx * k.w,
         0.72 * k.h,
         r.range(2, 7) * k.s,
         r.range(0.08, 0.26) * k.h,
       ),
-      k.fill(_a(col, r.range(0.12, 0.35)), blur: 4),
+      _a(col, r.range(0.12, 0.35)),
+      4,
     );
   }
   // Street lamps.
@@ -1753,13 +1895,11 @@ void _villePluie(_K k) {
   // Bokeh.
   for (var i = 0; i < 16; i++) {
     final o = k.p(r.next(), r.range(0.55, 0.95));
-    c.drawCircle(
+    k.softCircle(
       o,
       r.range(6, 18) * k.s,
-      k.fill(
-        _a(r.chance(0.6) ? _c(0xFFFFC27A) : _c(0xFF9EC2FF), 0.16),
-        blur: 3,
-      ),
+      _a(r.chance(0.6) ? _c(0xFFFFC27A) : _c(0xFF9EC2FF), 0.16),
+      3,
     );
   }
   k.rain(420, alpha: 0.2);
@@ -1794,11 +1934,7 @@ void _cafe(_K k) {
     final col = r.chance(0.55)
         ? _c(0xFFFFB86E)
         : (r.chance(0.5) ? _c(0xFF8DB4FF) : _c(0xFFFF7A6A));
-    c.drawCircle(
-      o,
-      r.range(8, 26) * k.s,
-      k.fill(_a(col, r.range(0.12, 0.3)), blur: 5),
-    );
+    k.softCircle(o, r.range(8, 26) * k.s, _a(col, r.range(0.12, 0.3)), 5);
   }
   for (var i = 0; i < 140; i++) {
     final o = Offset(
@@ -1857,10 +1993,11 @@ void _cafe(_K k) {
   // Interior bokeh.
   for (var i = 0; i < 14; i++) {
     final o = k.p(r.next(), r.range(0.55, 0.8));
-    c.drawCircle(
+    k.softCircle(
       o,
       r.range(10, 28) * k.s,
-      k.fill(_a(_c(0xFFFFB25C), r.range(0.06, 0.16)), blur: 6),
+      _a(_c(0xFFFFB25C), r.range(0.06, 0.16)),
+      6,
     );
   }
   // Table with a cup.
@@ -2180,20 +2317,21 @@ void _aurore(_K k) {
       final intensity = math.pow(_fbm(x * 4, sd + 3, 3), 1.6) * alpha;
       final top = k.p(x, y - hgt);
       final bottom = k.p(x, y);
+      // Rays 1.6 frame units apart and 5.5 wide: they overlap into a smooth curtain, so no
+      // blur is needed (version 1 blurred each of the 550 lines, an offscreen pass each).
       c.drawLine(
         top,
         bottom,
         Paint()
-          ..strokeWidth = 4 * k.s
+          ..strokeWidth = 5.5 * k.s
           ..blendMode = BlendMode.plus
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3 * k.s)
           ..shader = _linear(
             top,
             bottom,
             [
               _a(high, 0),
-              _a(high, intensity * 0.5),
-              _a(low, intensity),
+              _a(high, intensity * 0.4),
+              _a(low, intensity * 0.8),
               _a(low, 0),
             ],
             const [0, 0.45, 0.88, 1],
@@ -2220,22 +2358,20 @@ void _aurore(_K k) {
         _c(0xFF0B1622),
       ]),
   );
-  c.save();
-  c.clipPath(mountains);
+  // Snow on the peaks, kept on the mountains (no clip).
   for (var i = 0; i < 80; i++) {
     final x = r.next();
     final top = 0.58 - _fbm(x * 2.4, k.seed + 2, 5) * 0.12;
-    c.drawLine(
-      k.p(x, top + 0.004),
-      k.p(x + r.range(-0.02, 0.02), top + r.range(0.006, 0.02)),
-      k.stroke(
-        _a(_c(0xFFBFE6E0), r.range(0.06, 0.2)),
-        r.range(1, 3),
-        blur: 1.5,
-      ),
+    final from = k.p(x, top + 0.004);
+    final to = k.p(x + r.range(-0.02, 0.02), top + r.range(0.006, 0.02));
+    final paint = k.stroke(
+      _a(_c(0xFFBFE6E0), r.range(0.06, 0.2)),
+      r.range(1, 3),
+      blur: 1.5,
     );
+    if (!mountains.contains(from) || !mountains.contains(to)) continue;
+    c.drawLine(from, to, paint);
   }
-  c.restore();
   // Lake with the aurora reflected.
   final lake = Rect.fromLTRB(0, 0.66 * k.h, k.w, 0.86 * k.h);
   c.drawRect(
@@ -2248,17 +2384,19 @@ void _aurore(_K k) {
   );
   c.save();
   c.clipRect(lake);
+  // Side by side bands (no overlap, no blur): each fades out downwards.
   for (var x = 0.0; x <= 1; x += 0.01) {
     final intensity = math.pow(_fbm(x * 4, k.seed + 14, 3), 1.6) * 0.35;
+    final top = k.p(x, 0.66);
+    final bottom = k.p(x, 0.66 + 0.12 * _fbm(x * 7, k.seed + 20, 2) + 0.03);
+    final glow = _a(_c(0xFF57FFB0), intensity * 0.8);
     c.drawLine(
-      k.p(x, 0.66),
-      k.p(x, 0.66 + 0.12 * _fbm(x * 7, k.seed + 20, 2)),
-      k.stroke(
-        _a(_c(0xFF57FFB0), intensity),
-        4,
-        blur: 6,
-        blend: BlendMode.plus,
-      ),
+      top,
+      bottom,
+      Paint()
+        ..strokeWidth = 0.01 * k.w
+        ..blendMode = BlendMode.plus
+        ..shader = _linear(top, bottom, [glow, _a(glow, 0.5), _a(glow, 0)], const [0, 0.6, 1]),
     );
   }
   k.glints(lake, 120, _c(0xFFCFFFF0), maxAlpha: 0.2, maxLen: 30);
@@ -2304,10 +2442,11 @@ void _luneLac(_K k) {
   );
   final r = _Rng(k.seed + 1);
   for (var i = 0; i < 7; i++) {
-    c.drawCircle(
+    k.softCircle(
       moon.translate(r.range(-0.6, 0.5) * mr, r.range(-0.6, 0.6) * mr),
       r.range(0.1, 0.3) * mr,
-      k.fill(_a(_c(0xFF9C9C94), 0.25), blur: 1),
+      _a(_c(0xFF9C9C94), 0.25),
+      1,
     );
   }
   // Thin moonlit clouds.
@@ -2347,20 +2486,21 @@ void _luneLac(_K k) {
         _c(0xFF060C16),
       ]),
   );
-  // Mirrored shore.
-  c.save();
-  c.clipRect(lake);
-  c.translate(0, 2 * 0.585 * k.h);
-  c.scale(1, -1);
+  // Mirrored shore: both banks as one shape, mirrored in the path itself (no flipped canvas,
+  // no clip), one soft blur.
+  final mirror = Float64List.fromList([
+    1, 0, 0, 0, //
+    0, -1, 0, 0, //
+    0, 0, 1, 0, //
+    0, 2 * 0.585 * k.h, 0, 1,
+  ]);
+  final reflected = Path()
+    ..addPath(k.conifers(0.585, 0.02, 0.05, 0.03, k.seed + 3, x1: 0.36), Offset.zero)
+    ..addPath(k.conifers(0.585, 0.02, 0.06, 0.03, k.seed + 4, x0: 0.78), Offset.zero);
   c.drawPath(
-    k.conifers(0.585, 0.02, 0.05, 0.03, k.seed + 3, x1: 0.36),
-    k.fill(_a(_c(0xFF0B1220), 0.7), blur: 2),
+    reflected.transform(mirror),
+    k.blurredFill(_a(_c(0xFF0B1220), 0.7), 2),
   );
-  c.drawPath(
-    k.conifers(0.585, 0.02, 0.06, 0.03, k.seed + 4, x0: 0.78),
-    k.fill(_a(_c(0xFF0B1220), 0.7), blur: 2),
-  );
-  c.restore();
   // Moon glitter path.
   k.ellipseGlow(
     Rect.fromCenter(

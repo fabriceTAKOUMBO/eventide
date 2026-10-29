@@ -7,6 +7,7 @@ import 'package:eventide/ui/navigation.dart';
 import 'package:eventide/ui/screens/landscapes_sheet.dart';
 import 'package:eventide/ui/screens/settings_screen.dart';
 import 'package:eventide/ui/screens/wallpaper_sheet.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'app_harness.dart';
@@ -19,10 +20,9 @@ class _Model extends FakeAppModel {
   AppExit? exit;
   bool shareOk = true;
   int shares = 0;
-  WallpaperSupport support = const WallpaperSupport(liveWallpaper: true, gallery: true);
+  WallpaperSupport support = const WallpaperSupport(liveWallpaper: true);
   WallpaperResult result = WallpaperResult.opened;
   final List<String> wallpapers = [];
-  final List<String> saved = [];
 
   @override
   AppExit? get lastAbnormalExit => exit;
@@ -41,15 +41,11 @@ class _Model extends FakeAppModel {
     wallpapers.add(landscapeId);
     return result;
   }
-
-  @override
-  Future<bool> saveLandscapeVideoToGallery(String landscapeId) async {
-    saved.add(landscapeId);
-    return true;
-  }
 }
 
 void main() {
+  // Real fonts: the one-line check of the wallpaper button measures Manrope, not the test font.
+  setUpAll(loadAppFonts);
   setUp(() => LandscapeImages.debugSetVideos(bundled: {'cascade-foret'}));
   tearDown(() => LandscapeImages.debugSetVideos());
 
@@ -106,23 +102,26 @@ void main() {
       await tearDownApp(tester);
     });
 
-    testWidgets('video landscape: live wallpaper and Gallery, each explained', (tester) async {
+    testWidgets('video landscape: the live wallpaper, explained; no Gallery copy any more', (tester) async {
       usePhoneView(tester);
+      // Galaxy S24: 1080 × 2340 px at 2.8125, i.e. 384 × 832 dp.
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 2.8125;
       final model = _Model();
       await pumpApp(tester, model);
       await openRoute(tester, WallpaperSheet.routeName, (_) => const WallpaperSheet(landscapeId: 'cascade-foret'));
       expect(find.text(WallpaperMessages.liveTitle), findsOneWidget);
       expect(find.text(WallpaperMessages.liveText), findsOneWidget);
-      expect(find.text(WallpaperMessages.galleryText), findsOneWidget);
-      expect(find.textContaining('15 secondes'), findsOneWidget);
+      expect(find.textContaining('Galerie'), findsNothing);
+      expect(find.textContaining('15 secondes'), findsNothing);
+      // The main button's label holds on one line on the S24 (it wrapped on two before).
+      final label = tester.renderObject<RenderParagraph>(find.text(WallpaperMessages.liveTitle));
+      final oneLine = label.getFullHeightForCaret(const TextPosition(offset: 0));
+      expect(label.size.height, lessThan(oneLine * 1.5));
+      expect(label.didExceedMaxLines, isFalse);
       await tester.tap(find.text(WallpaperMessages.liveTitle));
       await settle(tester);
       expect(model.wallpapers, ['cascade-foret']);
-      await tester.ensureVisible(find.text(WallpaperMessages.galleryTitle));
-      await tester.tap(find.text(WallpaperMessages.galleryTitle));
-      await settle(tester);
-      expect(model.saved, ['cascade-foret']);
-      expect(find.text(WallpaperMessages.saved), findsOneWidget);
       await tearDownApp(tester);
     });
 
@@ -137,14 +136,13 @@ void main() {
       await tearDownApp(tester);
     });
 
-    testWidgets('a landscape without video: still picture only, no Gallery', (tester) async {
+    testWidgets('a landscape without video nor picture: nothing to offer, said plainly', (tester) async {
       usePhoneView(tester);
       final model = _Model(plan: Plan.annual);
       await pumpApp(tester, model);
       // berge-mousseuse: no video and no poster on this test setup.
       await openRoute(tester, WallpaperSheet.routeName, (_) => const WallpaperSheet(landscapeId: 'berge-mousseuse'));
       expect(find.text(WallpaperMessages.liveTitle), findsNothing);
-      expect(find.text(WallpaperMessages.galleryTitle), findsNothing);
       expect(find.text(WallpaperMessages.nothingText), findsOneWidget);
       await tearDownApp(tester);
     });

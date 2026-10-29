@@ -7,9 +7,6 @@
 // or poster is copied to the app's storage; a downloaded Premium file is used in place),
 // records the selection and opens Android's live wallpaper preview: the user confirms there,
 // Android never lets an app change the wallpaper silently.
-//
-// Gallery: some phones (One UI's lock screen) only take a video from the Gallery; the video
-// is copied there with MediaStore (Android 10+, no permission).
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -40,8 +37,6 @@ abstract class WallpaperPlatform {
   /// The plan may (no longer) use the selected landscape: video, or still picture only.
   Future<void> setAllowed(bool allowed);
 
-  Future<bool> saveVideoToGallery({required String path, required String title});
-
   /// Forgets the selection (data deletion): the wallpaper then shows a plain background.
   Future<void> clearSelection();
 }
@@ -67,7 +62,7 @@ class MethodChannelWallpaperPlatform implements WallpaperPlatform {
   Future<WallpaperSupport> support() async {
     final map = await _invoke<Map<Object?, Object?>>('wallpaperSupport');
     if (map == null) return WallpaperSupport.none;
-    return WallpaperSupport(liveWallpaper: map['live'] == true, gallery: map['gallery'] == true);
+    return WallpaperSupport(liveWallpaper: map['live'] == true);
   }
 
   @override
@@ -97,10 +92,6 @@ class MethodChannelWallpaperPlatform implements WallpaperPlatform {
 
   @override
   Future<void> setAllowed(bool allowed) => _invoke<bool>('setWallpaperAllowed', allowed);
-
-  @override
-  Future<bool> saveVideoToGallery({required String path, required String title}) async =>
-      await _invoke<bool>('saveVideoToGallery', {'path': path, 'title': title}) ?? false;
 
   @override
   Future<void> clearSelection() => _invoke<bool>('clearWallpaper');
@@ -214,25 +205,6 @@ class LandscapeWallpaper {
       await _removeOthers(landscapeId);
     }
     return result;
-  }
-
-  /// Saves the landscape's video to the Gallery (`Movies/Eventide`).
-  Future<bool> saveToGallery({
-    required String landscapeId,
-    required String name,
-    required LandscapeVideoSource? video,
-  }) async {
-    if (!_support.gallery) return false;
-    final path = await videoFile(landscapeId, video);
-    if (path == null) return false;
-    final saved = await platform.saveVideoToGallery(path: path, title: 'Eventide - $name');
-    // A copy made only for the Gallery is not kept (the wallpaper's own files stay).
-    if (video is AssetLandscapeVideo && landscapeId != _selected) {
-      try {
-        await File(path).delete();
-      } catch (_) {}
-    }
-    return saved;
   }
 
   /// Tells the wallpaper whether the plan still allows its landscape (sent when it changes).
