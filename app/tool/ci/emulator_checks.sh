@@ -19,9 +19,9 @@
 #
 # The whole guest log is streamed to a host file during each stage, and the emulator process is
 # sampled every MONITOR_INTERVAL seconds (host-monitor.txt: memory, threads, CPU used during the
-# interval). An emulator that stops using the CPU while alive has deadlocked: its threads (state,
-# kernel wait channel, gdb backtraces when gdb is installed) are dumped once to
-# emulator-freeze.txt. When the emulator disappears, the job log shows that dump, the host
+# interval). An emulator that stops using the CPU while alive is stuck, or crashed and is being
+# core-dumped: its threads (state, kernel wait channel, gdb backtraces or the fatal signal when gdb
+# is installed) are dumped once to emulator-freeze.txt. When the emulator disappears, the job log shows that dump, the host
 # samples and kernel log, any emulator crash report, and a digest of the guest log (our app's
 # lines, crashes, watchdog, audio, media codecs, graphics) followed by its last lines.
 #
@@ -66,17 +66,25 @@ start_logcat_stream() {
   timeout "${STREAM_TIMEOUT:-2400}" "$ADB_BIN" logcat -v threadtime -b all >"$1" 2>&1 &
   stream_pid=$!
 }
-# Threads of a frozen emulator, once: id, state, kernel wait channel, name, then gdb backtraces
-# (`sudo gdb`, when installed: ptrace of a non-child needs root). Shows where it is stuck.
+# Threads of an emulator that stopped using the CPU, once: id, state, kernel wait channel,
+# name, then gdb backtraces (`sudo gdb`, when installed: ptrace of a non-child needs root).
+# A thread in do_coredump means the emulator crashed and the kernel is writing its core dump
+# (about 50 s for 4 GB, seen on 28 Oct 2026); gdb then names the signal.
 freeze_dump() {
-  local pid="$1" file="$out/emulator-freeze.txt" task state
+  local pid="$1" file="$out/emulator-freeze.txt" task state threads crashed
+  threads="$(for task in /proc/"$pid"/task/*; do
+    state="$(sed 's/^.*) //' "$task/stat" 2>/dev/null | cut -d' ' -f1)"
+    printf '%s %s %s %s\n' "${task##*/}" "$state" "$(cat "$task/wchan" 2>/dev/null)" "$(cat "$task/comm" 2>/dev/null)"
+  done)"
+  crashed="$(awk '$3 == "do_coredump" {print $4}' <<<"$threads" | sort -u | paste -sd, -)"
   {
-    echo "emulator pid $pid used no CPU for three samples in a row ($(date -u +%H:%M:%S)): threads"
-    echo "(tid, state, kernel wait channel, name)"
-    for task in /proc/"$pid"/task/*; do
-      state="$(sed 's/^.*) //' "$task/stat" 2>/dev/null | cut -d' ' -f1)"
-      printf '%s %s %s %s\n' "${task##*/}" "$state" "$(cat "$task/wchan" 2>/dev/null)" "$(cat "$task/comm" 2>/dev/null)"
-    done
+    if [[ -n $crashed ]]; then
+      echo "emulator pid $pid CRASHED: thread(s) « $crashed » writing a core dump ($(date -u +%H:%M:%S))"
+    else
+      echo "emulator pid $pid used no CPU for three samples in a row ($(date -u +%H:%M:%S)): stuck"
+    fi
+    echo "threads (tid, state, kernel wait channel, name):"
+    echo "$threads"
     if command -v gdb >/dev/null; then
       echo "--- gdb backtraces (12 frames per thread)"
       timeout 120 sudo -n gdb -batch -nx -p "$pid" -ex 'set pagination off' -ex 'thread apply all bt 12' 2>&1 |
@@ -109,7 +117,7 @@ start_host_monitor() {
         if [[ $cpu != "?" && $cpu -lt 1 ]]; then still=$((still + 1)); else still=0; fi
         if [[ $still -ge 3 && -z $dumped ]]; then
           dumped="yes"
-          emu="${emu}FROZEN, threads dumped to emulator-freeze.txt; "
+          emu="${emu}no CPU for $((3 * interval)) s, threads dumped to emulator-freeze.txt; "
           freeze_dump "$pid"
         fi
       else
