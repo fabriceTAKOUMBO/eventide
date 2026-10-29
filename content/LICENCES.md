@@ -49,5 +49,5 @@ Ces fichiers ne vont **jamais** sur S3 ni dans la version de production : seule 
 
 | Fichier source | Usage | Origine | Statut |
 |---|---|---|---|
-| `medias-bruts/icone/full-relax-source.jpg` (1536 × 2752) | icônes Android (`mipmap-*`), icône Play (`app/assets/brand/logo_512.png`, `logo_1024.png`), via `tools/media/make_icon_from_photo.py` | Image fournie par le product owner, générée par IA d'après lui | **Provenance à confirmer avant publication** : elle ressemble à une image d'une vidéo YouTube de tiers (`toits-pluie`). Elle ne doit pas en être une retouche ; sinon, la regénérer à partir d'un texte seul. |
+| `medias-bruts/icone/full-relax-source.jpg` (1536 × 2752) | icônes Android (`mipmap-*`), icône Play (`app/assets/brand/logo_512.png`, `logo_1024.png`), via `tools/media/make_icon_from_photo.py` | Image générée par IA (Gemini) **à partir d'un texte seul** par le product owner (confirmé le 29 octobre 2026), sans image de départ | Utilisable ; garder la preuve de génération (conditions d'usage commercial de l'outil, dossier § 9) |
 
