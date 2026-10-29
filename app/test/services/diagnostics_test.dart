@@ -28,6 +28,25 @@ void main() {
     if (await dir.exists()) await dir.delete(recursive: true);
   });
 
+  test('mixed durable and ordinary lines are never written over each other (S24 report)', () async {
+    final log = DiagnosticsLog(now: () => clock);
+    await log.attach(Directory('${dir.path}/diagnostics'));
+    for (var i = 0; i < 40; i++) {
+      clock = clock.add(const Duration(milliseconds: 3));
+      if (i.isEven) {
+        log.add('paysage : lisiere-verte $i');
+      } else {
+        log.addDurable('dessin : image de la carte lisiere 720×720 jour $i');
+      }
+    }
+    await log.flush();
+    final lines = await log.storedLines();
+    expect(lines, hasLength(40));
+    for (final line in lines) {
+      expect(line, matches(RegExp(r'^2026-10-29 \d\d:\d\d:\d\d\.\d{3} I (paysage|dessin) ')), reason: line);
+    }
+  });
+
   group('FileGuardStore (crash guard sentinels)', () {
     test('written synchronously and atomically, read back by the next process', () {
       final file = File('${dir.path}/diagnostics/guard.json');

@@ -41,7 +41,6 @@ class DiagnosticsLog {
   final List<String> _recent = [];
   final List<String> _unwritten = [];
   Directory? _directory;
-  Future<void> _queue = Future.value();
   int? _size;
 
   String? _lastMessage;
@@ -57,23 +56,25 @@ class DiagnosticsLog {
   List<String> get recent => List.unmodifiable(_recent);
 
   /// Gives the log its folder: lines written so far are flushed there.
+  ///
+  /// Every write is synchronous and goes through [_appendNow]: Dart's append mode seeks to the
+  /// end when the file is opened, so an asynchronous writer racing a synchronous one could write
+  /// over the start of a line (seen on the S24: « te lisiere 720×720 jour »).
   Future<void> attach(Directory directory) {
     _directory = directory;
     final pending = [..._unwritten];
     _unwritten.clear();
-    _queue = _queue.then((_) async {
-      try {
-        await directory.create(recursive: true);
-        final file = _file!;
-        _size = await file.exists() ? await file.length() : 0;
-        for (final line in pending) {
-          await _append(line);
-        }
-      } catch (e) {
-        debugPrint('DiagnosticsLog: cannot open its folder ($e)');
+    try {
+      directory.createSync(recursive: true);
+      final file = _file!;
+      _size = file.existsSync() ? file.lengthSync() : 0;
+      for (final line in pending) {
+        _appendNow(line);
       }
-    });
-    return _queue;
+    } catch (e) {
+      debugPrint('DiagnosticsLog: cannot open its folder ($e)');
+    }
+    return Future.value();
   }
 
   void info(String message) => add(message);
@@ -125,15 +126,12 @@ class DiagnosticsLog {
       if (_unwritten.length > memoryLines) _unwritten.removeAt(0);
       return;
     }
-    if (durable) {
-      _appendNow(line);
-      return;
-    }
-    _queue = _queue.then((_) => _append(line));
+    _appendNow(line, flush: durable);
   }
 
-  /// Synchronous append (lines still queued may land after it: their timestamps tell the order).
-  void _appendNow(String line) {
+  /// Synchronous append; [flush] forces the bytes to storage (a line that must survive a native
+  /// crash right after it).
+  void _appendNow(String line, {bool flush = false}) {
     final file = _file;
     if (file == null) return;
     try {
@@ -146,36 +144,15 @@ class DiagnosticsLog {
         file.renameSync(previous.path);
         size = 0;
       }
-      file.writeAsBytesSync(bytes, mode: FileMode.append, flush: true);
+      file.writeAsBytesSync(bytes, mode: FileMode.append, flush: flush);
       _size = size + bytes.length;
     } catch (_) {
-      _size = null;
-    }
-  }
-
-  Future<void> _append(String line) async {
-    final file = _file;
-    if (file == null) return;
-    try {
-      final bytes = utf8.encode('$line\n');
-      var size = _size ?? (await file.exists() ? await file.length() : 0);
-      if (size + bytes.length > maxFileBytes && size > 0) {
-        final previous = _previous!;
-        if (await previous.exists()) await previous.delete();
-        await file.rename(previous.path);
-        size = 0;
-      }
-      await file.writeAsBytes(bytes, mode: FileMode.append);
-      _size = size + bytes.length;
-    } catch (_) {
-      // A full or read-only storage never breaks the app.
       _size = null;
     }
   }
 
   /// Every line kept on the phone (earlier runs included), oldest first.
   Future<List<String>> storedLines() async {
-    await _queue;
     final lines = <String>[];
     for (final file in [_previous, _file]) {
       if (file == null) continue;
@@ -191,13 +168,13 @@ class DiagnosticsLog {
     return lines;
   }
 
-  Future<void> flush() => _queue;
+  /// Writes are synchronous: nothing is ever pending.
+  Future<void> flush() => Future.value();
 
   /// Data deletion: forgets every line.
   Future<void> clear() async {
     _recent.clear();
     _unwritten.clear();
-    await _queue;
     for (final file in [_previous, _file]) {
       try {
         if (file != null && await file.exists()) await file.delete();
