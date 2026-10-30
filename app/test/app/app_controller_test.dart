@@ -233,7 +233,7 @@ void main() {
       model.selectLandscape('foret-lucioles');
       expect(model.scene.landscapeId, 'foret-lucioles');
       expect(model.scene.sounds.map((l) => l.id), ['ruisseau', 'vent']);
-      expect(model.lastLandscapeOfTheme('astral'), 'ciel-etoile');
+      expect(model.lastLandscapeOfTheme('imaginaire'), 'foret-lucioles');
     });
 
     test('mix: locked item → Premium, beyond 6 layers → message, levels follow while playing', () async {

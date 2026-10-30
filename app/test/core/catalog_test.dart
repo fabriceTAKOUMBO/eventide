@@ -11,13 +11,13 @@ void main() {
 
   test('reads every list of the real catalog', () {
     expect(catalog.version, 1);
-    expect(catalog.themes.map((t) => t.id), ['nature', 'urbain', 'astral', 'imaginaire']);
+    expect(catalog.themes.map((t) => t.id), ['nature', 'urbain', 'imaginaire']);
     expect(catalog.themes.first.name, 'Nature');
     expect(catalog.theme('imaginaire')!.name, 'Imaginaire');
     expect(catalog.landscapes, hasLength(10));
     expect(catalog.sounds, hasLength(13));
     expect(catalog.music, hasLength(8));
-    expect(catalog.decors, hasLength(10));
+    expect(catalog.decors, hasLength(9));
   });
 
   test('limits', () {
@@ -64,9 +64,8 @@ void main() {
   });
 
   test('landscapesOfTheme keeps the swipe order', () {
-    expect(catalog.landscapesOfTheme('nature').map((l) => l.id), ['cascade-foret']);
+    expect(catalog.landscapesOfTheme('nature').map((l) => l.id), ['cascade-foret', 'ciel-etoile']);
     expect(catalog.landscapesOfTheme('urbain').map((l) => l.id), ['pluie-ville', 'toits-pluie']);
-    expect(catalog.landscapesOfTheme('astral').map((l) => l.id), ['ciel-etoile']);
     expect(catalog.landscapesOfTheme('imaginaire').map((l) => l.id), [
       'foret-lucioles',
       'lac-lune',
@@ -247,7 +246,7 @@ void main() {
       }
       final lucioles = catalog.landscape('foret-lucioles')!;
       expect(lucioles.free, isTrue);
-      expect(lucioles.decorIds, ['lucioles', 'brume', 'feuilles', 'pluie', 'etoiles']);
+      expect(lucioles.decorIds, ['lucioles', 'brume', 'pluie', 'etoiles']);
       expect(lucioles.defaultMix[LayerKind.son], const [Layer(id: 'ruisseau', level: 40), Layer(id: 'vent', level: 25)]);
       expect(lucioles.defaultMix[LayerKind.musique], const [Layer(id: 'nappes-apaisantes', level: 20)]);
       expect(lucioles.defaultMix[LayerKind.decor], const [Layer(id: 'lucioles', level: 60), Layer(id: 'brume', level: 30)]);
@@ -275,7 +274,6 @@ void main() {
         'brume',
         'lucioles',
         'rayons-soleil',
-        'feuilles',
         'petales',
         'neige',
         'pluie',

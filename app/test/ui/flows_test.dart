@@ -176,10 +176,10 @@ void main() {
         model.catalog.landscape(model.browsedLandscapeId)!.themeId,
         'urbain',
       );
-      await tapText(tester, 'Astral');
+      await tapText(tester, 'Imaginaire');
       expect(
         model.catalog.landscape(model.browsedLandscapeId)!.themeId,
-        'astral',
+        'imaginaire',
       );
       await swipe(tester, const Offset(220, 0));
       expect(

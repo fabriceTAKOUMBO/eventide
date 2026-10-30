@@ -158,11 +158,11 @@ Lecture d'un son à événements (application) :
 
 ## 12. Paysages réels et paysages imaginaires (3D)
 
-Décision du product owner (29 octobre 2026) : **le décor d'un paysage filmé ne se modifie pas** (pas de neige, d'oiseaux… ajoutés sur une vraie vidéo). Les décors deviennent propres à une quatrième catégorie, **« Imaginaire »**, dont les paysages sont des scènes 3D dessinées en direct par l'application (Three.js), où l'utilisateur ajoute ou retire des éléments. Champs ajoutés au catalogue (facultatifs, la `version` du document de scène reste 1) :
+Décision du product owner (29 octobre 2026) : **le décor d'un paysage filmé ne se modifie pas** (pas de neige, d'oiseaux… ajoutés sur une vraie vidéo). Les décors deviennent propres à une catégorie **« Imaginaire »** (elle remplace « Astral »), dont les paysages sont des scènes 3D dessinées en direct par l'application (Three.js), où l'utilisateur ajoute ou retire des éléments. Champs ajoutés au catalogue (facultatifs, la `version` du document de scène reste 1) :
 
 | Champ | Règle |
 |---|---|
-| `themes` | quatrième thème `{"id": "imaginaire", "nom": "Imaginaire"}`, après `astral`. Un thème sans aucun paysage montrable par l'application est caché |
+| `themes` | `nature`, `urbain`, `imaginaire` (`{"id": "imaginaire", "nom": "Imaginaire"}`). Le thème `astral` est retiré le 30 octobre 2026 (décision du product owner) : `ciel-etoile` passe dans `nature`. Un thème sans aucun paysage montrable par l'application est caché |
 | `paysages[].rendu` | `video` (vidéo réelle avec son propre son : décor **non modifiable**) ou `3d` (scène imaginaire : décor modifiable). Absent : `video` |
 | `paysages[].decors` | pour `3d` seulement : identifiants des décors que la scène sait montrer (sous-ensemble de `decors`) |
 | `paysages[].eclairs` | `true` pour un paysage d'orage filmé : l'éclair est dessiné avec chaque tonnerre (§ 11), ce n'est plus un décor de l'utilisateur. Le décor `eclairs` est retiré du catalogue |

@@ -3,7 +3,6 @@
   "themes": [
     { "id": "nature", "nom": "Nature" },
     { "id": "urbain", "nom": "Urbain" },
-    { "id": "astral", "nom": "Astral" },
     { "id": "imaginaire", "nom": "Imaginaire" }
   ],
   "paysages": [
@@ -16,11 +15,11 @@
     { "id": "toits-pluie", "theme": "urbain", "nom": "Toits sous la pluie", "gratuit": false, "rendu": "video", "eclairs": true,
       "alias": ["toits", "toits sous la pluie"],
       "mix": { "sons": [{"id": "ambiance-toits-pluie", "niveau": 70}, {"id": "tonnerre", "niveau": 50}], "musique": [{"id": "cordes-lentes", "niveau": 15}], "decor": [] } },
-    { "id": "ciel-etoile", "theme": "astral", "nom": "Ciel étoilé", "gratuit": false, "rendu": "video",
+    { "id": "ciel-etoile", "theme": "nature", "nom": "Ciel étoilé", "gratuit": false, "rendu": "video",
       "alias": ["ciel étoilé", "étoiles", "ciel"],
       "mix": { "sons": [{"id": "grillons", "niveau": 40}, {"id": "vent", "niveau": 15}], "musique": [{"id": "boite-a-musique", "niveau": 15}], "decor": [] } },
     { "id": "foret-lucioles", "theme": "imaginaire", "nom": "Forêt aux lucioles", "gratuit": true, "rendu": "3d", "periode_s": 30,
-      "decors": ["lucioles", "brume", "feuilles", "pluie", "etoiles"],
+      "decors": ["lucioles", "brume", "pluie", "etoiles"],
       "alias": ["forêt aux lucioles", "lucioles"],
       "mix": { "sons": [{"id": "ruisseau", "niveau": 40}, {"id": "vent", "niveau": 25}], "musique": [{"id": "nappes-apaisantes", "niveau": 20}], "decor": [{"id": "lucioles", "niveau": 60}, {"id": "brume", "niveau": 30}] } },
     { "id": "lac-lune", "theme": "imaginaire", "nom": "Lac sous la lune", "gratuit": false, "rendu": "3d", "periode_s": 30,
@@ -76,7 +75,6 @@
     { "id": "brume", "nom": "Brume", "gratuit": true, "alias": ["brume", "brouillard", "de la brume"] },
     { "id": "lucioles", "nom": "Lucioles", "gratuit": true, "alias": ["lucioles", "luciole", "les lucioles"] },
     { "id": "rayons-soleil", "nom": "Rayons de soleil", "gratuit": false, "alias": ["rayons de soleil", "rayons", "soleil"] },
-    { "id": "feuilles", "nom": "Feuilles qui tombent", "gratuit": false, "alias": ["feuilles qui tombent", "feuilles", "les feuilles"] },
     { "id": "petales", "nom": "Pétales", "gratuit": false, "alias": ["pétales", "petales", "les pétales"] },
     { "id": "neige", "nom": "Neige", "gratuit": false, "alias": ["neige", "la neige", "flocons"] },
     { "id": "pluie", "nom": "Pluie", "gratuit": false, "alias": ["pluie", "la pluie", "gouttes"] },

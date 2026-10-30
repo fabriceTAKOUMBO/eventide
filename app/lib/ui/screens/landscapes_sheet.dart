@@ -1,5 +1,5 @@
-// Screen 3 · Paysages: one tab per theme of the catalog (Nature / Urbain / Astral /
-// Imaginaire, a theme without any landscape the phone can show is left out by the catalog),
+// Screen 3 · Paysages: one tab per theme of the catalog (Nature / Urbain /
+// Imaginaire; a theme without any landscape the phone can show is left out by the catalog),
 // then Favoris; 2-column grid.
 // Also used to pick the landscape of a schedule ([pickFor] set): it then returns the id.
 import 'package:flutter/material.dart';

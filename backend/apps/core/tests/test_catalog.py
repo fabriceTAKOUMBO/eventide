@@ -68,7 +68,7 @@ def test_ambiances_and_event_sounds_follow_contract_section_11(catalog):
 
 
 def test_filmed_and_3d_landscapes_follow_contract_section_12(catalog):
-    assert [t["id"] for t in catalog.raw["themes"]] == ["nature", "urbain", "astral", "imaginaire"]
+    assert [t["id"] for t in catalog.raw["themes"]] == ["nature", "urbain", "imaginaire"]
     decor_ids = set(catalog.sections["decors"])
     assert "eclairs" not in decor_ids and "pluie-ecran" not in decor_ids
     assert {"petales", "pluie", "etoiles-filantes"} <= decor_ids
