@@ -6,7 +6,7 @@ Contrat partagé entre l'application Flutter (`app/`) et l'API Django (`backend/
 - JSON UTF-8. Enveloppe et champs techniques en anglais `snake_case`. **Le document de scène et les programmations gardent les clés françaises de l'annexe A du dossier** (`paysage`, `sons`, `niveau`…), car c'est le format stocké et partagé.
 - Erreurs : `{"error": "<code>", "detail": "<texte court, sans donnée personnelle>"}` avec un statut HTTP cohérent. Codes communs à toutes les routes (en plus de ceux de chaque section) : `401 unauthorized` (jeton absent, inconnu ou révoqué ; en-tête `WWW-Authenticate: Bearer`), `404 not_found`, `405 method_not_allowed`, `413 payload_too_large` (corps de plus de 64 Kio), `415 unsupported_media_type` (corps non JSON), `429 rate_limited` (avec `Retry-After` en secondes), `500 server_error`.
 - Authentification : `Authorization: Bearer <token>` (jeton d'installation, § 2), sauf `GET /health`, `POST /installations`, `POST /play/rtdn` et les pages web (§ 9).
-- Le catalogue fermé (paysages, sons, musiques, décors, limites) est **`app/assets/catalog.json`** : une seule source, lue par l'application et embarquée par l'API (copie vérifiée par un test des deux côtés).
+- Le catalogue **de base** (paysages, sons, musiques, décors, limites) est **`app/assets/catalog.json`** : une seule source, lue par l'application et embarquée par l'API (copie vérifiée par un test des deux côtés). Depuis le 30 octobre 2026, le serveur y ajoute les paysages filmés, sons et musiques publiés depuis le tableau de bord (§ 13, § 14) : l'application les reçoit sans nouvelle version.
 
 ## 1. Document de scène (annexe A)
 
@@ -203,3 +203,49 @@ Les anciens paysages dessinés en 2D (`sous-bois`, `berge-mousseuse`, `torrent-m
 
 Les scènes 3D sont embarquées dans l'application (`app/assets/imaginaire/`, hors ligne). Leur image fixe et leur vidéo de fond d'écran sont tirées de la scène elle-même (`images/paysages/<id>.jpg`, `videos/paysages/<id>.mp4`, § 8), embarquées ou téléchargées selon la règle gratuit / Premium.
 
+## 13. Catalogue publié (contenu ajouté sans nouvelle version de l'application)
+
+Décision du product owner (30 octobre 2026) : de nouveaux paysages filmés, sons et musiques se publient depuis un tableau de bord (§ 14), et l'application se met à jour seule.
+
+- **Base embarquée.** `app/assets/catalog.json` reste le catalogue de départ (premier lancement, hors ligne, sans serveur). Thèmes, scènes 3D, décors et `limites` ne viennent que de lui : on ne publie ni scène 3D ni décor (ce sont du code embarqué).
+- **Catalogue publié** = base de l'API (`backend/eventide/catalog.json`, identique) + éléments publiés. `revision` : entier qui augmente de 1 à chaque publication, remplacement ou retrait (0 tant que rien n'est publié).
+- **`GET /catalog`** (jeton d'installation, 60 demandes par heure). Avec `If-None-Match: "<revision>"` égal à la révision courante : `304` sans corps. Sinon `200`, en-têtes `ETag: "<revision>"` et `Cache-Control: private, no-cache` :
+
+```json
+{
+  "revision": 7,
+  "catalog": { "version": 1, "themes": [], "paysages": [], "sons": [], "musiques": [], "decors": [], "limites": {} },
+  "distant": { "version": 1, "videos": ["lac-brume"], "images": ["lac-brume"], "sons": ["ambiance-lac-brume"], "musiques": [] }
+}
+```
+
+  `catalog` a exactement le format de `app/assets/catalog.json` (tous les éléments, base et publiés) ; `distant` a le format de `app/assets/landscapes/remote.json` (§ 8) et le remplace : il liste aussi les médias de la base qui sont sur le serveur.
+- **Éléments publiés.** Mêmes champs que ceux de la base, plus `media_rev` (entier ≥ 1, révision de leurs fichiers ; absent pour la base). Un paysage publié est toujours filmé (`rendu` : `video`), d'un thème `nature` ou `urbain`, sans `decors` ; son `mix` ne nomme que des éléments du catalogue publié, en tête son ambiance s'il en a une. Son ambiance est un son `ambiance-<id>` avec `paysage: <id>` (§ 11). Un identifiant publié ne reprend jamais un identifiant de la base ni un autre élément publié (même retiré).
+- **Clés de contenu (§ 8).** Les fichiers d'un élément publié portent sa révision : `videos/paysages/<id>.v<r>.mp4`, `images/paysages/<id>.v<r>.jpg`, `audio/sons/<id>.v<r>.ogg`, `audio/musiques/<id>.v<r>.ogg` (`r` = `media_rev`). `POST /content/urls` n'accepte pour un élément publié que la clé de sa révision courante (sinon `400 invalid_request`), et refuse un élément retiré. Un fichier remplacé a donc une nouvelle clé : l'application le télécharge de nouveau, et CloudFront n'a jamais à invalider son cache. La règle gratuit / Premium (§ 8) s'applique telle quelle (`gratuit` de l'élément).
+- **Application.** Elle demande `GET /catalog` au lancement (après le premier écran, sans le bloquer) puis au retour au premier plan si la dernière demande date de plus d'une heure ; elle garde la dernière réponse valide et s'en sert dès le lancement suivant. Elle valide `catalog` avec les mêmes règles que la base et **ignore toute la réponse** si `catalog.version` n'est pas 1, si le JSON est invalide, ou s'il manque un élément de la base (un retrait ne vise que des éléments publiés). Les nouveaux éléments apparaissent sans redémarrer ; la scène en cours de lecture n'est jamais interrompue. Un élément retiré disparaît des listes : un favori, une programmation ou un lien qui nomme un paysage retiré s'ouvre sur `cascade-foret` (comme au § 12), un son ou une musique retirés sont enlevés du mix. Les fichiers en cache dont la clé n'est plus au catalogue peuvent être effacés.
+- **API.** Les scènes partagées (§ 8) et les clés de contenu sont validées avec le catalogue publié : un élément publié est valide, un élément retiré est inconnu.
+
+## 14. Tableau de bord (administration)
+
+Pages web servies par l'API sur l'hôte du domaine (comme § 9), sous **`/tableau/`** : pas de nouvel hôte ni de nouvelle règle d'écoute du répartiteur. Réservées aux administrateurs ; aucune action d'administration ne passe par l'API `v1` (un jeton d'installation ne donne jamais ce droit).
+
+**Connexion.** Bouton « Se connecter avec Google » (Google Identity Services, client OAuth web). `POST /tableau/connexion` reçoit le jeton d'identité Google (formulaire, CSRF). Le serveur vérifie la signature, l'audience (`GOOGLE_OAUTH_CLIENT_IDS`), `email_verified`, et que l'adresse fait partie de `ADMIN_EMAILS` (réglage secret du serveur). L'adresse n'est **jamais enregistrée** (ni en base, ni dans les journaux) : la session ne garde que son empreinte SHA-256, revérifiée à chaque requête (retirer une adresse du réglage coupe l'accès aussitôt). Le compte (`Account`, par `sub`) est le même que dans l'application ; il est créé s'il n'existe pas. Cookie de session `Secure`, `HttpOnly`, `SameSite=Strict`, chemin `/tableau/`, 8 heures, effacé à la déconnexion. Refus : page « Accès refusé » sans détail ; 10 essais par 15 minutes par adresse IP.
+
+**Publier un élément.**
+
+1. **Nouveau** : type (paysage filmé, son, musique), identifiant (`[a-z0-9]+(-[a-z0-9]+)*`, 3 à 40 caractères, unique), nom (2 à 40 caractères), thème (paysage : `nature` ou `urbain`), gratuit ou Premium, éclairs d'orage (paysage), alias (facultatifs, minuscules, 10 au plus).
+2. **Envoi du fichier source directement du navigateur vers S3** (formulaire signé, clé `uploads/<uuid>/source`, 300 Mo au plus ; vidéo MP4, MOV ou WebM ; son WAV, MP3, OGG, M4A ou FLAC) : le fichier ne traverse ni l'API ni le répartiteur de charge partagé. Les sources sont effacées après 7 jours.
+3. **Traitement automatique** (tâche `ev-<env>-media`, ffmpeg), lancé à la fin de l'envoi :
+   - paysage : boucle sans raccord (fondu enchaîné), recadrage 9:16 en 1080 × 1920, H.264 sans son, 2,5 Mo au plus ; image fixe = première image de la boucle (JPEG, 300 Ko au plus) ; **ambiance** = le son de la vidéo, en boucle sans raccord d'au moins 60 s, volume normalisé, Opus → son `ambiance-<id>` (vidéo muette : paysage sans ambiance, signalé) ;
+   - son ou musique : boucle sans raccord d'au moins 60 s, volume normalisé, Opus ;
+   - source illisible, de moins de 8 s, ou résultat hors limites : état `echec` avec la raison.
+4. **Aperçu** : image fixe, vidéo et sons traités, lus depuis le stockage.
+5. **Publier** : l'élément entre au catalogue (§ 13, `revision` + 1). **Retirer** : il en sort (`revision` + 1) ; ses fichiers restent sur le stockage et il peut être publié de nouveau. **Remplacer le fichier** : nouvel envoi et nouveau traitement ; à la publication, `media_rev` + 1. Le nom, les alias et gratuit / Premium se modifient aussi (`revision` + 1).
+
+États d'un élément : `brouillon`, `envoi`, `traitement`, `pret`, `publie`, `retire`, `echec`. La page de l'élément montre l'état courant et se met à jour seule pendant le traitement (`GET /tableau/elements/<id>/etat` → `{"etat": "...", "detail": "..."}`, même origine, session).
+
+**Utilisateurs** (lecture seule) : totaux (installations, actives sur 7 et 30 jours, comptes Google liés, Premium actifs par produit) et liste paginée : installation (8 premiers caractères de l'identifiant), création, dernière activité, version de l'app, compte Google lié (oui / non), Premium (produit, état, échéance), nombre de partages. Le serveur n'a rien d'autre (ni nom, ni adresse, et les mix, favoris et nuits restent sur le téléphone). Ni export, ni modification.
+
+**Journal** : chaque connexion, publication, modification, remplacement et retrait est enregistré (date, compte administrateur, action, élément), visible dans le tableau de bord, gardé un an.
+
+**Sécurité** : CSRF sur chaque envoi de formulaire et chaque requête qui modifie ; politique de sécurité du contenu qui n'autorise en plus que le script et le cadre de Google Identity Services (`https://accounts.google.com/gsi/`) et l'adresse d'envoi S3 du bucket de contenu ; pages jamais mises en cache (`Cache-Control: no-store`) ; `X-Frame-Options: DENY`.
