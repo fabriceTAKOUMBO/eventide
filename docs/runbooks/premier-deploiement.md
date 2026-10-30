@@ -136,8 +136,9 @@ aws cloudwatch get-metric-statistics --namespace AWS/RDS --metric-name DatabaseC
   --period 86400 --statistics Maximum --query 'sort_by(Datapoints,&Timestamp)[].Maximum' --output text
 #   → marge : pic observé + 14 (Eventide) bien en dessous de max_connections de l'instance
 
-# Quota Fargate commun à tout le compte (pic d'Eventide : 1,75 vCPU en production, plafonné à 2
-# par Terraform ; préproduction en Spot : 1,25) : valeur du quota et marge restante.
+# Quota Fargate commun à tout le compte (pic d'Eventide : 2,75 vCPU en production, tâche media
+# du tableau de bord comprise, plafonné à 3 par Terraform ; préproduction en Spot : 2,25 pour 2,5 ;
+# ADR § 12) : valeur du quota et marge restante.
 aws service-quotas get-service-quota --service-code fargate --quota-code L-3032A538 \
   --query 'Quota.[QuotaName,Value]' --output text     # Fargate On-Demand vCPU resource count
 aws service-quotas get-service-quota --service-code fargate --quota-code L-36FBB829 \
@@ -205,7 +206,7 @@ Ensuite :
 
 ## 6. Secrets à déposer
 
-Un secret est créé avec la valeur provisoire `A_REMPLACER` (l'API répond alors `503` et l'alarme `ev-prod-google-not-configured` se déclenche) : `eventide/prod/google-play-service-account` (sortie `secrets_to_fill`). Dans CloudShell, sans laisser de fichier :
+Deux secrets sont créés avec la valeur provisoire `A_REMPLACER` (sortie `secrets_to_fill`) : `eventide/prod/google-play-service-account` (l'API répond alors `503` et l'alarme `ev-prod-google-not-configured` se déclenche) et `eventide/prod/admin-emails` (administrateurs du tableau de bord : personne tant qu'il n'est pas rempli ; voir le [runbook du tableau de bord](tableau-de-bord.md)). Dans CloudShell, sans laisser de fichier :
 
 ```bash
 # Clé JSON du compte de service Google Play : téléverser le fichier dans CloudShell, puis
@@ -218,7 +219,7 @@ Les tâches lisent les secrets **au démarrage** : relancer le déploiement (§ 
 
 ## 7. Amorçage de la base (une fois)
 
-La tâche `ev-prod-db-bootstrap` crée, avec le compte maître de l'instance partagée, la base `eventide`, la base vide `eventide_restore`, les rôles `ev_app`, `ev_migrator`, `ev_backup`, leurs limites de connexions (10, 2, 2 ; base 14) et leurs délais, puis les droits ([`bootstrap.sql`](../../infra/terraform/modules/db_tools/files/bootstrap.sql), [`grants.sql`](../../infra/terraform/modules/db_tools/files/grants.sql)). Le mot de passe maître passe par un **secret temporaire** ; les mots de passe de nos rôles partent sous forme de vérificateurs SCRAM.
+La tâche `ev-prod-db-bootstrap` crée, avec le compte maître de l'instance partagée, la base `eventide`, la base vide `eventide_restore`, les rôles `ev_app`, `ev_migrator`, `ev_backup`, leurs limites de connexions (11, 2, 1 ; base 14 : répartition proposée le 30 octobre 2026 avec la tâche `media` du tableau de bord, à confirmer, [ADR § 12](../infra/hebergement-mutualise.md#12-tableau-de-bord-et-publication-de-contenu-30-octobre-2026)) et leurs délais, puis les droits ([`bootstrap.sql`](../../infra/terraform/modules/db_tools/files/bootstrap.sql), [`grants.sql`](../../infra/terraform/modules/db_tools/files/grants.sql)). Le mot de passe maître passe par un **secret temporaire** ; les mots de passe de nos rôles partent sous forme de vérificateurs SCRAM.
 
 Dans **AWS CloudShell** (us-east-1), avec les valeurs de `terraform output -json prod` (aucun secret) :
 
@@ -256,7 +257,7 @@ aws secretsmanager delete-secret --secret-id "$SECRET_NAME" --force-delete-witho
 aws logs tail /ecs/ev-prod/jobs --log-stream-name-prefix db-bootstrap --since 30m --format short
 ```
 
-Attendu : conteneurs `init`, `scram` et `bootstrap` en code `0` ; dans les journaux `db_scram_verifiers_ready`, `db_bootstrap_started` puis `db_bootstrap_done`, les trois rôles avec `connexion = t` et `superutilisateur = f`, les limites `10 / 2 / 2`, leurs réglages (`statement_timeout`, `lock_timeout`, `idle_in_transaction_session_timeout`, `work_mem`, `maintenance_work_mem`, `idle_session_timeout`, `max_parallel_workers_per_gather=0`, `max_parallel_maintenance_workers=0`, et `temp_file_limit` si le compte maître a le droit de le poser), la base `eventide` avec la limite `14` et des droits sans entrée pour PUBLIC.
+Attendu : conteneurs `init`, `scram` et `bootstrap` en code `0` ; dans les journaux `db_scram_verifiers_ready`, `db_bootstrap_started` puis `db_bootstrap_done`, les trois rôles avec `connexion = t` et `superutilisateur = f`, les limites `11 / 2 / 1`, leurs réglages (`statement_timeout`, `lock_timeout`, `idle_in_transaction_session_timeout`, `work_mem`, `maintenance_work_mem`, `idle_session_timeout`, `max_parallel_workers_per_gather=0`, `max_parallel_maintenance_workers=0`, et `temp_file_limit` si le compte maître a le droit de le poser), la base `eventide` avec la limite `14` et des droits sans entrée pour PUBLIC.
 
 - `db_bootstrap_temp_file_limit_skipped` : le compte maître de l'instance n'a pas le droit `SET` sur `temp_file_limit` (paramètre réservé au superutilisateur) ; tous les autres plafonds sont posés. Rien à faire de notre côté (ne pas demander de droit supplémentaire sans décision du product owner) ; noter le constat dans le journal.
 
@@ -295,9 +296,9 @@ Attendu : conteneurs `init`, `scram` et `bootstrap` en code `0` ; dans les journ
 
 GitHub → *Actions* → **Deploy** → *Run workflow* : branche `main`, environnement `prod`, `image_tag` vide, migrations cochées.
 
-Le workflow lit sa configuration dans SSM (`/eventide/prod/deploy/config`), construit l'image `linux/arm64`, la pousse dans `ev-prod-api`, vérifie le scan ECR (toute vulnérabilité `CRITICAL` absente de `.github/accepted-cves.txt` bloque la production), fait enregistrer les révisions `api`, `migrate` et `jobs` par **notre registraire** (fonction Lambda `ev-prod-task-registrar` : modèle écrit par Terraform, seule l'image change ; le rôle de déploiement ne lit ni n'écrit aucune définition de tâche lui-même), lance les migrations en tâche ponctuelle (rôle `ev_migrator`), met à jour le service `api` **s'il existe** (phase 2 seulement ; en phase 1 un avis « Service api absent » est normal), enregistre le tag dans SSM et lance les tests de fumée (phase 2).
+Le workflow lit sa configuration dans SSM (`/eventide/prod/deploy/config`), construit l'image `linux/arm64`, la pousse dans `ev-prod-api`, vérifie le scan ECR (toute vulnérabilité `CRITICAL` absente de `.github/accepted-cves.txt` bloque la production), fait enregistrer les révisions `api`, `migrate`, `media` (après les migrations) et `jobs` par **notre registraire** (fonction Lambda `ev-prod-task-registrar` : modèle écrit par Terraform, seule l'image change ; le rôle de déploiement ne lit ni n'écrit aucune définition de tâche lui-même), lance les migrations en tâche ponctuelle (rôle `ev_migrator`), met à jour le service `api` **s'il existe** (phase 2 seulement ; en phase 1 un avis « Service api absent » est normal), enregistre le tag dans SSM et lance les tests de fumée (phase 2).
 
-Après ce premier déploiement, un `terraform plan` complet propose de **remplacer** nos définitions de tâches (`api`, `migrate`, `jobs` : Terraform suit le tag déployé, lu dans SSM ; chaque remplacement compte un `destroy`) : attendu, sans effet sur les autres produits. Pour un changement limité, cibler (`-target`) les ressources concernées.
+Après ce premier déploiement, un `terraform plan` complet propose de **remplacer** nos définitions de tâches (`api`, `migrate`, `jobs`, `media` : Terraform suit le tag déployé, lu dans SSM ; chaque remplacement compte un `destroy`) : attendu, sans effet sur les autres produits. Pour un changement limité, cibler (`-target`) les ressources concernées.
 
 ## 10. Contenu (sons et images)
 
@@ -351,7 +352,8 @@ Quand le nom est validé et le domaine acheté (la zone Route 53 publique est cr
 4. Avec l'accord du product owner : `terraform apply tfplan && rm tfplan tfplan.json`. Le certificat est validé automatiquement par DNS (zone dans ce compte) ; le service `api` démarre avec la dernière image déployée.
 5. Relancer **Deploy** (`prod`, migrations cochées) : cette fois le service est mis à jour et les tests de fumée tournent.
 6. **Notifications Google Play (RTDN)** : dans Google Cloud, sujet Pub/Sub (par ex. `eventide-play`) ; donner le rôle *Pub/Sub Publisher* sur ce sujet à `google-play-developer-notifications@system.gserviceaccount.com` ; abonnement **push** vers `https://api.<domaine>/v1/play/rtdn`, **authentification activée** avec le compte de service `rtdn_service_account_email` et l'audience `https://api.<domaine>/v1/play/rtdn` (valeur de `RTDN_AUDIENCE`). Play Console → *Monétisation* → *Notifications en temps réel pour les développeurs* : nom complet du sujet, puis *Envoyer une notification de test* : l'API répond `204` (journal `/ecs/ev-prod/api`). Étapes à vérifier dans la documentation Google au moment de le faire (non testées).
-7. Associer le site à l'application (liens `https://<domaine>/m/<code>`) : `https://<domaine>/.well-known/assetlinks.json` répond dès que `play_package_name` et `android_cert_fingerprints` sont renseignés (sinon `404`).
+7. **Tableau de bord** (`https://<domaine>/tableau/`, publication de contenu) : client OAuth web, administrateurs et vérifications dans le [runbook du tableau de bord](tableau-de-bord.md).
+8. Associer le site à l'application (liens `https://<domaine>/m/<code>`) : `https://<domaine>/.well-known/assetlinks.json` répond dès que `play_package_name` et `android_cert_fingerprints` sont renseignés (sinon `404`).
 
 ## 12. Sauvegarde et test de restauration
 
@@ -420,7 +422,7 @@ Le service `api` de préproduction tourne de 8 h à 20 h les jours ouvrés (heur
 | Plan : avertissement `check "terraform_session_can_decrypt"` ou `"terraform_session_can_use_state"` | Session qui n'est pas AdministratorAccess : `aws sso login --profile principal`, vérifier `AWS_PROFILE`, relancer |
 | `check-plan-additions-only.sh` : `ÉCHEC` | Ne pas appliquer. Chaque ligne nomme la ressource et la règle enfreinte ; transmettre la sortie. Une ressource partagée dans le plan (type interdit, adresse hors liste) est un bogue bloquant (règle 1) |
 | Plan : « La zone Route 53 de domain_name ne porte pas l'étiquette Project = eventide » | Zone pas encore étiquetée (§ 11, étape 1), ou `domain_name` désigne la zone d'un autre produit : vérifier le nom avant d'étiqueter quoi que ce soit |
-| Plan : « Pic de vCPU Fargate de l'environnement … au-delà du budget » | `api.max`, `api.cpu` ou `deployment_maximum_percent` relevés : le quota Fargate est commun au compte ; réduire, ou relever `fargate_vcpu_budget` après lecture du quota (§ 4) et accord du product owner |
+| Plan : « Pic de vCPU Fargate de l'environnement … au-delà du budget » | `api.max`, `api.cpu`, `deployment_maximum_percent`, `media_task` ou `media_task_concurrency` relevés : le quota Fargate est commun au compte ; réduire, ou relever `fargate_vcpu_budget` après lecture du quota (§ 4) et accord du product owner |
 | Plan : « Règle d'écouteur partagé : un nom d'hôte … n'est ni … ni l'un de ses sous-domaines » | Un nom d'hôte de nos règles sort de notre domaine : corriger ; jamais de joker ni de nom d'un autre produit |
 | Deploy : `Le registraire a refusé …` ou `Révision inattendue` | Famille ou tag invalides, ou configuration SSM incohérente : relancer après un `apply` de la pile ; ne jamais redonner `ecs:RegisterTaskDefinition` ou `ecs:DescribeTaskDefinition` au rôle de déploiement |
 | Apply : `PriorityInUse` sur une règle d'écouteur | Une autre application a pris une priorité de notre plage : choisir un autre `listener_priority_base` (validation Terraform à adapter) |

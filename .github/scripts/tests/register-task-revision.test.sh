@@ -34,6 +34,7 @@ run() { # <mode> <args...> -> exit status, output in $out
   out=$(env PATH="$work/bin:$PATH" FAKE_MODE="$1" FAKE_LOG="$work/log" GITHUB_ENV="$work/env" RUNNER_TEMP="$work" \
     TASK_REGISTRAR="${REGISTRAR:-ev-prod-task-registrar}" IMAGE_TAG="${TAG:-$SHA}" \
     API_FAMILY=ev-prod-api MIGRATE_FAMILY=ev-prod-migrate JOBS_FAMILY="${JOBS:-ev-prod-jobs}" \
+    MEDIA_FAMILY="${MEDIA:-ev-prod-media}" WORKER_FAMILY=ev-prod-worker \
     bash "$script" "${@:2}" 2>&1)
 }
 ok() { echo "OK   $1"; }
@@ -47,6 +48,24 @@ if run ok api API_TASKDEF migrate MIGRATE_TASKDEF &&
   ! grep -qE 'describe-task-definition|register-task-definition' "$work/log"; then
   ok "révisions api et migrate par le registraire, sans lire ni écrire de définition de tâche"
 else ko "révisions api et migrate"; fi
+
+if run ok media MEDIA_TASKDEF &&
+  grep -qx 'MEDIA_TASKDEF=arn:aws:ecs:us-east-1:466494951409:task-definition/ev-prod-media:12' "$work/env" &&
+  grep -qF "{\"family\":\"media\",\"image_tag\":\"$SHA\"}" "$work/log"; then
+  ok "révision media (traitement du tableau de bord) par le registraire"
+else ko "révision media"; fi
+
+if ! run foreign media MEDIA_TASKDEF && grep -q 'Révision inattendue' <<< "$out" && [ ! -s "$work/env" ]; then
+  ok "révision media d'une autre famille refusée"
+else ko "révision media d'une autre famille"; fi
+
+if ! MEDIA=cinaf-streaming-media run ok media MEDIA_TASKDEF && grep -q "hors d'Eventide" <<< "$out" && [ ! -s "$work/log" ]; then
+  ok "famille media attendue hors d'Eventide refusée avant tout appel"
+else ko "famille media attendue hors d'Eventide"; fi
+
+if ! run ok worker WORKER_TASKDEF && grep -q 'Famille inconnue : worker' <<< "$out" && [ ! -s "$work/log" ]; then
+  ok "clé de famille hors de la liste (api, migrate, jobs, media) refusée avant tout appel"
+else ko "clé de famille hors de la liste"; fi
 
 if ! run foreign jobs JOBS_TASKDEF && grep -q 'Révision inattendue' <<< "$out" && [ ! -s "$work/env" ]; then
   ok "révision d'une autre famille refusée"

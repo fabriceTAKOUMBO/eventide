@@ -62,6 +62,7 @@ output "db_connection_limits" {
     total    = local.total_connection_limit
     budget   = var.db_connection_budget
     app_max  = local.app_connections_needed
+    media    = local.media_connections
   }
 }
 
@@ -80,10 +81,11 @@ output "shared_contact_points" {
 }
 
 output "shared_capacity" {
-  description = "Part de l'environnement dans les capacités communes du compte : pic de vCPU Fargate et budget."
+  description = "Part de l'environnement dans les capacités communes du compte : pic de vCPU Fargate (tâches media comprises) et budget."
   value = {
     peak_fargate_vcpu   = local.peak_fargate_vcpu
     fargate_vcpu_budget = var.fargate_vcpu_budget
+    media_task_vcpu     = var.media_task_concurrency * var.media_task.cpu / 1024
   }
 }
 
@@ -104,6 +106,7 @@ output "content" {
     base_url        = module.content.content_base_url
     distribution_id = module.content.distribution_id
     key_pair_id     = module.content.key_pair_id
+    uploads         = module.content.uploads
   }
 }
 
@@ -114,7 +117,18 @@ output "alerts_topic_arn" {
 
 output "secret_names" {
   description = "Secrets à remplir à la main (valeur provisoire A_REMPLACER)."
-  value       = ["${local.secret_prefix}/google-play-service-account"]
+  value       = ["${local.secret_prefix}/admin-emails", "${local.secret_prefix}/google-play-service-account"]
+}
+
+output "dashboard" {
+  description = "Tableau de bord (contrat § 14) : variables d'intégration de l'API et de la tâche media (aucun secret), tâche media, secrets injectés par famille (noms seulement), politiques des rôles de tâche."
+  value = {
+    environment       = local.dashboard_environment
+    media_task        = module.ecs.media_task
+    secrets_by_family = module.ecs.secret_names_by_family
+    task_roles        = module.ecs.task_role_arns
+    task_policies     = module.ecs.task_role_policies
+  }
 }
 
 output "shared_alb" {

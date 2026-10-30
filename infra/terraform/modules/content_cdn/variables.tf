@@ -64,6 +64,40 @@ variable "noncurrent_version_days" {
   default     = 30
 }
 
+variable "cors_allowed_origins" {
+  description = "Origines web autorisées à envoyer un fichier au bucket (formulaire POST signé du tableau de bord) : https://<domaine> et https://www.<domaine> en production. Vide = aucune règle CORS (pas de domaine, pas de tableau de bord)."
+  type        = list(string)
+  default     = []
+
+  # Exact HTTPS origins only: no wildcard, no path, no plain HTTP.
+  validation {
+    condition     = alltrue([for o in var.cors_allowed_origins : can(regex("^https://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$", o))])
+    error_message = "cors_allowed_origins : origines https://<nom d'hôte> exactes seulement (ni joker, ni chemin, ni http)."
+  }
+}
+
+variable "cors_max_age_seconds" {
+  description = "Durée de mise en cache, par le navigateur, de la réponse CORS préalable (secondes)."
+  type        = number
+  default     = 600
+
+  validation {
+    condition     = var.cors_max_age_seconds >= 0 && var.cors_max_age_seconds <= 3600
+    error_message = "cors_max_age_seconds : entre 0 et 3600."
+  }
+}
+
+variable "upload_expiration_days" {
+  description = "Jours avant l'effacement des fichiers sources envoyés par le tableau de bord (préfixe uploads/)."
+  type        = number
+  default     = 7
+
+  validation {
+    condition     = var.upload_expiration_days >= 1 && var.upload_expiration_days <= 30
+    error_message = "upload_expiration_days : entre 1 et 30."
+  }
+}
+
 variable "force_destroy" {
   description = "Autorise la suppression d'un bucket non vide (préproduction ou retrait volontaire)."
   type        = bool

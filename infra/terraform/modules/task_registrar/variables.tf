@@ -12,9 +12,14 @@ variable "register_inputs" {
   description = "Entrées exactes de RegisterTaskDefinition par clé de famille (sortie register_inputs du module ecs). Chaque famille doit valoir <name>-<clé>."
   type        = any
 
+  # Closed list of OUR family keys (the handler checks the same list).
   validation {
-    condition     = alltrue([for k, v in var.register_inputs : can(regex("^[a-z0-9]+$", k))])
-    error_message = "Clés de famille : minuscules et chiffres (api, migrate, jobs)."
+    condition     = alltrue([for k, v in var.register_inputs : contains(["api", "migrate", "jobs", "media"], k)])
+    error_message = "Clés de famille : api, migrate, jobs ou media seulement."
+  }
+  validation {
+    condition     = alltrue([for k, v in var.register_inputs : try(v.family, "") == "${var.name}-${k}"])
+    error_message = "Chaque modèle doit porter la famille <name>-<clé> (ev-<env>-api, -migrate, -jobs, -media)."
   }
 }
 
@@ -24,8 +29,13 @@ variable "image_repository_url" {
 }
 
 variable "pass_role_arns" {
-  description = "Rôles d'exécution référencés par les modèles (iam:PassRole vers ECS)."
+  description = "Rôles référencés par les modèles (rôles d'exécution, rôles de tâche de api et media) : iam:PassRole vers ECS."
   type        = list(string)
+
+  validation {
+    condition     = length(var.pass_role_arns) > 0 && alltrue([for a in var.pass_role_arns : can(regex("^arn:aws:iam::[0-9]{12}:role/ev-[a-z0-9-]+$", a))])
+    error_message = "pass_role_arns : nos rôles seulement (role/ev-*)."
+  }
 }
 
 variable "revision_tags" {

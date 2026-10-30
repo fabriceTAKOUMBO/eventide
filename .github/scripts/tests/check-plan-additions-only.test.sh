@@ -40,12 +40,32 @@ expect 0 good-phase1.json -- \
   "module.prod.aws_vpc_security_group_ingress_rule.shared_postgres : create (tcp 5432 depuis notre groupe)" \
   "Ressources d'Eventide modifiées, remplacées, supprimées ou importées (à relire) :" "OK : aucune ressource"
 
+# Phase 2 with the dashboard (30 October 2026): media family, task roles and their policies on
+# our resources only, CORS and lifecycle of OUR content bucket: accepted, updates listed.
 expect 0 good-phase2.json -- \
   "aws_lb_listener_rule.api : create (priorité 400 : api.eventide.app)" \
   "aws_lb_listener_rule.web[0] : create (priorité 401 : eventide.app, www.eventide.app)" \
   "aws_lb_listener_certificate.this : create" \
   "module.prod.module.ecs.aws_ecs_task_definition.api : delete,create" \
-  "module.prod.aws_ssm_parameter.deploy_config : update"
+  "module.prod.aws_ssm_parameter.deploy_config : update" \
+  "module.prod.module.task_registrar.aws_iam_role_policy.this : update" \
+  "module.prod.module.content.aws_s3_bucket_lifecycle_configuration.this : update" \
+  "Actions : 13 create, 1 delete,create, 1 no-op, 3 update"
+
+# The same kinds of resources pointed at the other platforms.
+expect 1 bad-media-iam.json -- \
+  "ressource « arn:aws:s3:::cinaf-streaming-prod-media/* » qui n'est pas à Eventide (CinafMedia)" \
+  "ressource « arn:aws:ecs:us-east-1:466494951409:task-definition/cinaf-streaming-api:* » qui n'est pas à Eventide (CinafTasks)" \
+  "ressource « arn:aws:iam::466494951409:role/ce-prod-api-task » qui n'est pas à Eventide (CeRole)" \
+  "secret:candidatureexpress/prod/* » qui n'est pas à Eventide (CeSecrets)" \
+  "droit sur « * » (ReadEverything) : s3:GetObject, logs:FilterLogEvents" \
+  "instruction Allow avec NotAction ou NotResource (AllButOurs) : interdite" \
+  "droits IAM posés sur le rôle « cinaf-streaming-ecs-task » qui n'est pas à Eventide" \
+  "politique « arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess » attachée" \
+  "aws_iam_policy_attachment.s3 : type aws_iam_policy_attachment interdit" \
+  "réglage S3 (aws_s3_bucket_cors_configuration) sur le bucket « cinaf-streaming-prod-media »" \
+  "réglage S3 (aws_s3_bucket_lifecycle_configuration) sur le bucket « ce-prod-documents »" \
+  "ÉCHEC : 11 violation(s)"
 
 expect 1 bad-update-cinaf.json -- \
   "aws_security_group.cinaf_rds : ressource hors de la liste d'Eventide (aws_security_group, update)" \

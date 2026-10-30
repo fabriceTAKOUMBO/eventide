@@ -1,0 +1,259 @@
+{
+  "format_version": "1.2",
+  "terraform_version": "1.16.5",
+  "variables": {
+    "domain_name": {
+      "value": "eventide.app"
+    },
+    "aws_account_id": {
+      "value": "466494951409"
+    }
+  },
+  "resource_changes": [
+    {
+      "address": "module.prod.module.ecs.aws_iam_role_policy.task[\"api\"]",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "task",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "dashboard-uploads-and-media-tasks",
+          "role": "ev-prod-api-task",
+          "policy": "{\"Statement\":[{\"Action\":[\"s3:GetObject\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::ev-prod-content-466494951409/uploads/*\"],\"Sid\":\"Ours\"},{\"Action\":[\"s3:GetObject\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::cinaf-streaming-prod-media/*\"],\"Sid\":\"CinafMedia\"},{\"Action\":[\"ecs:RunTask\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:ecs:us-east-1:466494951409:task-definition/cinaf-streaming-api:*\"],\"Sid\":\"CinafTasks\"},{\"Action\":[\"iam:PassRole\"],\"Effect\":\"Allow\",\"Resource\":\"arn:aws:iam::466494951409:role/ce-prod-api-task\",\"Sid\":\"CeRole\"},{\"Action\":[\"secretsmanager:GetSecretValue\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:secretsmanager:us-east-1:466494951409:secret:candidatureexpress/prod/*\"],\"Sid\":\"CeSecrets\"},{\"Action\":[\"s3:*\"],\"Effect\":\"Deny\",\"Resource\":\"*\",\"Sid\":\"Deny\"}],\"Version\":\"2012-10-17\"}"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.ecs.aws_iam_role_policy.task[\"media\"]",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "task",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "name": "process-media",
+          "role": "ev-prod-media-task",
+          "policy": "{\"Statement\":[{\"Action\":[\"s3:GetObject\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::ev-prod-content-466494951409/uploads/*\"],\"Sid\":\"ReadUploadedSources\"},{\"Action\":[\"s3:PutObject\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::ev-prod-content-466494951409/videos/paysages/*\",\"arn:aws:s3:::ev-prod-content-466494951409/images/paysages/*\",\"arn:aws:s3:::ev-prod-content-466494951409/audio/sons/*\",\"arn:aws:s3:::ev-prod-content-466494951409/audio/musiques/*\"],\"Sid\":\"WriteProcessedMedia\"}],\"Version\":\"2012-10-17\"}"
+        },
+        "after": {
+          "name": "process-media",
+          "role": "ev-prod-media-task",
+          "policy": "{\"Statement\":[{\"Action\":[\"ecr:GetAuthorizationToken\"],\"Effect\":\"Allow\",\"Resource\":\"*\",\"Sid\":\"EcrAuth\"},{\"Action\":[\"s3:GetObject\",\"logs:FilterLogEvents\"],\"Effect\":\"Allow\",\"Resource\":\"*\",\"Sid\":\"ReadEverything\"},{\"Action\":[\"s3:GetObject\"],\"Effect\":\"Allow\",\"NotResource\":[\"arn:aws:s3:::ev-prod-content-466494951409/*\"],\"Sid\":\"AllButOurs\"}],\"Version\":\"2012-10-17\"}"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.ecs.aws_iam_role_policy.foreign",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "foreign",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "extra",
+          "role": "cinaf-streaming-ecs-task",
+          "policy": "{\"Statement\":[{\"Action\":[\"s3:GetObject\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::ev-prod-content-466494951409/uploads/*\"],\"Sid\":\"ReadUploadedSources\"},{\"Action\":[\"s3:PutObject\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::ev-prod-content-466494951409/videos/paysages/*\",\"arn:aws:s3:::ev-prod-content-466494951409/images/paysages/*\",\"arn:aws:s3:::ev-prod-content-466494951409/audio/sons/*\",\"arn:aws:s3:::ev-prod-content-466494951409/audio/musiques/*\"],\"Sid\":\"WriteProcessedMedia\"}],\"Version\":\"2012-10-17\"}"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.ecs.aws_iam_role_policy_attachment.read_only",
+      "mode": "managed",
+      "type": "aws_iam_role_policy_attachment",
+      "name": "read_only",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "role": "ev-prod-media-task",
+          "policy_arn": "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.aws_iam_policy_attachment.s3",
+      "mode": "managed",
+      "type": "aws_iam_policy_attachment",
+      "name": "s3",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "ev-prod-s3",
+          "policy_arn": "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess",
+          "roles": [
+            "ev-prod-media-task"
+          ]
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.content.aws_s3_bucket_cors_configuration.this[0]",
+      "mode": "managed",
+      "type": "aws_s3_bucket_cors_configuration",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "bucket": "cinaf-streaming-prod-media",
+          "cors_rule": [
+            {
+              "allowed_headers": [
+                "content-type"
+              ],
+              "allowed_methods": [
+                "POST"
+              ],
+              "allowed_origins": [
+                "https://eventide.app",
+                "https://www.eventide.app"
+              ],
+              "expose_headers": [
+                "ETag"
+              ],
+              "id": "dashboard-uploads",
+              "max_age_seconds": 600
+            }
+          ]
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.content.aws_s3_bucket_lifecycle_configuration.this",
+      "mode": "managed",
+      "type": "aws_s3_bucket_lifecycle_configuration",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "bucket": "ce-prod-documents"
+        },
+        "after": {
+          "bucket": "ce-prod-documents"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.ecs.aws_iam_role_policy.unknown",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "unknown",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "later"
+        },
+        "after_unknown": {
+          "policy": true,
+          "role": true
+        }
+      }
+    }
+  ],
+  "prior_state": {
+    "format_version": "1.0",
+    "terraform_version": "1.16.5",
+    "values": {
+      "root_module": {
+        "resources": [
+          {
+            "address": "data.aws_security_group.rds",
+            "mode": "data",
+            "type": "aws_security_group",
+            "name": "rds",
+            "values": {
+              "id": "sg-070b4372d5a95ad2d"
+            }
+          },
+          {
+            "address": "data.aws_lb.shared",
+            "mode": "data",
+            "type": "aws_lb",
+            "name": "shared",
+            "values": {
+              "name": "cinaf-streaming-prod-alb",
+              "security_groups": [
+                "sg-04bbc536ff0295918"
+              ]
+            }
+          },
+          {
+            "address": "data.aws_db_instance.shared",
+            "mode": "data",
+            "type": "aws_db_instance",
+            "name": "shared",
+            "values": {
+              "db_instance_identifier": "cinaf-streaming-prod-postgres",
+              "vpc_security_groups": [
+                "sg-070b4372d5a95ad2d"
+              ]
+            }
+          },
+          {
+            "address": "data.aws_vpc.shared",
+            "mode": "data",
+            "type": "aws_vpc",
+            "name": "shared",
+            "values": {
+              "id": "vpc-0fbfe87b34e2b3903"
+            }
+          }
+        ],
+        "child_modules": [
+          {
+            "address": "module.prod.module.alb[0]",
+            "resources": [
+              {
+                "address": "module.prod.module.alb[0].data.aws_lb.shared",
+                "mode": "data",
+                "type": "aws_lb",
+                "name": "shared",
+                "values": {
+                  "security_groups": [
+                    "sg-04bbc536ff0295918"
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

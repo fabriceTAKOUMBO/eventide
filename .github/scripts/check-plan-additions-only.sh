@@ -29,7 +29,15 @@
 #                              every update, replace, delete, forget or import is LISTED for
 #                              the review. Creates are checked: tag Project = eventide, names
 #                              with our prefixes (ev-, eventide, /ecs/ev-, /eventide/…), metric
-#                              filters on our log groups only, alarm actions = SNS only;
+#                              filters on our log groups only, alarm actions = SNS only.
+#                              Creates AND updates are checked (30 October 2026, dashboard):
+#                              S3 bucket settings (CORS, lifecycle, policy…) on OUR buckets
+#                              only; IAM role policies on OUR roles only, whose Allow statements
+#                              name only Eventide resources for S3, ECS, IAM, Secrets Manager,
+#                              SSM, Lambda, ECR and CloudWatch Logs, use "*" only for
+#                              ecr:GetAuthorizationToken and ecs:RegisterTaskDefinition, and
+#                              never NotAction / NotResource; no AWS managed policy attached
+#                              (they grant on "*", i.e. on the other platforms' resources too);
 #   - anything else          : refused (not in the allowlist).
 # A security group rule whose security group is a SHARED one (read from the data sources of the
 # plan) is a contact point whatever its address.
@@ -45,7 +53,7 @@ for arg in "$@"; do
   case "$arg" in
     --destroy) mode=destroy ;;
     -h | --help)
-      sed -n '2,40p' "$0"
+      sed -n '2,47p' "$0"
       exit 0
       ;;
     -*)
@@ -103,6 +111,7 @@ def forbidden_re:
   + "|aws_vpc_dhcp_options|aws_vpc_dhcp_options_association|aws_flow_log|aws_ec2_traffic_mirror_[a-z0-9_]+|aws_ec2_tag"
   + "|aws_route53_zone|aws_route53_zone_association|aws_route53_vpc_association_authorization|aws_route53_resolver_[a-z0-9_]+"
   + "|aws_service_discovery_private_dns_namespace|aws_iam_openid_connect_provider|aws_iam_saml_provider"
+  + "|aws_iam_policy_attachment"
   + "|aws_cloudwatch_log_subscription_filter|aws_cloudwatch_log_resource_policy|aws_cloudwatch_log_account_policy"
   + "|aws_cloudwatch_event_bus_policy|aws_cloudwatch_event_permission|aws_cloudwatch_event_archive|aws_cloudtrail"
   + "|aws_default_[a-z0-9_]+|aws_guardduty_[a-z0-9_]+|aws_securityhub_[a-z0-9_]+|aws_config_[a-z0-9_]+"
@@ -133,6 +142,48 @@ def name_attrs: {
   aws_appautoscaling_policy: "name", aws_appautoscaling_scheduled_action: "name"
 };
 def own_name_re: "^(ev-|eventide|alias/ev-|alias/eventide|/ecs/ev-|/aws/lambda/ev-|/eventide/)";
+
+# Buckets and roles of Eventide (names).
+def own_bucket_re: "^(ev-|eventide)";
+def own_role_re: "^(ev-|eventide)";
+
+def as_array: if type == "array" then . elif . == null then [] else [.] end;
+
+# ARN of a resource of Eventide, for the services whose ARN carries a name we can check.
+def own_arn:
+  test("^arn:aws[a-z-]*:s3:::(ev-|eventide)")
+  or test("^arn:aws[a-z-]*:ecs:[^:]*:[^:]*:(cluster|service|task|task-definition|task-set|container-instance|capacity-provider)/ev-")
+  or test("^arn:aws[a-z-]*:iam::[^:]*:role/ev-")
+  or test("^arn:aws[a-z-]*:secretsmanager:[^:]*:[^:]*:secret:eventide/")
+  or test("^arn:aws[a-z-]*:ssm:[^:]*:[^:]*:parameter/eventide/")
+  or test("^arn:aws[a-z-]*:lambda:[^:]*:[^:]*:function:ev-")
+  or test("^arn:aws[a-z-]*:ecr:[^:]*:[^:]*:repository/ev-")
+  or test("^arn:aws[a-z-]*:logs:[^:]*:[^:]*:log-group:(/ecs/ev-|/aws/lambda/ev-)");
+def named_arn: test("^arn:aws[a-z-]*:(s3|ecs|iam|secretsmanager|ssm|lambda|ecr|logs):");
+# The only actions of our policies on "*" (no resource-level restriction exists or is verified).
+def star_actions: ["ecr:GetAuthorizationToken", "ecs:RegisterTaskDefinition"];
+
+# Findings (messages) of an IAM policy document of ours, given as the JSON string of the plan.
+# An unknown policy (computed at apply) is not checked here: the review of the plan remains.
+def policy_findings:
+  (try fromjson catch null) as $doc
+  | if ($doc | type) != "object" then []
+    else [
+      ($doc.Statement | as_array)[] as $st
+      | select((($st.Effect // "Allow") == "Allow"))
+      | if ($st | has("NotAction")) or ($st | has("NotResource")) then
+          "instruction Allow avec NotAction ou NotResource (\($st.Sid // "sans Sid")) : interdite"
+        else
+          ($st.Action | as_array) as $actions
+          | ($st.Resource | as_array)[] as $r
+          | if $r == "*" then
+              ([$actions[] | select(IN(star_actions[]) | not)]) as $bad
+              | if ($bad | length) > 0 then "droit sur « * » (\($st.Sid // "sans Sid")) : \($bad | join(", ")) ; seuls \(star_actions | join(" et ")) le peuvent" else empty end
+            elif ($r | type) == "string" and ($r | named_arn) and (($r | own_arn) | not) then
+              "ressource « \($r) » qui n'\''est pas à Eventide (\($st.Sid // "sans Sid"))"
+            else empty end
+        end
+    ] end;
 
 def err($a; $msg): {level: "ERROR", address: $a, msg: $msg};
 def review($a; $msg): {level: "REVIEW", address: $a, msg: $msg};
@@ -236,7 +287,24 @@ def contact($a; $msg): {level: "CONTACT", address: $a, msg: $msg};
                 | map(select(type == "string" and (startswith("arn:aws:sns:") | not)))
                 | if length > 0 then err($a; "action d'\''alarme autre qu'\''une publication SNS : \(join(", "))") else empty end
               else empty end )
-          else empty end )
+          else empty end ),
+        # Creates and updates (replace included): settings of a bucket and IAM policies must
+        # concern Eventide only, whatever their address.
+        ( if ($is_noop or $is_delete) then empty
+          else
+            ( if ($rc.type | test("^aws_s3_(bucket_[a-z_]+|object|object_copy)$")) and (($after.bucket // null) | type) == "string"
+                and (($after.bucket | test(own_bucket_re)) | not)
+              then err($a; "réglage S3 (\($rc.type)) sur le bucket « \($after.bucket) » qui n'\''est pas à Eventide") else empty end ),
+            ( if ($rc.type | test("^aws_iam_role_policy(_attachment)?$")) and (($after.role // null) | type) == "string"
+                and (($after.role | test(own_role_re)) | not)
+              then err($a; "droits IAM posés sur le rôle « \($after.role) » qui n'\''est pas à Eventide") else empty end ),
+            ( if $rc.type == "aws_iam_role_policy_attachment" and (($after.policy_arn // null) | type) == "string"
+                and (($after.policy_arn | test(":iam::aws:policy/")) or (($after.policy_arn | test(":policy/(ev-|eventide)")) | not))
+              then err($a; "politique « \($after.policy_arn) » attachée : seules nos politiques (les politiques gérées par AWS portent sur « * », donc sur les autres plateformes)") else empty end ),
+            ( if ($rc.type | test("^aws_iam_(role_policy|policy)$")) and (($after.policy // null) | type) == "string"
+              then ($after.policy | policy_findings)[] | err($a; .)
+              else empty end )
+          end )
 
       else
         err($a; "ressource hors de la liste d'\''Eventide (\($rc.type), \($label)) : rien d'\''autre que nos ressources ne doit figurer dans le plan")

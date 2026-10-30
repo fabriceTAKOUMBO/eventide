@@ -27,7 +27,7 @@ Prix d'une tâche `api` : 0,25 × 0,03238 + 0,5 × 0,00356 = **0,009875 USD/h**,
 |---|---|---|---|---|---|
 | Fargate ARM — `api` | Phase 1 : pas de service ; lancement : 1 tâche (+ quelques heures à 2 tâches) ; plafond : 2 tâches en permanence | 0,03238 /vCPU-h, 0,00356 /Go-h [FG-USE1] | 0 | 7,5 | 14,4 |
 | Tâches planifiées et ponctuelles (Spot) | ≈ 13 h de tâche par mois (24 exécutions par jour d'environ 1 minute, plus purge et sauvegarde), migrations | Spot ≈ -65 % (non vérifié) [CE-COUTS] | < 0,1 | < 0,1 | 0,2 |
-| Secrets Manager | 6 secrets : `django-secret-key`, `db-app`, `db-migrator`, `db-backup`, `google-play-service-account`, `cloudfront-private-key` (le secret temporaire d'amorçage vit quelques minutes) | 0,40 /secret [CE-COUTS] | 2,4 | 2,4 | 2,4 |
+| Secrets Manager | 7 secrets : `django-secret-key`, `db-app`, `db-migrator`, `db-backup`, `google-play-service-account`, `cloudfront-private-key`, `admin-emails` (tableau de bord, § 4 bis) (le secret temporaire d'amorçage vit quelques minutes) | 0,40 /secret [CE-COUTS] | 2,8 | 2,8 | 2,8 |
 | KMS | `alias/ev-prod` + `alias/eventide-tfstate`, requêtes | 1 /clé [CE-COUTS] | 2,0 | 2,1 | 2,2 |
 | CloudWatch — alarmes | Phase 1 : 16 (4 événements applicatifs, 2 volumes de journaux, sauvegarde manquante, 4 contenu, 5 sur la charge de l'instance partagée : CPU, connexions, mémoire, disque, crédits) ; phase 2 : 21 (+ 5xx, latence p95, cibles en échec, CPU et mémoire du service) ; la franchise de 10 alarmes du compte est supposée consommée par les autres produits | 0,10 /alarme [CE-COUTS] | 1,6 | 2,1 | 2,1 |
 | CloudWatch — métriques issues des journaux | 5 métriques (4 événements applicatifs, sauvegarde envoyée) | 0,30 /métrique [CE-COUTS] | 1,5 | 1,5 | 1,5 |
@@ -39,7 +39,7 @@ Prix d'une tâche `api` : 0,25 × 0,03238 + 0,5 × 0,00356 = **0,009875 USD/h**,
 | Route 53 | Notre zone (créée à l'achat du domaine) ; requêtes vers les alias | 0,50 /zone [CE-COUTS] | 0 | 0,5 | 0,6 |
 | Budgets, détection d'anomalies, EventBridge Scheduler, ACM, OAC et adresses signées CloudFront | — | gratuits [CE-COUTS], [DOSSIER] | 0 | 0 | 0 |
 | Registraire des définitions de tâche (Lambda `ev-prod-task-registrar`, ARM64, 128 Mo) | Quelques appels par déploiement, hors VPC (aucun trafic par la NAT) | ≈ 0 (non vérifié) | 0 | 0 | 0 |
-| **Total AWS hors contenu diffusé** | Fourchette basse de la NAT (point de terminaison S3 présent) ; jusqu'à ≈ +4 USD sinon, payés par CINAF | | **≈ 8,0** | **≈ 17,9** | **≈ 29,1** |
+| **Total AWS hors contenu diffusé** | Fourchette basse de la NAT (point de terminaison S3 présent) ; jusqu'à ≈ +4 USD sinon, payés par CINAF (plus le tableau de bord, § 4 bis) | | **≈ 8,4** | **≈ 18,3** | **≈ 29,5** |
 
 « Plafond » est aussi le **plafond de dépense fixe** en cas d'attaque ou de boucle : l'autoscaling ne dépasse pas 2 tâches (le plan Terraform échoue si le budget de connexions pouvait être dépassé). Le poste variable (contenu) reste borné par les garde-fous du § 4.
 
@@ -52,7 +52,7 @@ Prix d'une tâche `api` : 0,25 × 0,03238 + 0,5 × 0,00356 = **0,009875 USD/h**,
 | Poste | Hypothèse | USD / mois |
 |---|---|---|
 | Fargate Spot ARM | 1 tâche `api` (0,25 vCPU, 0,5 Go), 8 h-20 h les jours ouvrés (≈ 260 h/mois), Spot ≈ -65 % (non vérifié) | ≈ 1 |
-| Secrets Manager, KMS | 6 secrets, 1 clé | 3,4 |
+| Secrets Manager, KMS | 7 secrets (dont `admin-emails`), 1 clé | 3,8 |
 | CloudWatch (alarmes, métriques, journaux 14 jours) | 11 à 16 alarmes, 5 métriques | ≈ 2,5 à 3 |
 | ECR, S3, CloudFront (contenu de test), divers | | ≈ 0,5 |
 | **Total préproduction** | | **≈ 8** |
@@ -76,6 +76,21 @@ Hypothèses du dossier d'analyse : boucle de 3 minutes en Opus à 96 kbit/s ≈ 
 - **Formule CloudFront à prix fixe** [DOSSIER] : Pro à 15 USD/mois (10 millions de requêtes, 50 To, sans facture de dépassement) ; moins chère que le paiement à l'usage au-delà de ≈ 180 Go par mois sans franchise (≈ 12 000 sessions à froid). À étudier avant d'atteindre ce volume (rattachement à notre seule distribution à vérifier ; non prévu dans Terraform).
 - **Garde-fous** : budget `ev-prod-content-mensuel` (30 USD) ; alarmes `ev-prod-content-requests-day` (> 200 000 requêtes par jour) et `ev-prod-content-bytes-day` (> 30 Go par jour), `-5xx`, `-4xx`. Les adresses signées expirent après 1 heure et l'API limite les demandes d'adresses (120 par heure et par installation).
 - **Stockage S3** : < 0,2 Go pour le catalogue actuel (12 paysages, 10 sons, 8 musiques) : < 0,01 USD/mois.
+
+### 4 bis. Tableau de bord et traitement des médias (30 octobre 2026)
+
+Hypothèse : 20 fichiers envoyés par mois (300 Mo au plus), une tâche `ev-prod-media` de 1 vCPU / 2 Go pendant 5 à 15 minutes chacune ([ADR § 12.4](../infra/hebergement-mutualise.md#124-ressources-partagées--analyse-chiffrée), estimations non mesurées).
+
+| Poste | Hypothèse | USD / mois |
+|---|---|---|
+| Fargate ARM à la demande (tâche `media`) | 0,03238 + 2 × 0,00356 ≈ 0,04 USD/h [FG-USE1], ≤ 5 h | ≈ 0,2 |
+| Secrets Manager | +1 secret (`admin-emails`) par environnement : 7 secrets en production | +0,4 |
+| S3 (sources dans `uploads/`, effacées après 7 jours ; fichiers traités) | ≈ 1,6 Go-mois en moyenne ; l'envoi vers S3 est gratuit | < 0,05 |
+| **NAT de CINAF** : trafic de la tâche `media` | Source, fichiers traités et image : ≤ 10 Go à 0,045 USD/Go [CE-COUTS] | ≤ 0,45 (payé par CINAF) |
+| **NAT de CINAF** : image plus lourde de ffmpeg pour **toutes** les tâches | ≈ 770 téléchargements de l'image par mois ; +0,1 Go chacun avec le paquet Debian (≈ +0,03 Go avec un ffmpeg réduit) | ≈ +3,5 (≈ +1) (payé par CINAF) |
+| ALB de CINAF | Pages du tableau de bord seulement ; les fichiers passent directement du navigateur à S3 | < 0,01 |
+
+Soit ≈ 0,6 USD/mois sur nos budgets et ≈ 1,5 à 4 USD/mois sur la NAT de CINAF, à leur signaler (règle 5).
 
 ## 5. Services Google (hors AWS)
 

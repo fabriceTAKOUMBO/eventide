@@ -47,7 +47,8 @@ github_subject_repository = "fabriceTAKOUMBO@75751595/eventide@0000000000" # pla
 # Application (valeurs publiques).
 play_package_name          = ""   # ex. "app.eventide" (Play Console)
 android_cert_fingerprints  = []   # ["AB:CD:…"] empreinte SHA-256 de Play App Signing
-google_oauth_client_ids    = []   # ["<id>.apps.googleusercontent.com"]
+google_oauth_client_ids    = []   # ["<id>.apps.googleusercontent.com"] (y mettre aussi google_web_client_id)
+google_web_client_id       = ""   # client OAuth « Application Web » du tableau de bord (runbook tableau-de-bord.md)
 rtdn_service_account_email = ""   # compte de service de l'abonnement Pub/Sub push
 legal_publisher_name       = ""
 legal_contact_email        = ""

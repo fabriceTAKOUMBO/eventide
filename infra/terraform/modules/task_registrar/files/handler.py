@@ -11,9 +11,12 @@ variables included) nor ecs:RegisterTaskDefinition (whose restriction to a famil
 verified): it can neither read nor write a task definition outside Eventide. This function only
 accepts a family key of its own configuration and a commit SHA.
 
-Event:  {"family": "api" | "migrate" | "jobs", "image_tag": "<40 lowercase hex characters>"}
+Event:  {"family": "api" | "migrate" | "jobs" | "media", "image_tag": "<40 lowercase hex characters>"}
 Result: {"taskDefinitionArn": "...", "family": "ev-<env>-<key>", "revision": <int>}
 Any refusal raises RegistrationRefused (FunctionError for the caller); nothing is registered.
+The family keys are a closed list (FAMILY_KEYS, also checked by Terraform), and every IAM role a
+template names (execution role, task role of api and media) must be one of ours
+(role/ev-<env>-...).
 """
 
 from __future__ import annotations
@@ -26,7 +29,12 @@ from typing import Any
 
 IMAGE_TAG = re.compile(r"[0-9a-f]{40}")
 OWN_PREFIX = re.compile(r"ev-[a-z0-9]+-")
+OWN_ROLE = re.compile(r"arn:aws:iam::[0-9]{12}:role/(ev-[a-z0-9]+-)[a-z0-9-]+")
 EVENT_FIELDS = {"family", "image_tag"}
+# Families of Eventide (ev-<env>-<key>): api service, migrations, scheduled jobs, media
+# processing started by the API (dashboard). Closed list, whatever the packaged configuration says.
+FAMILY_KEYS = frozenset({"api", "migrate", "jobs", "media"})
+ROLE_FIELDS = ("executionRoleArn", "taskRoleArn")
 
 
 class RegistrationRefused(Exception):
@@ -44,8 +52,9 @@ def build_request(event: Any, config: dict[str, Any]) -> dict[str, Any]:
         raise RegistrationRefused("event attendu : {family, image_tag}, rien d'autre")
     key, tag = event["family"], event["image_tag"]
     templates = config["templates"]
-    if not isinstance(key, str) or key not in templates:
-        raise RegistrationRefused(f"famille inconnue (attendu : {', '.join(sorted(templates))})")
+    if not isinstance(key, str) or key not in FAMILY_KEYS or key not in templates:
+        known = sorted(FAMILY_KEYS.intersection(templates))
+        raise RegistrationRefused(f"famille inconnue (attendu : {', '.join(known)})")
     if not isinstance(tag, str) or not IMAGE_TAG.fullmatch(tag):
         raise RegistrationRefused("image_tag : SHA de commit complet (40 caracteres hexadecimaux)")
 
@@ -53,6 +62,14 @@ def build_request(event: Any, config: dict[str, Any]) -> dict[str, Any]:
     request = copy.deepcopy(templates[key])
     if not OWN_PREFIX.fullmatch(prefix) or request.get("family") != f"{prefix}{key}":
         raise RegistrationRefused("modele hors des familles d'Eventide")
+    for field in ROLE_FIELDS:
+        if field not in request:
+            continue
+        role = OWN_ROLE.fullmatch(str(request[field]))
+        if role is None or role.group(1) != prefix:
+            raise RegistrationRefused(f"{field} : role hors d'Eventide dans le modele")
+    if "executionRoleArn" not in request:
+        raise RegistrationRefused("executionRoleArn absent du modele")
 
     repository = config["image_repository"]
     replaced = 0

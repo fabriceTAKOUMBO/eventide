@@ -5,7 +5,9 @@
 # Vérifie : le plan passe sans domaine et avec domaine ; les gardes de l'infrastructure partagée
 # (X-Forwarded-For, version PostgreSQL) font échouer le plan quand elles sont fausses.
 # Also: our listener rules (priorities and host names), the refusal of another platform's
-# domain or of a zone not marked Project = eventide, the RDS load alarms (prod only).
+# domain or of a zone not marked Project = eventide, the RDS load alarms (prod only), and the
+# dashboard (ADR § 12): media task counted in both budgets, CORS origins = our web hosts only,
+# ADMIN_EMAILS secret to fill, web OAuth client accepted as an audience.
 
 # Toutes les configurations du fournisseur AWS sont simulées (défaut ET alias preprod) : sans
 # cela, la configuration non simulée tenterait un vrai appel STS.
@@ -44,20 +46,20 @@ run "without_domain_no_public_entry" {
     error_message = "Sans domaine, l'ALB partagé ne doit pas être utilisé."
   }
   assert {
-    condition     = output.prod.db_connection_limits.total == 14 && output.prod.db_connection_limits.app == 10
-    error_message = "Budget de connexions attendu : 10 + 2 + 2 = 14."
+    condition     = output.prod.db_connection_limits.total == 14 && output.prod.db_connection_limits.app == 11 && output.prod.db_connection_limits.backup == 1
+    error_message = "Budget de connexions attendu : 11 + 2 + 1 = 14 (total inchangé avec la tâche media)."
   }
   assert {
-    condition     = output.prod.db_connection_limits.app_max <= 10
-    error_message = "L'autoscaling ne doit pas dépasser la limite de ev_app."
+    condition     = output.prod.db_connection_limits.app_max == 11 && output.prod.db_connection_limits.media == 1
+    error_message = "L'autoscaling, les tâches planifiées et la tâche media ne doivent pas dépasser la limite de ev_app (8 + 2 + 1 = 11)."
   }
   assert {
     condition     = output.preprod == null
     error_message = "La préproduction est désactivée par défaut."
   }
   assert {
-    condition     = output.prod.secrets_to_fill == ["eventide/prod/google-play-service-account"]
-    error_message = "Secrets sous eventide/prod/*."
+    condition     = jsonencode(output.prod.secrets_to_fill) == jsonencode(["eventide/prod/admin-emails", "eventide/prod/google-play-service-account"])
+    error_message = "Secrets à remplir sous eventide/prod/* (dont ADMIN_EMAILS du tableau de bord)."
   }
   assert {
     condition     = length(output.prod.contact_points.listener_rules) == 0 && !output.prod.contact_points.listener_certificate
@@ -72,8 +74,28 @@ run "without_domain_no_public_entry" {
     error_message = "Alarmes de charge de l'instance partagée (métriques seulement) : CPU, connexions, mémoire, disque, crédits."
   }
   assert {
-    condition     = output.prod.shared_capacity.peak_fargate_vcpu <= output.prod.shared_capacity.fargate_vcpu_budget
-    error_message = "Part du quota Fargate commun au compte."
+    condition     = output.prod.shared_capacity.peak_fargate_vcpu == 2.75 && output.prod.shared_capacity.fargate_vcpu_budget == 3
+    error_message = "Part du quota Fargate commun au compte : 1,75 + 1 (tâche media) = 2,75 vCPU, budget 3."
+  }
+  assert {
+    # CONTENT_BUCKET and CONTENT_BUCKET_REGION come from data sources deferred to apply here
+    # (module depends_on): checked by modules/shared_platform/tests/dashboard.tftest.hcl.
+    condition = (
+      output.prod.dashboard.environment.MEDIA_STORAGE == "s3" &&
+      output.prod.dashboard.environment.MEDIA_TASK_CLUSTER == "ev-prod" &&
+      output.prod.dashboard.environment.MEDIA_TASK_DEFINITION == "ev-prod-media" &&
+      output.prod.dashboard.environment.MEDIA_TASK_CONTAINER == "media" &&
+      output.prod.dashboard.environment.MEDIA_TASK_SUBNETS == "subnet-03bb1c6197c29a369,subnet-0fcd9f10a65ed1a16"
+    )
+    error_message = "Intégration du tableau de bord : notre bucket, notre cluster, la famille ev-prod-media, nos sous-réseaux."
+  }
+  assert {
+    condition     = output.prod.ecs_task_families.media == "ev-prod-media"
+    error_message = "Famille media créée (enregistrée ensuite par le déploiement)."
+  }
+  assert {
+    condition     = length(output.prod.content.uploads.cors_allowed_origins) == 0
+    error_message = "Sans domaine : aucune règle CORS sur le bucket de contenu."
   }
   assert {
     condition     = output.prod.task_registrar_function == "ev-prod-task-registrar"
@@ -115,6 +137,14 @@ run "with_domain_public_entry" {
     condition     = output.prod.contact_points.listener_certificate
     error_message = "Notre certificat ajouté à l'écouteur (SNI)."
   }
+  assert {
+    condition     = jsonencode(output.prod.content.uploads.cors_allowed_origins) == jsonencode(["https://eventide.example", "https://www.eventide.example"])
+    error_message = "Envoi direct vers le bucket : POST depuis https://<domaine> et https://www.<domaine> seulement."
+  }
+  assert {
+    condition     = length(output.prod.contact_points.listener_rules) == 2
+    error_message = "Tableau de bord sur les hôtes web existants : aucune règle d'écouteur de plus (400 et 401 seulement)."
+  }
 }
 
 run "with_preprod" {
@@ -146,6 +176,33 @@ run "with_preprod" {
     condition     = length(output.preprod.contact_points.rds_metric_alarms) == 0
     error_message = "Une seule série d'alarmes sur l'instance partagée (production)."
   }
+  assert {
+    condition     = jsonencode(output.preprod.content.uploads.cors_allowed_origins) == jsonencode(["https://preprod.eventide.example"])
+    error_message = "CORS de préproduction : son seul hôte web."
+  }
+  assert {
+    condition     = output.preprod.shared_capacity.peak_fargate_vcpu == 2.25 && output.preprod.shared_capacity.fargate_vcpu_budget == 2.5
+    error_message = "Préproduction : 1,25 + 1 (tâche media) = 2,25 vCPU, budget 2,5."
+  }
+  assert {
+    condition     = output.preprod.dashboard.environment.MEDIA_TASK_DEFINITION == "ev-preprod-media" && output.preprod.dashboard.environment.MEDIA_TASK_CLUSTER == "ev-preprod"
+    error_message = "La préproduction lance SA famille media dans SON cluster."
+  }
+  assert {
+    condition     = output.preprod.db_connection_limits.app_max <= output.preprod.db_connection_limits.app
+    error_message = "Préproduction : 2 + 1 + 1 (tâche media) dans la limite de ev_preprod_app."
+  }
+}
+
+run "web_client_must_be_an_accepted_audience" {
+  command = plan
+
+  variables {
+    google_web_client_id    = "123456789012-abcdefghijklmnop.apps.googleusercontent.com"
+    google_oauth_client_ids = ["999999999999-androidclient.apps.googleusercontent.com"]
+  }
+
+  expect_failures = [var.google_web_client_id]
 }
 
 run "domain_of_another_platform_is_refused" {

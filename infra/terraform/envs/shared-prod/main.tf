@@ -246,19 +246,30 @@ module "prod" {
     web = var.listener_priority_base + 1
   }
 
-  # Base et rôles propres sur l'instance partagée ; budget de connexions (décision du PO).
+  # Base et rôles propres sur l'instance partagée ; budget de connexions : 14 (décision du PO).
+  # Répartition proposée le 30 octobre 2026 pour la tâche media du tableau de bord (ADR § 12,
+  # À CONFIRMER par le product owner) : ev_app 10 -> 11, ev_backup 2 -> 1 (pg_dump n'ouvre
+  # qu'une connexion), total inchangé (14) : aucune connexion de plus sur l'instance de CINAF.
   db_name                   = "eventide"
   db_roles                  = { app = "ev_app", migrator = "ev_migrator", backup = "ev_backup" }
-  db_role_connection_limits = { app = 10, migrator = 2, backup = 2 }
+  db_role_connection_limits = { app = 11, migrator = 2, backup = 1 }
   db_connection_budget      = 14
   app_connection_reserve    = 2
 
   # Graviton (ARM64), à la demande, 1 à 2 tâches. Connexions : 2 tâches x 1 worker x pool 2,
-  # doublées pendant un déploiement (200 %), + 2 pour les tâches planifiées = 10 = limite ev_app.
+  # doublées pendant un déploiement (200 %), + 2 pour les tâches planifiées + 1 pour la tâche
+  # media = 11 = limite ev_app.
   cpu_architecture           = "ARM64"
   use_fargate_spot           = false
   deployment_maximum_percent = 200
   api                        = { cpu = 256, memory = 512, min = 1, max = 2, workers = 1, threads = 8, db_pool_max = 2, requests = 600 }
+
+  # Tâche media (tableau de bord) : 1 vCPU / 2 Go, une à la fois. Pic de vCPU Fargate : 1,75 +
+  # 1 = 2,75 ; budget relevé de 2 à 3 vCPU (quota commun au compte : ADR § 12, À CONFIRMER par
+  # le product owner après lecture du quota, runbook § 4).
+  media_task             = { cpu = 1024, memory = 2048 }
+  media_task_concurrency = 1
+  fargate_vcpu_budget    = 3
 
   force_destroy               = false
   log_retention_days          = 30
@@ -270,6 +281,7 @@ module "prod" {
   play_package_name          = var.play_package_name
   android_cert_fingerprints  = var.android_cert_fingerprints
   google_oauth_client_ids    = var.google_oauth_client_ids
+  google_web_client_id       = var.google_web_client_id
   rtdn_service_account_email = var.rtdn_service_account_email
   legal_publisher_name       = var.legal_publisher_name
   legal_contact_email        = var.legal_contact_email
@@ -323,11 +335,17 @@ module "preprod" {
   app_connection_reserve    = 1
 
   # Fargate Spot, une tâche les jours ouvrés de 8 h à 20 h (heure de Bruxelles), zéro sinon.
+  # Connexions : 1 x 1 x 1 x 2 + 1 + 1 (media) = 4 = limite ev_preprod_app.
   cpu_architecture           = "ARM64"
   use_fargate_spot           = true
   deployment_maximum_percent = 200
   api                        = { cpu = 256, memory = 512, min = 0, max = 1, workers = 1, threads = 4, db_pool_max = 1, requests = 600 }
   scheduled_stop             = { enabled = true }
+
+  # Tâche media comme en production. Pic : 1,25 + 1 = 2,25 vCPU ; budget 2,5 (À CONFIRMER).
+  media_task             = { cpu = 1024, memory = 2048 }
+  media_task_concurrency = 1
+  fargate_vcpu_budget    = 2.5
 
   force_destroy               = true
   log_retention_days          = 14
@@ -339,6 +357,7 @@ module "preprod" {
   play_package_name          = var.play_package_name
   android_cert_fingerprints  = var.android_cert_fingerprints
   google_oauth_client_ids    = var.google_oauth_client_ids
+  google_web_client_id       = var.google_web_client_id
   rtdn_service_account_email = var.rtdn_service_account_email
   legal_publisher_name       = var.legal_publisher_name
   legal_contact_email        = var.legal_contact_email

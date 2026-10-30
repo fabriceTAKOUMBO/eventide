@@ -116,13 +116,13 @@ variable "db_roles" {
 }
 
 variable "db_role_connection_limits" {
-  description = "CONNECTION LIMIT par rôle (décision du product owner : 10, 2, 2)."
+  description = "CONNECTION LIMIT par rôle. Décision du product owner du 28 octobre 2026 : 10, 2, 2 (base 14) ; proposé le 30 octobre 2026 avec la tâche media : 11, 2, 1, même total 14 (ADR § 12, à confirmer)."
   type = object({
     app      = number
     migrator = number
     backup   = number
   })
-  default = { app = 10, migrator = 2, backup = 2 }
+  default = { app = 11, migrator = 2, backup = 1 }
 }
 
 variable "db_connection_budget" {
@@ -135,6 +135,26 @@ variable "app_connection_reserve" {
   description = "Connexions du rôle applicatif réservées aux tâches planifiées (purge, finalisation des achats)."
   type        = number
   default     = 2
+}
+
+variable "media_task_concurrency" {
+  description = "Tâches media (tableau de bord) qui peuvent tourner en même temps : comptées dans le budget de connexions (1 connexion du rôle applicatif chacune) et dans le budget de vCPU. L'API doit lancer au plus ce nombre de traitements à la fois (count = 1, pas de nouveau traitement tant qu'un autre est en cours)."
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.media_task_concurrency >= 1 && var.media_task_concurrency <= 2 && floor(var.media_task_concurrency) == var.media_task_concurrency
+    error_message = "media_task_concurrency : 1 ou 2."
+  }
+}
+
+variable "media_task" {
+  description = "Taille de la tâche media (unités CPU, Mo) : 1 vCPU / 2 Go au plus (quota Fargate commun au compte), comptée dans fargate_vcpu_budget."
+  type = object({
+    cpu    = number
+    memory = number
+  })
+  default = { cpu = 1024, memory = 2048 }
 }
 
 # --- Dimensionnement ---
@@ -166,7 +186,7 @@ variable "api" {
 }
 
 variable "fargate_vcpu_budget" {
-  description = "Pic de vCPU Fargate permis à l'environnement (quota commun à tout le compte partagé) : tâches api pendant un déploiement + 3 tâches ponctuelles."
+  description = "Pic de vCPU Fargate permis à l'environnement (quota commun à tout le compte partagé) : tâches api pendant un déploiement + 3 tâches ponctuelles + tâches media. Valeur par défaut volontairement basse : chaque environnement fixe la sienne après accord du product owner (envs/shared-prod)."
   type        = number
   default     = 2
 }
@@ -240,6 +260,21 @@ variable "google_oauth_client_ids" {
   default     = []
 }
 
+variable "google_web_client_id" {
+  description = "Client OAuth Google « Application Web » du bouton « Se connecter avec Google » du tableau de bord (GOOGLE_WEB_CLIENT_ID, public). Vide = non configuré. Doit aussi figurer dans google_oauth_client_ids (audience vérifiée par l'API)."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.google_web_client_id == "" || can(regex("^[0-9]+-[a-z0-9]+\\.apps\\.googleusercontent\\.com$", var.google_web_client_id))
+    error_message = "google_web_client_id : identifiant de client OAuth Google (<numéro>-<code>.apps.googleusercontent.com)."
+  }
+  validation {
+    condition     = var.google_web_client_id == "" || contains(var.google_oauth_client_ids, var.google_web_client_id)
+    error_message = "google_web_client_id doit aussi figurer dans google_oauth_client_ids : l'API vérifie l'audience du jeton de connexion du tableau de bord avec cette liste."
+  }
+}
+
 variable "rtdn_audience" {
   description = "Audience du jeton OIDC de l'abonnement Pub/Sub push des RTDN (vide = https://api.<suffixe>/v1/play/rtdn)."
   type        = string
@@ -265,7 +300,7 @@ variable "legal_contact_email" {
 }
 
 variable "api_extra_environment" {
-  description = "Variables non secrètes supplémentaires de l'API (remplacent les valeurs du module)."
+  description = "Variables non secrètes supplémentaires de l'API (remplacent les valeurs du module, sauf celles de l'intégration du tableau de bord : CONTENT_BUCKET, MEDIA_TASK_*…)."
   type        = map(string)
   default     = {}
 }
