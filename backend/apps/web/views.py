@@ -18,7 +18,8 @@ from django.shortcuts import render
 from django.views.decorators.cache import cache_control
 from django.views.decorators.http import require_GET
 
-from apps.core.catalog import DEFAULT_LANDSCAPE, SCENE_SECTIONS, get_catalog
+from apps.core.catalog import DEFAULT_LANDSCAPE, SCENE_SECTIONS
+from apps.publishing.catalog import current_catalog
 from apps.shares.models import Share
 from apps.shares.views import CODE_RE
 
@@ -44,9 +45,10 @@ def _common() -> dict[str, Any]:
 
 
 def describe_scene(scene: dict) -> dict:
-    """The mix of a stored share, as the app opens it (contract § 12): a retired landscape is
-    shown as the default free landscape, and only the decor that applies to it is listed."""
-    catalog = get_catalog()
+    """The mix of a stored share, as the app opens it (contract § 12-13): a retired landscape
+    (2D, or withdrawn from the published catalog) is shown as the default free landscape, a
+    withdrawn sound or music is left out, and only the decor that applies is listed."""
+    catalog = current_catalog()
     paysage = catalog.landscape_or_default(scene.get("paysage")) or DEFAULT_LANDSCAPE
     decors = catalog.decors_of(paysage)
     layers = []
@@ -89,7 +91,7 @@ def share_page(request: HttpRequest, code: str) -> HttpResponse:
 
 
 def _names() -> dict:
-    catalog = get_catalog()
+    catalog = current_catalog()
     return {
         section: {
             i: {"nom": catalog.name(section, i), "gratuit": catalog.is_free(section, i)}

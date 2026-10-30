@@ -1,0 +1,5 @@
+<nav class="pagination" aria-label="Pages">
+  {% if pagination.previous %}<a class="bouton secondaire" href="{{ base }}?page={{ pagination.previous }}">Précédente</a>{% endif %}
+  <span>Page {{ pagination.page }} sur {{ pagination.pages }}</span>
+  {% if pagination.next %}<a class="bouton secondaire" href="{{ base }}?page={{ pagination.next }}">Suivante</a>{% endif %}
+</nav>

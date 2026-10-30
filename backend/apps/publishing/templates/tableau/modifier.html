@@ -1,0 +1,28 @@
+{% extends "tableau/base.html" %}
+{% block title %}Modifier {{ item.nom }}{% endblock %}
+{% block content %}
+<p class="fil"><a href="/tableau/">Catalogue</a> › <a href="/tableau/elements/{{ item.pk }}">{{ item.nom }}</a></p>
+<h1>Modifier</h1>
+{% if item.en_catalogue %}<p class="note">Cet élément est en ligne : l'application reçoit les changements à sa prochaine mise à jour du catalogue.</p>{% endif %}
+<form method="post" action="/tableau/elements/{{ item.pk }}/modifier" class="formulaire" novalidate>
+  {% csrf_token %}
+  <label for="{{ form.nom.id_for_label }}">Nom</label>
+  <input type="text" name="nom" id="{{ form.nom.id_for_label }}" value="{{ form.nom.value|default_if_none:'' }}" maxlength="40">
+  {% for e in form.nom.errors %}<p class="erreur-champ">{{ e }}</p>{% endfor %}
+
+  <fieldset>
+    <legend>Accès</legend>
+    {% for choice in form.gratuit %}<label class="choix">{{ choice.tag }} {{ choice.choice_label }}</label>{% endfor %}
+  </fieldset>
+
+  <label for="{{ form.alias.id_for_label }}">Alias</label>
+  <input type="text" name="alias" id="{{ form.alias.id_for_label }}" value="{{ form.alias.value|default_if_none:'' }}" maxlength="600" aria-describedby="aide-alias">
+  <p class="aide" id="aide-alias">Séparés par des virgules, 10 au plus.</p>
+  {% for e in form.alias.errors %}<p class="erreur-champ">{{ e }}</p>{% endfor %}
+
+  <p class="actions">
+    <button type="submit" class="bouton">Enregistrer</button>
+    <a class="bouton secondaire" href="/tableau/elements/{{ item.pk }}">Annuler</a>
+  </p>
+</form>
+{% endblock %}

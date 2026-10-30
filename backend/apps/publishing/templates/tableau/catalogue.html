@@ -1,0 +1,30 @@
+{% extends "tableau/base.html" %}
+{% block title %}Catalogue{% endblock %}
+{% block content %}
+<div class="titre-ligne">
+  <h1>Catalogue</h1>
+  <a class="bouton" href="/tableau/elements/nouveau">Nouveau</a>
+</div>
+<p class="note">Révision du catalogue publié : <strong>{{ revision }}</strong>. Catalogue de base, embarqué dans l'application : {{ base.filmes }} paysages filmés, {{ base.scenes }} scènes 3D, {{ base.sons }} sons, {{ base.musiques }} musiques.</p>
+
+{% if elements %}
+<table class="liste">
+  <thead>
+    <tr><th>Élément</th><th>Type</th><th>État</th><th>En ligne</th><th>Accès</th></tr>
+  </thead>
+  <tbody>
+    {% for item in elements %}
+    <tr>
+      <td data-label="Élément"><a href="/tableau/elements/{{ item.pk }}">{{ item.nom }}</a><br><code>{{ item.item_id }}</code></td>
+      <td data-label="Type">{{ item.get_kind_display }}</td>
+      <td data-label="État"><span class="etat etat-{{ item.state }}">{{ item.get_state_display }}</span></td>
+      <td data-label="En ligne">{% if item.en_catalogue %}oui (fichiers v{{ item.media_rev }}){% else %}non{% endif %}</td>
+      <td data-label="Accès">{% if item.gratuit %}Gratuit{% else %}Premium{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>Aucun élément publié depuis le tableau de bord pour l'instant.</p>
+{% endif %}
+{% endblock %}

@@ -79,6 +79,12 @@ jobs:
       - name: Install dependencies (locked)
         run: uv sync --frozen
 
+      - name: Install ffmpeg (tests of the media processing, contract § 14)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends ffmpeg
+          ffmpeg -hide_banner -version | head -n 1
+
       - name: Ruff (lint)
         run: uv run --frozen ruff check --output-format=github .
 

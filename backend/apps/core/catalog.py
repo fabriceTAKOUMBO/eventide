@@ -1,12 +1,15 @@
 """The closed catalog (``backend/eventide/catalog.json``, copy of ``app/assets/catalog.json``).
 
 A single source of truth shared with the Flutter app: a test fails if the two files differ.
+``get_catalog()`` is that base catalog; the catalog the API validates against is the published
+catalog (base + elements published from the dashboard, contract § 13), built with
+``build_catalog()`` by ``apps.publishing.catalog``.
 """
 
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
 from typing import Any
@@ -46,6 +49,9 @@ class Catalog:
     limits: dict[str, int]
     # Variant file of an event sound (``variantes``, contract § 11) -> that sound's id.
     variants: dict[str, str]
+    # Published elements only (contract § 13): section -> id -> ``media_rev``. Their content
+    # keys carry ``.v<media_rev>``; base items have none.
+    media_revs: dict[str, dict[str, int]] = field(default_factory=dict)
 
     def has(self, section: str, item_id: object) -> bool:
         return isinstance(item_id, str) and item_id in self.sections[section]
@@ -56,6 +62,10 @@ class Catalog:
         if file_id in self.sections["sons"]:
             return file_id
         return self.variants.get(file_id)
+
+    def media_rev(self, section: str, item_id: str) -> int | None:
+        """``media_rev`` of a published element, None for an item of the base catalog."""
+        return self.media_revs.get(section, {}).get(item_id)
 
     def is_free(self, section: str, item_id: str) -> bool:
         return bool(self.sections[section][item_id].get("gratuit"))
@@ -84,9 +94,9 @@ class Catalog:
         return None
 
 
-@cache
-def get_catalog() -> Catalog:
-    raw = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
+def build_catalog(
+    raw: dict[str, Any], media_revs: dict[str, dict[str, int]] | None = None
+) -> Catalog:
     sections = {
         key: {item["id"]: item for item in raw[key]}
         for key in ("paysages", "sons", "musiques", "decors")
@@ -94,4 +104,16 @@ def get_catalog() -> Catalog:
     variants = {
         variant: sound["id"] for sound in raw["sons"] for variant in sound.get("variantes", [])
     }
-    return Catalog(raw=raw, sections=sections, limits=dict(raw["limites"]), variants=variants)
+    return Catalog(
+        raw=raw,
+        sections=sections,
+        limits=dict(raw["limites"]),
+        variants=variants,
+        media_revs=media_revs or {},
+    )
+
+
+@cache
+def get_catalog() -> Catalog:
+    """The base catalog embedded in the API (never changes while the process runs)."""
+    return build_catalog(json.loads(CATALOG_PATH.read_text(encoding="utf-8")))

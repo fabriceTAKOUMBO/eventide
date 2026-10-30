@@ -1,0 +1,42 @@
+{% extends "tableau/base.html" %}
+{% block title %}Utilisateurs{% endblock %}
+{% block content %}
+<h1>Utilisateurs</h1>
+<p class="note">Lecture seule. Le serveur ne connaît ni nom ni adresse : les mix, favoris et nuits restent sur les téléphones.</p>
+
+<div class="totaux">
+  <div class="total"><span class="chiffre">{{ totals.installations }}</span><span>installations</span></div>
+  <div class="total"><span class="chiffre">{{ totals.actives_7 }}</span><span>actives sur 7 jours</span></div>
+  <div class="total"><span class="chiffre">{{ totals.actives_30 }}</span><span>actives sur 30 jours</span></div>
+  <div class="total"><span class="chiffre">{{ totals.comptes }}</span><span>comptes Google liés</span></div>
+  {% for label, n in totals.premium %}
+  <div class="total"><span class="chiffre">{{ n }}</span><span>Premium · {{ label }}</span></div>
+  {% empty %}
+  <div class="total"><span class="chiffre">0</span><span>Premium actifs</span></div>
+  {% endfor %}
+</div>
+
+{% if rows %}
+<table class="liste">
+  <thead>
+    <tr><th>Installation</th><th>Création</th><th>Dernière activité</th><th>Version</th><th>Compte Google</th><th>Premium</th><th>Partages</th></tr>
+  </thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td data-label="Installation"><code>{{ r.installation }}</code></td>
+      <td data-label="Création">{{ r.creation|date:"d/m/Y" }}</td>
+      <td data-label="Dernière activité">{{ r.activite|date:"d/m/Y H:i" }}</td>
+      <td data-label="Version">{{ r.version }}</td>
+      <td data-label="Compte Google">{% if r.compte %}oui{% else %}non{% endif %}</td>
+      <td data-label="Premium">{% if r.premium %}{{ r.premium.produit }}, {{ r.premium.etat }}{% if r.premium.echeance %}, échéance {{ r.premium.echeance|date:"d/m/Y" }}{% endif %}{% else %}—{% endif %}</td>
+      <td data-label="Partages">{{ r.partages }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% include "tableau/pagination.html" with base="/tableau/utilisateurs" %}
+{% else %}
+<p>Aucune installation sur cette page.</p>
+{% endif %}
+{% endblock %}

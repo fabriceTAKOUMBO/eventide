@@ -1,0 +1,24 @@
+{% extends "tableau/base.html" %}
+{% load static %}
+{% block title %}Connexion{% endblock %}
+{% block content %}
+<section class="connexion">
+  <h1>Connexion</h1>
+  <p class="note">Réservé aux administrateurs de Full Relax. Votre adresse est vérifiée à la connexion, jamais enregistrée.</p>
+  {% if unavailable %}<p class="message erreur" role="alert">Google est momentanément injoignable. Réessayez dans un instant.</p>{% endif %}
+  {% if configured %}
+  <div id="connexion-google" class="bouton-google" data-client-id="{{ client_id }}"></div>
+  <noscript><p class="message erreur">La connexion avec Google demande JavaScript.</p></noscript>
+  <form id="connexion-form" method="post" action="/tableau/connexion" hidden>
+    {% csrf_token %}
+    <input type="hidden" name="credential" value="">
+  </form>
+  {% else %}
+  <p class="message erreur">La connexion n'est pas configurée sur ce serveur.</p>
+  {% endif %}
+</section>
+{% endblock %}
+{% block scripts %}{% if configured %}
+<script src="{% static 'tableau/connexion.js' %}"></script>
+<script src="https://accounts.google.com/gsi/client" async></script>
+{% endif %}{% endblock %}

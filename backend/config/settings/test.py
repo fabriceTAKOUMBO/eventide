@@ -1,7 +1,8 @@
 """Settings for pytest. Deterministic: the local ``.env`` file is ignored.
 
 Only the database URL may come from the environment (CI provides its own PostgreSQL 16).
-No real Google or AWS endpoint is ever reached: tests mock HTTP with ``responses``.
+No real Google or AWS endpoint is ever reached: tests mock HTTP with ``responses`` and AWS with
+botocore's ``Stubber`` (clients built with fake credentials, see ``apps/publishing/tests``).
 """
 
 import os
@@ -21,6 +22,25 @@ _TEST_ENV = {
     "CONTENT_BASE_URL": "https://cdn.eventide.test",
     "CLOUDFRONT_KEY_PAIR_ID": "K2TESTKEYID",
     "CLOUDFRONT_PRIVATE_KEY": "",
+    "ADMIN_EMAILS": "Admin@Eventide.test, second@eventide.test",
+    "GOOGLE_WEB_CLIENT_ID": "client-1.apps.googleusercontent.com",
+    "CONTENT_BUCKET": "ev-test-content",
+    "CONTENT_BUCKET_REGION": "us-east-1",
+    "AWS_REGION": "us-east-1",
+    "MEDIA_TASK_CLUSTER": "ev-test",
+    "MEDIA_TASK_DEFINITION": "ev-test-media",
+    "MEDIA_TASK_CONTAINER": "media",
+    "MEDIA_TASK_SUBNETS": "subnet-aaa,subnet-bbb",
+    "MEDIA_TASK_SECURITY_GROUPS": "sg-media",
+    "MEDIA_STORAGE": "s3",
+    # Never a real AWS identity in tests (defence in depth: AWS clients are stubbed, and an
+    # unstubbed client fails, see conftest.py). Fake keys sign presigned forms locally only.
+    "AWS_ACCESS_KEY_ID": "testing",
+    "AWS_SECRET_ACCESS_KEY": "testing",  # nosec B105 - fake test value, never a secret
+    "AWS_SESSION_TOKEN": "testing",  # nosec B105 - fake test value, never a secret
+    "AWS_EC2_METADATA_DISABLED": "true",
+    "AWS_CONFIG_FILE": os.devnull,
+    "AWS_SHARED_CREDENTIALS_FILE": os.devnull,
     "DB_POOL_MAX_SIZE": "0",
     "NUM_PROXIES": "1",
     "LOG_LEVEL": "WARNING",

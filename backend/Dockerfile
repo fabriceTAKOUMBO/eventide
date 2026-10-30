@@ -75,6 +75,16 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN groupadd --system --gid 10001 app \
  && useradd --system --uid 10001 --gid 10001 --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin app
 
+# ffmpeg et ffprobe : traitement des fichiers publiés depuis le tableau de bord (contrat § 14).
+# La tâche ev-<env>-media lance cette même image (python manage.py process_media <uuid>).
+# Paquet Debian signé (mises à jour de sécurité à chaque reconstruction), sans recommandés.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ffmpeg \
+ && rm -rf /var/lib/apt/lists/* \
+ && ffmpeg -hide_banner -encoders | grep -q libx264 \
+ && ffmpeg -hide_banner -encoders | grep -q libopus \
+ && ffmpeg -hide_banner -filters | grep -q zscale
+
 WORKDIR /app
 
 # Code, environnement virtuel et fichiers statiques appartiennent à root : lisibles, non modifiables.

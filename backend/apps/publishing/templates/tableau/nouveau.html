@@ -1,0 +1,72 @@
+{% extends "tableau/base.html" %}
+{% block title %}Nouvel élément{% endblock %}
+{% block content %}
+<h1>Nouvel élément</h1>
+<form method="post" action="/tableau/elements/nouveau" class="formulaire" novalidate>
+  {% csrf_token %}
+  {% if form.non_field_errors %}<p class="message erreur">{{ form.non_field_errors|join:" " }}</p>{% endif %}
+
+  <fieldset>
+    <legend>Type</legend>
+    {% for choice in form.kind %}<label class="choix">{{ choice.tag }} {{ choice.choice_label }}</label>{% endfor %}
+    {% for e in form.kind.errors %}<p class="erreur-champ">{{ e }}</p>{% endfor %}
+  </fieldset>
+
+  <label for="{{ form.item_id.id_for_label }}">Identifiant</label>
+  <input type="text" name="item_id" id="{{ form.item_id.id_for_label }}" value="{{ form.item_id.value|default_if_none:'' }}" maxlength="40" autocomplete="off" spellcheck="false" placeholder="lac-brume" aria-describedby="aide-id">
+  <p class="aide" id="aide-id">3 à 40 caractères : minuscules, chiffres, tirets entre les mots. Définitif.</p>
+  {% for e in form.item_id.errors %}<p class="erreur-champ">{{ e }}</p>{% endfor %}
+
+  <label for="{{ form.nom.id_for_label }}">Nom</label>
+  <input type="text" name="nom" id="{{ form.nom.id_for_label }}" value="{{ form.nom.value|default_if_none:'' }}" maxlength="40" placeholder="Lac dans la brume">
+  {% for e in form.nom.errors %}<p class="erreur-champ">{{ e }}</p>{% endfor %}
+
+  <fieldset>
+    <legend>Accès</legend>
+    {% for choice in form.gratuit %}<label class="choix">{{ choice.tag }} {{ choice.choice_label }}</label>{% endfor %}
+  </fieldset>
+
+  <label for="{{ form.alias.id_for_label }}">Alias (facultatif)</label>
+  <input type="text" name="alias" id="{{ form.alias.id_for_label }}" value="{{ form.alias.value|default_if_none:'' }}" maxlength="600" placeholder="lac, brume" aria-describedby="aide-alias">
+  <p class="aide" id="aide-alias">Séparés par des virgules, 10 au plus.</p>
+  {% for e in form.alias.errors %}<p class="erreur-champ">{{ e }}</p>{% endfor %}
+
+  <fieldset class="paysage-seulement">
+    <legend>Paysage filmé (ignoré pour un son ou une musique)</legend>
+    <label for="{{ form.theme.id_for_label }}">Thème</label>
+    <select name="theme" id="{{ form.theme.id_for_label }}">
+      <option value="">—</option>
+      {% for value, label in form.theme.field.choices %}<option value="{{ value }}"{% if form.theme.value == value %} selected{% endif %}>{{ label }}</option>{% endfor %}
+    </select>
+    {% for e in form.theme.errors %}<p class="erreur-champ">{{ e }}</p>{% endfor %}
+    <label class="choix">{{ form.eclairs }} Éclairs d'orage (l'éclair est dessiné avec chaque tonnerre)</label>
+
+    <p class="sous-titre">Mix par défaut (après l'ambiance tirée du son de la vidéo)</p>
+    <p class="aide">Sons, 3 au plus</p>
+    {% for son, niveau in sons %}
+    <div class="ligne-mix">
+      <label class="visuellement-cache" for="{{ son.id_for_label }}">Son {{ forloop.counter }}</label>
+      {{ son }}
+      <label class="visuellement-cache" for="{{ niveau.id_for_label }}">Niveau du son {{ forloop.counter }}</label>
+      <input type="number" name="{{ niveau.html_name }}" id="{{ niveau.id_for_label }}" min="1" max="100" value="{{ niveau.value|default_if_none:'' }}"> %
+      {% for e in son.errors %}<p class="erreur-champ">{{ e }}</p>{% endfor %}{% for e in niveau.errors %}<p class="erreur-champ">{{ e }}</p>{% endfor %}
+    </div>
+    {% endfor %}
+    <p class="aide">Musique, 2 au plus</p>
+    {% for musique, niveau in musiques %}
+    <div class="ligne-mix">
+      <label class="visuellement-cache" for="{{ musique.id_for_label }}">Musique {{ forloop.counter }}</label>
+      {{ musique }}
+      <label class="visuellement-cache" for="{{ niveau.id_for_label }}">Niveau de la musique {{ forloop.counter }}</label>
+      <input type="number" name="{{ niveau.html_name }}" id="{{ niveau.id_for_label }}" min="1" max="100" value="{{ niveau.value|default_if_none:'' }}"> %
+      {% for e in musique.errors %}<p class="erreur-champ">{{ e }}</p>{% endfor %}{% for e in niveau.errors %}<p class="erreur-champ">{{ e }}</p>{% endfor %}
+    </div>
+    {% endfor %}
+  </fieldset>
+
+  <p class="actions">
+    <button type="submit" class="bouton">Créer</button>
+    <a class="bouton secondaire" href="/tableau/">Annuler</a>
+  </p>
+</form>
+{% endblock %}

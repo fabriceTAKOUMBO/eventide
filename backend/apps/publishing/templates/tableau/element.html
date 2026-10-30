@@ -1,0 +1,89 @@
+{% extends "tableau/base.html" %}
+{% load static %}
+{% block title %}{{ item.nom }}{% endblock %}
+{% block content %}
+<p class="fil"><a href="/tableau/">Catalogue</a> › {{ item.get_kind_display }}</p>
+<div class="titre-ligne">
+  <h1>{{ item.nom }}</h1>
+  <a class="bouton secondaire" href="/tableau/elements/{{ item.pk }}/modifier">Modifier</a>
+</div>
+
+<dl class="fiche">
+  <dt>Identifiant</dt><dd><code>{{ item.item_id }}</code></dd>
+  <dt>Accès</dt><dd>{% if item.gratuit %}Gratuit{% else %}Premium{% endif %}</dd>
+  {% if item.kind == "paysage" %}
+  <dt>Thème</dt><dd>{% if item.theme == "urbain" %}Urbain{% else %}Nature{% endif %}{% if item.eclairs %} · éclairs d'orage{% endif %}</dd>
+  {% endif %}
+  {% if item.alias %}<dt>Alias</dt><dd>{{ item.alias|join:", " }}</dd>{% endif %}
+  <dt>En ligne</dt><dd>{% if item.en_catalogue %}oui, fichiers v{{ item.media_rev }}{% if item.kind == "paysage" %}{% if item.has_ambiance %}, avec ambiance{% else %}, sans ambiance{% endif %}{% endif %}{% else %}non{% endif %}</dd>
+</dl>
+
+<section class="etat-bloc" id="etat" data-url="/tableau/elements/{{ item.pk }}/etat" data-suivre="{% if poll %}1{% else %}0{% endif %}" aria-live="polite">
+  <p>État : <span class="etat etat-{{ item.state }}" id="etat-valeur">{{ item.get_state_display }}</span></p>
+  <p class="detail" id="etat-detail">{{ item.detail }}</p>
+  {% if poll %}<p class="note">Traitement en cours : cette page se met à jour seule (quelques minutes pour une vidéo).</p>{% endif %}
+  {% if item.state == "envoi" and item.upload_id %}
+  <p class="note">Le fichier a été envoyé, ou son envoi a été interrompu. Un seul traitement à la fois : s'il attend son tour, lancez-le ici (sinon, renvoyez le fichier).</p>
+  <p class="actions"><button type="button" class="bouton secondaire" id="lancer" data-upload="{{ item.upload_id }}">Lancer le traitement</button></p>
+  <p id="lancer-statut" class="detail" role="status"></p>
+  {% endif %}
+</section>
+
+{% if preview %}
+<section class="apercu">
+  <h2>Aperçu — fichiers v{{ preview.rev }} ({{ preview.label }})</h2>
+  {% if preview.urls %}
+    {% if item.kind == "paysage" %}
+    <div class="medias">
+      <figure><img src="{{ preview.urls.image }}" alt="Image fixe de {{ item.nom }}" width="216" height="384"><figcaption>Image fixe</figcaption></figure>
+      <figure><video src="{{ preview.urls.video }}" poster="{{ preview.urls.image }}" width="216" height="384" muted loop playsinline controls preload="none"></video><figcaption>Boucle vidéo (sans son)</figcaption></figure>
+    </div>
+    {% if preview.urls.ambiance %}<p>Ambiance :</p><audio src="{{ preview.urls.ambiance }}" controls loop preload="none"></audio>{% endif %}
+    {% else %}
+    <audio src="{{ preview.urls.audio }}" controls loop preload="none"></audio>
+    {% endif %}
+  {% else %}
+    <p class="note">Aperçu indisponible : la signature des adresses du contenu n'est pas configurée.</p>
+  {% endif %}
+  {% if item.state == "pret" and item.pending_info %}
+  <ul class="mesures">
+    {% if item.pending_info.video %}<li>Vidéo : {{ item.pending_info.video.secondes }} s, {{ item.pending_info.video.octets|filesizeformat }}, CRF {{ item.pending_info.video.crf }}</li>{% endif %}
+    {% if item.pending_info.image %}<li>Image fixe : {{ item.pending_info.image.octets|filesizeformat }}</li>{% endif %}
+    {% if item.pending_info.ambiance %}<li>Ambiance : {{ item.pending_info.ambiance.secondes }} s (boucle de {{ item.pending_info.ambiance.boucle_secondes }} s), {{ item.pending_info.ambiance.octets|filesizeformat }}</li>{% endif %}
+    {% if item.pending_info.audio %}<li>Son : {{ item.pending_info.audio.secondes }} s (boucle de {{ item.pending_info.audio.boucle_secondes }} s), {{ item.pending_info.audio.octets|filesizeformat }}</li>{% endif %}
+  </ul>
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="actions-bloc">
+  <h2>Actions</h2>
+  <div class="actions">
+    {% if actions.publier %}
+    <form method="post" action="/tableau/elements/{{ item.pk }}/publier">{% csrf_token %}<button type="submit" class="bouton">Publier</button></form>
+    {% endif %}
+    {% if actions.retirer %}
+    <form method="post" action="/tableau/elements/{{ item.pk }}/retirer">{% csrf_token %}<button type="submit" class="bouton secondaire">Retirer du catalogue</button></form>
+    {% endif %}
+  </div>
+</section>
+
+<section class="envoi" id="envoi"
+  data-envoi="/tableau/elements/{{ item.pk }}/envoi"
+  data-fini="/tableau/elements/{{ item.pk }}/envoi-termine"
+  data-csrf="{{ csrf_token }}"
+  data-max="{{ max_mo }}">
+  <h2>{% if item.media_rev or item.pending_rev %}Remplacer le fichier{% else %}Envoyer le fichier{% endif %}</h2>
+  {% if upload_ready %}
+  <p class="aide">{% if item.kind == "paysage" %}Vidéo MP4, MOV ou WebM, 8 s au moins{% else %}Son WAV, MP3, OGG, M4A ou FLAC, 8 s au moins{% endif %}, {{ max_mo }} Mo au plus. Le fichier part directement vers le stockage, puis il est traité automatiquement.</p>
+  <label for="fichier">Fichier source</label>
+  <input type="file" id="fichier" accept="{{ accept }}">
+  <p class="actions"><button type="button" class="bouton" id="envoyer">Envoyer</button></p>
+  <progress id="progression" max="100" value="0" hidden></progress>
+  <p id="envoi-statut" class="detail" role="status"></p>
+  {% else %}
+  <p class="message erreur">L'envoi de fichiers n'est pas configuré sur ce serveur.</p>
+  {% endif %}
+</section>
+{% endblock %}
+{% block scripts %}<script src="{% static 'tableau/element.js' %}"></script>{% endblock %}
