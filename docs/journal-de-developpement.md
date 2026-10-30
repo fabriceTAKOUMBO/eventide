@@ -7,6 +7,7 @@
 - **Fusion** de l'intégration 3D (WebView, décor non modifiable sur les vidéos réelles, éclair d'orage automatique) et des six scènes. Les boucles des scènes 3D peuvent aller jusqu'à 4 Mo (contrat § 8). Vérifications : 498 tests de l'app, 217 de l'API, CI 41054912607 verte ; démo S24 : artefact 12976324598.
 - **Aller plus vite** (demande du product owner) : skill du projet `.claude/skills/scene-imaginaire/SKILL.md`. Il contient les règles du product owner, le budget du téléphone et la méthode : petites images fixes, aperçu à valider, longues vidéos seulement après validation, un agent par scène. Deux agents mettent en cours lac-lune, aurore, jardin-zen, mer-nuages et ondes au niveau de la forêt (aperçu d'abord).
 - **Higgsfield** : le connecteur MCP ne fait que **lire** (solde, modèles, générations passées) et ne peut pas générer. Les générations se lancent sur le site, puis on les récupère par le connecteur. Compte gratuit, 10 crédits. Modèles utiles : FLUX 3 Video (20 s, 1080p, son synchronisé), Seedance 2.0.
+- **Prompts vidéo Higgsfield** (`docs/medias/prompts-video.md`) : cinq urbains (`toits-pluie`, `cafe-nuit`, `rue-pavee`, `pluie-ville`, `verriere-pluie`) et quatre de nature (`cascade-foret`, `pluie-foret`, `vagues-crepuscule`, `ciel-etoile`), 20 s, 9:16, 1080p, son de la scène sans tonnerre ni éclair. Ils remplacent les deux médias de test YouTube et refont `pluie-ville` et `cascade-foret` ; les cinq nouveaux identifiants entreront au catalogue à l'intégration.
 
 ## 29 octobre 2026 (nuit) — nom, icône, police, vrai tonnerre, scènes 3D
 
