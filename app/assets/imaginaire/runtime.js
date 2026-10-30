@@ -204,8 +204,10 @@
     '}',
   ].join('\n');
 
+  // opts.type: THREE.HalfFloatType for a scene with the HDR finish (post.js), whose values exceed
+  // 1 and whose night darks band in 8 bits (default: 8 bits).
   function createMirror(ctx, opts) {
-    var rt = new THREE.WebGLRenderTarget(2, 2, { depthBuffer: true, stencilBuffer: false });
+    var rt = new THREE.WebGLRenderTarget(2, 2, { depthBuffer: true, stencilBuffer: false, type: opts.type || THREE.UnsignedByteType });
     rt.texture.generateMipmaps = false;
     var uniforms = Object.assign({
       tMirror: { value: rt.texture },

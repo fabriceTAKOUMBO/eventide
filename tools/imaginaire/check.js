@@ -74,8 +74,15 @@ async function checkScene(browser, port, id) {
   const p1 = await count();
   if (p1 !== p0) fail(`${p1 - p0} images drawn while paused`);
   await page.evaluate(() => window.eventide.setPaused(false));
-  await page.waitForTimeout(600);
-  if ((await count()) === p1) fail('no image after setPaused(false)');
+  // as for the transition: software WebGL may still be drawing the images queued before the pause
+  // (a few seconds for the heavy HDR scenes), so the first new image is awaited up to 6 s
+  let resumed = false;
+  const resumeDeadline = Date.now() + 6000;
+  while (!resumed && Date.now() < resumeDeadline) {
+    await page.waitForTimeout(200);
+    resumed = (await count()) > p1;
+  }
+  if (!resumed) fail('no image within 6 s after setPaused(false)');
   await page.evaluate(() => window.eventide.dispose());
   if (await page.evaluate(() => document.querySelector('canvas') !== null)) fail('canvas left after dispose()');
   if (messages.some((m) => m.type === 'error')) fail(`error message: ${JSON.stringify(messages.filter((m) => m.type === 'error'))}`);
