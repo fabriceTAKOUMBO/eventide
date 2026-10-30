@@ -268,6 +268,11 @@ abstract class AppModel extends ChangeNotifier {
   /// (`assets/landscapes/<id>.jpg`) are found by the UI from the asset manifest.
   String? landscapePosterFile(String landscapeId) => null;
 
+  /// Landscapes with a looping video on the content server, from the published catalog's
+  /// `distant` (contract § 13), which replaces `assets/landscapes/remote.json`. Null: no
+  /// published catalog, the UI reads the bundled `remote.json` itself.
+  Set<String>? get remoteLandscapeVideos => null;
+
   // ---- Problem report (docs/app/architecture.md « Rapport de problème »)
 
   /// Last abnormal end of the app recorded by Android (crash, ANR, or killed while in use:

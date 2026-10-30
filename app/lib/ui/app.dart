@@ -65,13 +65,15 @@ class _EventideAppState extends State<EventideApp> {
     }
   }
 
-  /// Posters downloaded for Premium (bundled ones are found from the asset manifest).
+  /// Posters downloaded for Premium (bundled ones are found from the asset manifest), and the
+  /// videos on the content server (the published catalog's, contract § 13).
   void _usePosters() {
     final model = widget.model;
     LandscapeImages.resolver = (id) {
       final path = model.landscapePosterFile(id);
       return path == null ? null : FileImage(File(path));
     };
+    LandscapeImages.remoteVideos = () => model.remoteLandscapeVideos;
   }
 
   /// Only the settings (text size, contrast) change the app shell.

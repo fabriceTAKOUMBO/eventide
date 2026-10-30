@@ -133,4 +133,47 @@ void main() {
     expect(await api.contentUrls(['audio/sons/vagues.ogg']), {'audio/sons/vagues.ogg': 'https://cdn.test/signed'});
     await expectLater(api.getShare('nope1234'), throwsA(isA<ApiException>().having((e) => e.status, 'status', 404)));
   });
+
+  group('GET /catalog (contract § 13)', () {
+    test('200: the body; the revision held goes in If-None-Match', () async {
+      await store.write(StoreKeys.installation, {'token': 't'});
+      final api = build((request) async => json(200, {'revision': 7, 'catalog': {}, 'distant': {}}));
+      final answer = await api.fetchCatalog();
+      expect(answer, isA<CatalogFetched>().having((a) => a.body['revision'], 'revision', 7));
+      expect(requests.single.method, 'GET');
+      expect(requests.single.url.toString(), 'https://api.test/v1/catalog');
+      expect(requests.single.headers['Authorization'], 'Bearer t');
+      expect(requests.single.headers.containsKey('If-None-Match'), isFalse);
+      await api.fetchCatalog(etag: '"7"');
+      expect(requests.last.headers['If-None-Match'], '"7"');
+    });
+
+    test('304: unchanged, without a body', () async {
+      await store.write(StoreKeys.installation, {'token': 't'});
+      final api = build((request) async => http.Response('', 304));
+      expect(await api.fetchCatalog(etag: '"7"'), isA<CatalogNotModified>());
+    });
+
+    test('304 after a revoked token: registered again, still unchanged', () async {
+      await store.write(StoreKeys.installation, {'token': 'old'});
+      final api = build((request) async {
+        if (request.url.path == '/v1/installations') return json(201, {'installation_id': 'i', 'token': 'new'});
+        if (request.headers['Authorization'] == 'Bearer old') return json(401, {'error': 'unauthorized'});
+        return http.Response('', 304);
+      });
+      expect(await api.fetchCatalog(etag: '"3"'), isA<CatalogNotModified>());
+      expect(requests.last.headers['If-None-Match'], '"3"');
+    });
+
+    test('errors are exceptions; other routes never accept a 304', () async {
+      await store.write(StoreKeys.installation, {'token': 't'});
+      final failing = build((request) async => json(429, {'error': 'rate_limited'}));
+      await expectLater(failing.fetchCatalog(), throwsA(isA<ApiException>().having((e) => e.status, 'status', 429)));
+      final notModified = build((request) async => http.Response('', 304));
+      await expectLater(notModified.entitlements(), throwsA(isA<ApiException>().having((e) => e.status, 'status', 304)));
+      final none = build((request) async => json(200, {}), base: '');
+      await expectLater(none.fetchCatalog(), throwsA(isA<ApiUnavailableException>()));
+      expect(requests, isEmpty);
+    });
+  });
 }

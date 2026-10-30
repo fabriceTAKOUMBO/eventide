@@ -24,6 +24,23 @@ class ApiException implements Exception {
   String toString() => 'ApiException($status, $code)';
 }
 
+/// Answer of `GET /catalog` (contract § 13).
+sealed class CatalogFetch {
+  const CatalogFetch();
+}
+
+/// `304`: the revision held is still the current one.
+final class CatalogNotModified extends CatalogFetch {
+  const CatalogNotModified();
+}
+
+/// `200`: the published catalog (`{"revision", "catalog", "distant"}`), not yet checked.
+final class CatalogFetched extends CatalogFetch {
+  const CatalogFetched(this.body);
+
+  final Map<String, dynamic> body;
+}
+
 /// No answer: no backend configured, no network, timeout or unreadable response.
 class ApiUnavailableException implements Exception {
   const ApiUnavailableException(this.reason, {this.timeout = false});
@@ -138,6 +155,9 @@ class ApiClient {
 
   // ---- Transport
 
+  /// Returned by [_send] for a `304 Not Modified` when the caller accepts one.
+  static const Object _notModified = _NotModified();
+
   Future<Object?> _send(
     String method,
     String path, {
@@ -145,11 +165,14 @@ class ApiClient {
     bool auth = true,
     Duration? timeout,
     bool retried = false,
+    Map<String, String> extraHeaders = const {},
+    bool acceptNotModified = false,
   }) async {
     if (!enabled) throw const ApiUnavailableException('no backend');
     final headers = <String, String>{
       'Accept': 'application/json',
       if (body != null) 'Content-Type': 'application/json; charset=utf-8',
+      ...extraHeaders,
     };
     if (auth) headers['Authorization'] = 'Bearer ${await _ensureToken()}';
     final request = http.Request(method, _uri(path))..headers.addAll(headers);
@@ -173,8 +196,18 @@ class ApiClient {
       _token = null;
       await _store.delete(StoreKeys.installation);
       await _register();
-      return _send(method, path, body: body, auth: auth, timeout: timeout, retried: true);
+      return _send(
+        method,
+        path,
+        body: body,
+        auth: auth,
+        timeout: timeout,
+        retried: true,
+        extraHeaders: extraHeaders,
+        acceptNotModified: acceptNotModified,
+      );
     }
+    if (response.statusCode == 304 && acceptNotModified) return _notModified;
 
     Object? decoded;
     if (response.bodyBytes.isNotEmpty) {
@@ -245,6 +278,19 @@ class ApiClient {
     };
   }
 
+  /// `GET /catalog` (contract § 13). [etag]: the revision held, sent as `If-None-Match`
+  /// (`"7"`); the server then answers `304` when it is still the current one.
+  Future<CatalogFetch> fetchCatalog({String? etag}) async {
+    final body = await _send(
+      'GET',
+      '/catalog',
+      extraHeaders: {'If-None-Match': ?etag},
+      acceptNotModified: true,
+    );
+    if (identical(body, _notModified)) return const CatalogNotModified();
+    return CatalogFetched(_asMap(body));
+  }
+
   Future<Map<String, dynamic>> linkGoogle(String idToken) async =>
       _asMap(await _send('POST', '/account/google', body: {'id_token': idToken}));
 
@@ -253,4 +299,8 @@ class ApiClient {
   Future<void> deleteAccount() async {
     await _send('DELETE', '/account');
   }
+}
+
+class _NotModified {
+  const _NotModified();
 }

@@ -76,7 +76,8 @@ Scene? _sceneFromShared(Map<dynamic, dynamic> json, Catalog catalog) {
       if (entry is! Map) continue;
       final id = entry['id'];
       final level = entry['niveau'];
-      if (id is! String || catalog.item(kind, id) == null) continue;
+      // Unknown, or withdrawn from the published catalog (contract § 13): dropped.
+      if (id is! String || !catalog.listsItem(kind, id)) continue;
       // Decor only where it applies: a 3D scene that can show it (contract § 12).
       if (kind == LayerKind.decor && !landscape.allowsDecor(id)) continue;
       if (level is! num || !level.isFinite) continue;

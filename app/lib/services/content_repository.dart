@@ -1,6 +1,7 @@
 // Resolves where the audio of a layer, and the video and poster of a landscape, come from:
 // bundled asset, cached file, or download (signed CloudFront URL from POST /content/urls, or the
-// local dev server in debug).
+// local dev server in debug). The files of an item published from the dashboard carry its
+// revision in their key (contract § 13): a replaced file is a new key, hence a new download.
 import 'dart:async';
 import 'dart:io';
 
@@ -47,16 +48,44 @@ class ContentRepository {
 
   Set<String>? _assets;
   RemoteLandscapeMedia? _remote;
+
+  /// The catalog whose `media_rev` names the files of published items (null: base keys only).
+  Catalog? _catalog;
   final Map<String, Future<File>> _downloads = {};
   bool _prefetching = false;
 
-  /// Content key, as in the API contract § 8: `audio/sons/<id>.ogg`, `audio/musiques/<id>.ogg`.
-  static String contentKey(LayerKind kind, String id) {
+  /// Content key, as in the API contract § 8: `audio/sons/<id>.ogg`, `audio/musiques/<id>.ogg`;
+  /// `audio/sons/<id>.v<rev>.ogg` for an item published from the dashboard ([rev] = its
+  /// `media_rev`, contract § 13).
+  static String contentKey(LayerKind kind, String id, {int? rev}) {
     assert(kind.isAudio, 'decor items have no audio');
-    return 'audio/${kind == LayerKind.son ? 'sons' : 'musiques'}/$id.ogg';
+    final folder = kind == LayerKind.son ? 'sons' : 'musiques';
+    return 'audio/$folder/$id${LandscapeMediaKeys.revisionSuffix(rev)}.ogg';
   }
 
+  /// Bundled copy of an item of the base (a published item is never bundled).
   static String assetKey(LayerKind kind, String id) => 'assets/${contentKey(kind, id)}';
+
+  /// Uses [catalog] to name the files of published items (their `media_rev`, contract § 13),
+  /// and [remote], when given, as the media on the content server (the published catalog's
+  /// `distant`, which replaces `remote.json`). Files already resolved, being played or being
+  /// downloaded are not touched.
+  void useCatalog(Catalog catalog, {RemoteLandscapeMedia? remote}) {
+    _catalog = catalog;
+    if (remote != null) _remote = remote;
+  }
+
+  /// Content key of the audio file of [id] (a sound, a music, or a variant of a sound played by
+  /// events), with the revision of a published item.
+  String audioKey(LayerKind kind, String id) => contentKey(kind, id, rev: _catalog?.item(kind, id)?.mediaRev);
+
+  /// Content key of the looping video of [landscapeId] (`videos/paysages/<id>[.v<rev>].mp4`).
+  String videoKey(String landscapeId) =>
+      LandscapeMediaKeys.video(landscapeId, rev: _catalog?.landscape(landscapeId)?.mediaRev);
+
+  /// Content key of the poster of [landscapeId] (`images/paysages/<id>[.v<rev>].jpg`).
+  String imageKey(String landscapeId) =>
+      LandscapeMediaKeys.image(landscapeId, rev: _catalog?.landscape(landscapeId)?.mediaRev);
 
   File _cachedFile(String key) => File('${_directory.path}/$key');
 
@@ -71,13 +100,14 @@ class ContentRepository {
     } catch (_) {
       // No manifest: nothing is asked from the server.
     }
-    return _remote = remote;
+    // A catalog received meanwhile wins (useCatalog).
+    return _remote ??= remote;
   }
 
   /// Playable without network (bundled or already downloaded).
   Future<bool> isAvailableOffline(LayerKind kind, String id) async {
     if ((await _assetSet()).contains(assetKey(kind, id))) return true;
-    return _cachedFile(contentKey(kind, id)).exists();
+    return _cachedFile(audioKey(kind, id)).exists();
   }
 
   /// The file of [id] can be had: bundled, already downloaded, or on the content server
@@ -95,7 +125,7 @@ class ContentRepository {
   Future<AudioSourceRef> resolve(LayerKind kind, String id, {required bool allowNetwork}) async {
     final asset = assetKey(kind, id);
     if ((await _assetSet()).contains(asset)) return AssetAudioSource(asset);
-    final key = contentKey(kind, id);
+    final key = audioKey(kind, id);
     final cached = _cachedFile(key);
     if (await cached.exists()) return FileAudioSource(cached.path);
     if (!allowNetwork) throw ContentUnavailableException(key, offline: true);
@@ -171,7 +201,7 @@ class ContentRepository {
     final asset = LandscapeMediaKeys.bundledVideo(id);
     if ((await _assetSet()).contains(asset)) return AssetLandscapeVideo(asset);
     final path = await _landscapeFile(
-      LandscapeMediaKeys.video(id),
+      videoKey(id),
       listed: (await _remoteSet()).videos.contains(id),
       allowDownload: allowDownload,
       wifiOnly: wifiOnly,
@@ -188,27 +218,36 @@ class ContentRepository {
   }) async {
     if ((await _assetSet()).contains(LandscapeMediaKeys.bundledImage(id))) return null;
     return _landscapeFile(
-      LandscapeMediaKeys.image(id),
+      imageKey(id),
       listed: (await _remoteSet()).images.contains(id),
       allowDownload: allowDownload,
       wifiOnly: wifiOnly,
     );
   }
 
-  /// Ids of the landscapes whose poster is already downloaded.
+  /// Ids of the landscapes whose current poster is already downloaded (for a published
+  /// landscape, the poster of its current revision).
   Future<Set<String>> downloadedLandscapeImages() async {
     final folder = Directory('${_directory.path}/images/paysages');
     try {
       if (!await folder.exists()) return {};
-      return {
-        await for (final entity in folder.list())
-          if (entity is File && entity.path.endsWith('.jpg'))
-            entity.uri.pathSegments.last.replaceFirst(RegExp(r'\.jpg$'), ''),
-      };
+      final ids = <String>{};
+      await for (final entity in folder.list()) {
+        if (entity is! File) continue;
+        final name = entity.uri.pathSegments.last;
+        final match = _posterFile.firstMatch(name);
+        if (match == null) continue;
+        final id = match.group(1)!;
+        if ('images/paysages/$name' == imageKey(id)) ids.add(id);
+      }
+      return ids;
     } catch (_) {
       return {};
     }
   }
+
+  /// A downloaded poster: `<id>.jpg`, or `<id>.v<rev>.jpg` for a published landscape.
+  static final RegExp _posterFile = RegExp(r'^([a-z0-9-]+)(?:\.v\d+)?\.jpg$');
 
   Future<String?> _landscapeFile(
     String key, {
@@ -247,7 +286,7 @@ class ContentRepository {
             if (!await isPublished(kind, id)) continue;
             if (wifiOnly && !await _connectivity.isUnmetered()) return downloaded;
             try {
-              await _download(contentKey(kind, id));
+              await _download(audioKey(kind, id));
               downloaded++;
             } on ContentUnavailableException catch (e) {
               if (e.offline) return downloaded;
@@ -255,23 +294,92 @@ class ContentRepository {
           }
         }
       }
-      final assets = await _assetSet();
-      for (final id in (await _remoteSet()).images) {
-        if (assets.contains(LandscapeMediaKeys.bundledImage(id))) continue;
-        final key = LandscapeMediaKeys.image(id);
-        if (await _cachedFile(key).exists()) continue;
-        if (wifiOnly && !await _connectivity.isUnmetered()) return downloaded;
-        try {
-          await _download(key);
-          downloaded++;
-        } on ContentUnavailableException catch (e) {
-          if (e.offline) return downloaded;
-        }
-      }
+      downloaded += await _downloadPosters((await _remoteSet()).images, wifiOnly: wifiOnly);
     } finally {
       _prefetching = false;
     }
     return downloaded;
+  }
+
+  /// Downloads in the background the posters of [landscapeIds] that are on the content server
+  /// and not yet on the phone, one at a time (« Wi-Fi seulement » respected). Used for the
+  /// landscapes published free from the dashboard (contract § 13): every plan can use them and
+  /// their poster is never bundled. Returns the number of files downloaded.
+  Future<int> prefetchPosters(Iterable<String> landscapeIds, {required bool wifiOnly}) async {
+    if (wifiOnly && !await _connectivity.isUnmetered()) return 0;
+    final remote = (await _remoteSet()).images;
+    return _downloadPosters([
+      for (final id in landscapeIds)
+        if (remote.contains(id)) id,
+    ], wifiOnly: wifiOnly);
+  }
+
+  /// Downloads the posters of [ids] not bundled nor downloaded yet; stops when the network is
+  /// gone or no longer allowed.
+  Future<int> _downloadPosters(Iterable<String> ids, {required bool wifiOnly}) async {
+    var downloaded = 0;
+    final assets = await _assetSet();
+    for (final id in ids) {
+      if (assets.contains(LandscapeMediaKeys.bundledImage(id))) continue;
+      // Only landscapes of the catalog: their key names the current revision of the poster.
+      final catalog = _catalog;
+      if (catalog != null && catalog.landscape(id) == null) continue;
+      final key = imageKey(id);
+      if (await _cachedFile(key).exists()) continue;
+      if (wifiOnly && !await _connectivity.isUnmetered()) return downloaded;
+      try {
+        await _download(key);
+        downloaded++;
+      } on ContentUnavailableException catch (e) {
+        if (e.offline) return downloaded;
+      }
+    }
+    return downloaded;
+  }
+
+  /// Removes the downloaded files of published items that are no longer current (contract
+  /// § 13): a file of an older revision, or of an item no longer in the catalog. Only files
+  /// named with a revision (`<id>.v<rev>.<ext>`) can go: files of base items are kept, and
+  /// bundled assets are never in this folder. The video and poster of [keepLandscapes] (the
+  /// live wallpaper plays them from here) are kept, and so is a file being downloaded. Meant
+  /// for the start of the app, before a file of an older revision can be in use. Never throws.
+  Future<int> removeStaleFiles({Set<String> keepLandscapes = const {}}) async {
+    if (_catalog == null) return 0;
+    var removed = 0;
+    final folders = <({String folder, String extension, String Function(String id) key, bool landscape})>[
+      (folder: 'audio/sons', extension: 'ogg', key: (id) => audioKey(LayerKind.son, id), landscape: false),
+      (folder: 'audio/musiques', extension: 'ogg', key: (id) => audioKey(LayerKind.musique, id), landscape: false),
+      (folder: 'videos/paysages', extension: 'mp4', key: videoKey, landscape: true),
+      (folder: 'images/paysages', extension: 'jpg', key: imageKey, landscape: true),
+    ];
+    for (final f in folders) {
+      final dir = Directory('${_directory.path}/${f.folder}');
+      final pattern = RegExp('^([a-z0-9-]+)\\.v\\d+\\.${f.extension}\$');
+      try {
+        if (!await dir.exists()) continue;
+        final stale = <File>[];
+        await for (final entity in dir.list()) {
+          if (entity is! File) continue;
+          final name = entity.uri.pathSegments.last;
+          final match = pattern.firstMatch(name);
+          if (match == null) continue;
+          final id = match.group(1)!;
+          final key = '${f.folder}/$name';
+          if (f.landscape && keepLandscapes.contains(id)) continue;
+          if (key == f.key(id) || _downloads.containsKey(key)) continue;
+          stale.add(entity);
+        }
+        for (final file in stale) {
+          try {
+            await file.delete();
+            removed++;
+          } catch (_) {}
+        }
+      } catch (e) {
+        debugPrint('ContentRepository: cleanup of ${f.folder} failed ($e)');
+      }
+    }
+    return removed;
   }
 
   /// Removes every downloaded file (data deletion).

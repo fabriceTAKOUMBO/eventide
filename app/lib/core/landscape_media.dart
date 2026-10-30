@@ -43,11 +43,21 @@ final class FileLandscapeVideo extends LandscapeVideoSource {
 
 /// Content keys (S3, `POST /content/urls`) and bundled asset paths of landscape media.
 abstract final class LandscapeMediaKeys {
-  /// `videos/paysages/<id>.mp4`: seamless loop, H.264, no audio.
-  static String video(String id) => 'videos/paysages/$id.mp4';
+  /// `videos/paysages/<id>.mp4`: seamless loop, H.264, no audio. A landscape published from the
+  /// dashboard names the revision of its files ([rev] = its `media_rev`, contract § 13):
+  /// `videos/paysages/<id>.v<rev>.mp4`.
+  static String video(String id, {int? rev}) => 'videos/paysages/$id${revisionSuffix(rev)}.mp4';
 
-  /// `images/paysages/<id>.jpg`: poster, exactly the first frame of the loop.
-  static String image(String id) => 'images/paysages/$id.jpg';
+  /// `images/paysages/<id>.jpg`: poster, exactly the first frame of the loop
+  /// (`images/paysages/<id>.v<rev>.jpg` for a published landscape, see [video]).
+  static String image(String id, {int? rev}) => 'images/paysages/$id${revisionSuffix(rev)}.jpg';
+
+  /// `.v<rev>` for the files of an item published from the dashboard (contract § 13), nothing
+  /// for an item of the bundled base.
+  static String revisionSuffix(int? rev) => rev == null ? '' : '.v$rev';
+
+  /// Entry page of the 3D scenes' runtime (`assets/imaginaire/`, contract § 12).
+  static const String sceneRuntime = 'assets/imaginaire/index.html';
 
   static String bundledVideo(String id) => 'assets/landscapes/$id.mp4';
   static String bundledImage(String id) => 'assets/landscapes/$id.jpg';

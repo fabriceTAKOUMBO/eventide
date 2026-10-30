@@ -26,7 +26,11 @@ class LandscapesSheet extends StatefulWidget {
 }
 
 class _LandscapesSheetState extends State<LandscapesSheet> {
-  int? _tab;
+  /// Tab chosen by the user: a theme id, or [_favoritesTabId]. Kept by id, not by position: the
+  /// themes can change while the sheet is open (published catalog, contract § 13).
+  String? _tabId;
+
+  static const String _favoritesTabId = '#favoris';
 
   bool get _picker => widget.pickFor != null;
 
@@ -40,7 +44,10 @@ class _LandscapesSheetState extends State<LandscapesSheet> {
     final initialTab = selectedLandscape == null
         ? 0
         : themes.indexWhere((t) => t.id == selectedLandscape.themeId);
-    final tab = _tab ?? (initialTab < 0 ? 0 : initialTab);
+    final chosen = _tabId == _favoritesTabId
+        ? (_picker ? -1 : themes.length)
+        : themes.indexWhere((t) => t.id == _tabId);
+    final tab = chosen >= 0 ? chosen : (initialTab < 0 ? 0 : initialTab);
     final labels = [for (final t in themes) t.name, if (!_picker) 'Favoris'];
     final favoritesTab = !_picker && tab == themes.length;
     final premium = model.plan.isPremium;
@@ -57,7 +64,7 @@ class _LandscapesSheetState extends State<LandscapesSheet> {
           _TextTabs(
             labels: labels,
             selected: tab,
-            onSelected: (i) => setState(() => _tab = i),
+            onSelected: (i) => setState(() => _tabId = i < themes.length ? themes[i].id : _favoritesTabId),
           ),
           const SizedBox(height: 14),
           if (favoritesTab)

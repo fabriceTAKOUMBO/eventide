@@ -21,6 +21,10 @@ typedef LandscapeImageResolver = ImageProvider? Function(String landscapeId);
 /// [discoverAssets]), then [resolver] (set by the app to the posters downloaded for Premium).
 abstract final class LandscapeImages {
   static LandscapeImageResolver? resolver;
+
+  /// Set by the app: the landscapes with a video on the content server now (the published
+  /// catalog's `distant`, contract § 13), or null for those of the bundled `remote.json`.
+  static Set<String>? Function()? remoteVideos;
   static final Set<String> _bundled = {};
   static final Set<String> _bundledVideos = {};
   static final Set<String> _remoteVideos = {};
@@ -58,7 +62,7 @@ abstract final class LandscapeImages {
   /// the still picture stays put (no Ken Burns), so that the video replaces it without a jump.
   static bool hasVideo(String landscapeId) =>
       _bundledVideos.contains(landscapeId) ||
-      _remoteVideos.contains(landscapeId);
+      (remoteVideos?.call() ?? _remoteVideos).contains(landscapeId);
 
   /// The runtime of the 3D scenes is bundled (`assets/imaginaire/index.html`). Without it a 3D
   /// scene shows its poster only.

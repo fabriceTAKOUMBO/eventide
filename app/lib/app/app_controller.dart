@@ -28,6 +28,7 @@ import '../services/audio/event_scheduler.dart';
 import '../services/audio/media_artwork.dart';
 import '../services/audio/playback_handler.dart';
 import '../services/billing_service.dart';
+import '../services/catalog_updates.dart';
 import '../services/connectivity.dart';
 import '../services/content_repository.dart';
 import '../services/diagnostics.dart';
@@ -130,6 +131,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
     this._artwork,
     this._problems,
     this._wallpaper,
+    this._catalogUpdates,
     DateTime Function()? now,
     Random? random,
   })  : _catalog = catalog,
@@ -137,10 +139,18 @@ class RealAppModel extends AppModel implements PlaybackHost {
         _now = now ?? DateTime.now,
         _random = random ?? Random(),
         _scene = Scene.fromLandscape(catalog.defaultLandscape),
-        _browsedId = catalog.defaultLandscape.id;
+        _browsedId = catalog.defaultLandscape.id {
+    // Files of published items are named after their revision (contract § 13).
+    _content.useCatalog(catalog);
+  }
 
-  final Catalog _catalog;
-  final ProductRules _rules;
+  /// The catalog shown (contract § 13: replaced, without a restart, when a newer published
+  /// catalog arrives; see « Published catalog » below).
+  Catalog _catalog;
+  ProductRules _rules;
+
+  /// The published catalog (null: the bundled catalog only, e.g. tests that do not need it).
+  final CatalogUpdates? _catalogUpdates;
   final LocalStore _store;
   final PlaybackHandler _handler;
   final ContentRepository _content;
@@ -203,7 +213,14 @@ class RealAppModel extends AppModel implements PlaybackHost {
 
   bool _preparing = false;
   int _audioGeneration = 0;
-  final Map<String, AudioSourceRef> _sources = {};
+
+  /// Audio files resolved, by layer key, with the content key they were resolved for.
+  final Map<String, ({String key, AudioSourceRef source})> _sources = {};
+
+  /// The published catalog is asked for (after the first screen, [startCatalogUpdates]).
+  bool _catalogUpdatesStarted = false;
+  Future<bool>? _catalogCheck;
+  DateTime? _linkCatalogCheckAt;
   bool _foreground = false;
   bool _foregroundInitDone = false;
   DateTime? _lastStandbyEvent;
@@ -373,6 +390,8 @@ class RealAppModel extends AppModel implements PlaybackHost {
       _foregroundInitDone = true;
       await _firstForeground();
     } else {
+      // Published catalog (contract § 13): asked again once the last answer is an hour old.
+      if (_catalogUpdatesStarted && (_catalogUpdates?.due ?? false)) unawaited(checkPublishedCatalog());
       await _refreshPermissions();
       final allowed = await _native.canScheduleExactAlarms();
       if (allowed != _exactAlarmAllowed) {
@@ -395,6 +414,8 @@ class RealAppModel extends AppModel implements PlaybackHost {
     if (online && _api.enabled) await _refreshEntitlements();
     if (entitlements.plan.isPremium) {
       unawaited(_prefetch(wifiOnly: _settings.wifiOnly));
+    } else {
+      unawaited(_prefetchPublishedPosters());
     }
     if (online) await _maybeShowAd(AdPlacement.open);
   }
@@ -588,7 +609,11 @@ class RealAppModel extends AppModel implements PlaybackHost {
     return list.isEmpty ? _catalog.defaultLandscape.id : list.first.id;
   }
 
-  void _onPlaybackStatus() => notifyListeners();
+  void _onPlaybackStatus() {
+    // Items withdrawn while being played leave the catalog once nothing plays them any more.
+    _settleCatalog();
+    notifyListeners();
+  }
 
   // ---------------------------------------------------------------------------
   // Audio preparation
@@ -646,7 +671,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
         // only) is left out without a message.
         if (item != null && item.isAmbiance && !await _content.isPublished(kind, layer.id)) continue;
         try {
-          final source = _sources[key] ??= await _content.resolve(kind, layer.id, allowNetwork: true);
+          final source = await _resolveSource(kind, layer.id);
           layers.add(EngineLayer(
             key: key,
             source: source,
@@ -712,15 +737,29 @@ class RealAppModel extends AppModel implements PlaybackHost {
     );
   }
 
-  Future<AudioSourceRef> _resolveVariant(LayerKind kind, String id) async =>
-      _sources[MixRules.layerKey(kind, id)] ??= await _content.resolve(kind, id, allowNetwork: true);
+  Future<AudioSourceRef> _resolveVariant(LayerKind kind, String id) => _resolveSource(kind, id);
+
+  /// The file of a sound, a music or a variant: the one already resolved, or found (bundled,
+  /// cached) or downloaded now. A file resolved for an older revision of a published item is
+  /// resolved again for the current one, except while a session is loaded: the scene being
+  /// played keeps its files until it ends (contract § 13, never interrupted).
+  Future<AudioSourceRef> _resolveSource(LayerKind kind, String id) async {
+    final layerKey = MixRules.layerKey(kind, id);
+    final key = _content.audioKey(kind, id);
+    final known = _sources[layerKey];
+    if (known != null && (known.key == key || _loaded)) return known.source;
+    final source = await _content.resolve(kind, id, allowNetwork: true);
+    _sources[layerKey] = (key: key, source: source);
+    return source;
+  }
 
   static const String _carrierKey = 'carrier';
 
   /// A free, bundled loop (never heard: parked at volume 0) for a mix of event sounds only.
   AudioSourceRef? _carrierSource() {
     for (final s in _catalog.sounds) {
-      if (s.free && s.events == null && !s.isAmbiance) {
+      // A published item is never bundled (contract § 13).
+      if (s.free && s.events == null && !s.isAmbiance && !s.isPublished) {
         return AssetAudioSource(ContentRepository.assetKey(LayerKind.son, s.id));
       }
     }
@@ -772,6 +811,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
 
   void _setPreparing(bool value) {
     _preparing = value;
+    if (!value) _settleCatalog();
     notifyListeners();
   }
 
@@ -1178,7 +1218,8 @@ class RealAppModel extends AppModel implements PlaybackHost {
     if (landscape == null) return;
     final art = _artwork;
     final moment = _scene.moment;
-    final inputs = (_scene, _favorites, id, _plan, art?.peek(id));
+    // The catalog too: a published landscape may be renamed, or get new neighbours.
+    final inputs = (_scene, _favorites, id, _plan, art?.peek(id), _catalog);
     if (inputs != _cardInputs) {
       _cardInputs = inputs;
       final scene = id == _scene.landscapeId ? _scene : _scene.withLandscape(landscape);
@@ -1280,8 +1321,9 @@ class RealAppModel extends AppModel implements PlaybackHost {
   @override
   Schedule newScheduleDraft() {
     final current = _catalog.landscape(_scene.landscapeId);
-    final landscape =
-        current != null && _rules.canUseLandscape(_plan, current) ? current : _catalog.defaultLandscape;
+    final landscape = current != null && _catalog.lists(current.id) && _rules.canUseLandscape(_plan, current)
+        ? current
+        : _catalog.defaultLandscape;
     return Schedule(
       id: _newId(),
       hour: 22,
@@ -1465,9 +1507,32 @@ class RealAppModel extends AppModel implements PlaybackHost {
     notifyListeners();
   }
 
+  /// Posters of the landscapes published from the dashboard that this plan can use (the free
+  /// ones for a free user; Premium gets every poster with [_prefetch]): never bundled, they are
+  /// downloaded in the background like Premium posters, so that the lists show them.
+  Future<void> _prefetchPublishedPosters() async {
+    final ids = [
+      for (final l in _catalog.landscapes)
+        if (l.isPublished && _rules.canUseLandscape(_plan, l)) l.id,
+    ];
+    if (ids.isEmpty) return;
+    try {
+      await _content.prefetchPosters(ids, wifiOnly: _settings.wifiOnly);
+    } catch (e) {
+      debugPrint('RealAppModel: posters prefetch failed ($e)');
+    }
+    await _refreshPosters();
+  }
+
   @override
   String? landscapePosterFile(String landscapeId) =>
-      _posterIds.contains(landscapeId) ? _content.cachedPath(LandscapeMediaKeys.image(landscapeId)) : null;
+      _posterIds.contains(landscapeId) ? _content.cachedPath(_content.imageKey(landscapeId)) : null;
+
+  @override
+  Set<String>? get remoteLandscapeVideos {
+    final shown = _catalogUpdates?.current;
+    return shown != null && shown.published ? shown.remote.videos : null;
+  }
 
   @override
   Stream<LightningStrike> get lightningStrikes => _handler.lightningStrikes;
@@ -1477,8 +1542,9 @@ class RealAppModel extends AppModel implements PlaybackHost {
     final landscape = _catalog.landscape(landscapeId);
     // A locked landscape shows its still picture only: nothing is downloaded for it.
     if (landscape == null || !_rules.canUseLandscape(_plan, landscape)) return null;
-    // Only Premium content lives on the server; free landscapes are bundled.
-    final download = _plan.isPremium;
+    // Premium content lives on the server, free landscapes of the base are bundled; a landscape
+    // published from the dashboard is only on the server, free ones included (contract § 13).
+    final download = _plan.isPremium || landscape.isPublished;
     final wifiOnly = _settings.wifiOnly;
     try {
       if (!_posterIds.contains(landscapeId)) {
@@ -1503,6 +1569,123 @@ class RealAppModel extends AppModel implements PlaybackHost {
     if (before.wifiOnly && !settings.wifiOnly && _plan.isPremium) {
       unawaited(_prefetch(wifiOnly: false));
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Published catalog (contract § 13): landscapes, sounds and music published from the
+  // dashboard reach the app without a new version. Asked after the first screen, then on
+  // returns to the foreground (hourly at most); a newer valid catalog replaces [_catalog] at
+  // once and every screen follows (notifyListeners). The scene being played is never
+  // interrupted: what it uses and was withdrawn stays known until it stops (Catalog.keeping).
+  // Silent: no message, a line in the problem report.
+  // ---------------------------------------------------------------------------
+
+  /// Starts asking for the published catalog: now, then on returns to the foreground once the
+  /// last answer is an hour old. Called once the first screen is drawn (bootstrap). Without a
+  /// backend, does nothing.
+  Future<void> startCatalogUpdates() async {
+    final updates = _catalogUpdates;
+    if (updates == null || !updates.enabled || _catalogUpdatesStarted) return;
+    _catalogUpdatesStarted = true;
+    await checkPublishedCatalog();
+  }
+
+  /// Asks for the published catalog now and applies a newer one. True when one was applied.
+  /// Never throws; one request at a time.
+  Future<bool> checkPublishedCatalog() => _catalogCheck ??= _checkCatalog().whenComplete(() => _catalogCheck = null);
+
+  Future<bool> _checkCatalog() async {
+    final updates = _catalogUpdates;
+    if (updates == null || !updates.enabled) return false;
+    await _ready.future;
+    try {
+      final next = await updates.check();
+      if (next == null || _events.isClosed) return false;
+      _applyCatalog(next);
+      return true;
+    } catch (e) {
+      debugPrint('RealAppModel: published catalog not applied ($e)');
+      return false;
+    }
+  }
+
+  /// A link names a landscape unknown here: asks for the catalog (once every 2 minutes at most).
+  Future<bool> _checkCatalogForLink() async {
+    final updates = _catalogUpdates;
+    if (updates == null || !updates.enabled) return false;
+    final last = _linkCatalogCheckAt;
+    final now = _now();
+    if (last != null && now.difference(last) < const Duration(minutes: 2)) return false;
+    _linkCatalogCheckAt = now;
+    return checkPublishedCatalog();
+  }
+
+  /// Items withdrawn while being played leave the catalog once the scene stops.
+  void _settleCatalog() {
+    final shown = _catalogUpdates?.current;
+    if (shown == null || !_catalog.hasLingering || _audioActive || _events.isClosed) return;
+    _applyCatalog(shown, settling: true);
+  }
+
+  /// Shows [next]. While a scene is loaded or being prepared, it is not touched: its landscape,
+  /// sounds and music stay known even if withdrawn (Catalog.keeping), and the files it plays
+  /// stay the same (_resolveSource). Otherwise a withdrawn landscape gives way to the default
+  /// one (sounds and music kept) and a withdrawn sound or music leaves the mix (contract § 13).
+  /// Favourites, schedules and the landscapes remembered per theme follow the same rules.
+  void _applyCatalog(CatalogSnapshot next, {bool settling = false}) {
+    if (_events.isClosed) return;
+    final previous = _catalog;
+    final active = _audioActive;
+    final catalog = active ? next.catalog.keeping(previous, _scene) : next.catalog;
+    _catalog = catalog;
+    _rules = ProductRules(catalog);
+    _content.useCatalog(catalog, remote: next.remote);
+
+    if (!active) {
+      final scene = catalog.sanitize(_scene) ??
+          catalog.sanitize(_scene.copyWith(landscapeId: catalog.defaultLandscape.id))!;
+      if (!identical(scene, _scene)) {
+        Breadcrumbs.add('catalogue publié : scène ${_scene.landscapeId} → ${scene.landscapeId}');
+        _scene = scene;
+        _saveScene();
+      }
+    }
+    if (!catalog.lists(_browsedId) && _browsedId != _scene.landscapeId) {
+      _browseTimer?.cancel();
+      _browseTimer = null;
+      _browsedId = _scene.landscapeId;
+    }
+    final themes = _lastByTheme.length;
+    _lastByTheme.removeWhere((theme, id) => !catalog.lists(id) || catalog.landscape(id)!.themeId != theme);
+    if (_lastByTheme.length != themes) _saveState();
+
+    final favorites = [for (final f in _favorites) _sanitizeFavorite(f)];
+    if (favorites.indexed.any((e) => !identical(e.$2, _favorites[e.$1]))) {
+      _favorites = favorites;
+      unawaited(_saveFavorites());
+    }
+    final schedules = [for (final s in _schedules) _sanitizeSchedule(s)];
+    if (schedules.indexed.any((e) => !identical(e.$2, _schedules[e.$1]))) {
+      _schedules = schedules;
+      unawaited(_saveSchedules());
+    }
+    // Names shown by the fallback notification may have changed.
+    unawaited(_syncSchedules());
+
+    if (!settling) {
+      Breadcrumbs.add(
+        'catalogue publié : révision ${next.revision} appliquée (${catalog.landscapes.length} paysages, '
+        '${catalog.sounds.length} sons, ${catalog.music.length} musiques${active ? ', écoute en cours gardée' : ''})',
+      );
+      // New posters and sounds, like Premium remote media (Premium: everything for offline).
+      if (_plan.isPremium) {
+        unawaited(_prefetch(wifiOnly: _settings.wifiOnly));
+      } else {
+        unawaited(_prefetchPublishedPosters());
+      }
+    }
+    unawaited(_refreshPosters());
+    notifyListeners();
   }
 
   // ---------------------------------------------------------------------------
@@ -1543,12 +1726,13 @@ class RealAppModel extends AppModel implements PlaybackHost {
     _lastLink = text;
     _lastLinkAt = now;
     await _ready.future;
-    Scene? shared;
+    final Scene? Function() decode;
     final code = shareCodeFromUri(uri);
     if (code != null) {
       if (!_api.enabled) return;
       try {
-        shared = sceneFromSharedJson(await _api.getShare(code), _catalog);
+        final json = await _api.getShare(code);
+        decode = () => sceneFromSharedJson(json, _catalog);
       } on ApiException catch (e) {
         _emit(ToastEvent(e.status == 404 ? AppMessages.shareNotFound : AppMessages.shareOffline));
         return;
@@ -1557,8 +1741,12 @@ class RealAppModel extends AppModel implements PlaybackHost {
         return;
       }
     } else {
-      shared = sceneFromShareUri(uri, _catalog);
+      decode = () => sceneFromShareUri(uri, _catalog);
     }
+    var shared = decode();
+    // A landscape published since the last answer (contract § 13): the catalog is asked for
+    // once, then the link is read again.
+    if (shared == null && await _checkCatalogForLink()) shared = decode();
     if (shared == null) return;
     // The recipient keeps their own timer and sleep tracking, and hears the shared mix: a
     // shared scene never carries a mute (contract § 8).
@@ -1750,6 +1938,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
     _saveStateTimer?.cancel();
     await _store.deleteAll();
     await _content.clear();
+    await _catalogUpdates?.clear();
     await _api.forgetInstallation();
     _sources.clear();
     _posterIds.clear();
@@ -1784,6 +1973,11 @@ class RealAppModel extends AppModel implements PlaybackHost {
       // The wallpaper follows the plan: a landscape no longer allowed shows its still picture.
       addListener(_syncWallpaperAllowance);
       _syncWallpaperAllowance();
+    }
+    // Files of older revisions of published items (contract § 13), once at start: nothing
+    // plays them yet. The wallpaper's files stay (its process reads them from there).
+    if (_catalogUpdates?.current?.published ?? false) {
+      unawaited(_content.removeStaleFiles(keepLandscapes: {?wallpaper?.selected}));
     }
     await _problems?.load();
     if (!_events.isClosed && (wallpaper != null || _problems?.lastAbnormal != null)) notifyListeners();
@@ -1829,7 +2023,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
         landscapeId: landscapeId,
         name: landscape.name,
         video: await landscapeVideo(landscapeId),
-        downloadedPoster: _content.cachedPath(LandscapeMediaKeys.image(landscapeId)),
+        downloadedPoster: _content.cachedPath(_content.imageKey(landscapeId)),
       );
       Breadcrumbs.add('fond d’écran : $landscapeId → ${result.name}');
       return result;

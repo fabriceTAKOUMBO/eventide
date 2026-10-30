@@ -24,6 +24,7 @@ import '../services/audio/media_artwork.dart';
 import '../services/audio/playback_handler.dart';
 import '../services/audio/soloud_audio_engine.dart';
 import '../services/billing_service.dart';
+import '../services/catalog_updates.dart';
 import '../services/connectivity.dart';
 import '../services/content_repository.dart';
 import '../services/diagnostics.dart';
@@ -88,34 +89,17 @@ Future<Set<String>> _bundledAssets() async {
     return manifest
         .listAssets()
         .where((k) =>
-            k.startsWith('assets/audio/') || k.startsWith('assets/landscapes/') || k == _sceneRuntime)
+            k.startsWith('assets/audio/') ||
+            k.startsWith('assets/landscapes/') ||
+            k == LandscapeMediaKeys.sceneRuntime)
         .toSet();
   } catch (_) {
     return const {};
   }
 }
 
-/// Entry page of the 3D scenes' runtime (contract § 12).
-const String _sceneRuntime = 'assets/imaginaire/index.html';
-
-/// The catalog without the landscapes this phone can never show (contract § 12): a filmed
-/// landscape needs its video or its poster, bundled or on the content server (`remote.json`);
-/// a 3D scene needs the bundled runtime or its poster. In production, the landscapes made
-/// from test material (demo build only) are left out, and a theme left empty is hidden.
-Future<Catalog> _showableCatalog(Catalog catalog, Future<Set<String>> bundled) async {
-  final assets = await bundled;
-  final remote = await _remoteLandscapeMedia();
-  final runtime = assets.contains(_sceneRuntime);
-  return catalog.showing((l) {
-    final media = assets.contains(LandscapeMediaKeys.bundledVideo(l.id)) ||
-        assets.contains(LandscapeMediaKeys.bundledImage(l.id)) ||
-        remote.videos.contains(l.id) ||
-        remote.images.contains(l.id);
-    return media || (l.is3d && runtime);
-  });
-}
-
 /// Which Premium landscapes have a video or a poster on the content server (generated file).
+/// Replaced by the published catalog's `distant` once one was received (contract § 13).
 Future<RemoteLandscapeMedia> _remoteLandscapeMedia() async {
   try {
     return RemoteLandscapeMedia.fromJson(jsonDecode(await rootBundle.loadString(LandscapeMediaKeys.remoteManifest)));
@@ -146,6 +130,9 @@ Future<({PlaybackHandler handler, RealAppModel model})> startEventide() async {
   });
   final initial = WidgetsBinding.instance.lifecycleState;
   if (initial != null) model.handleLifecycle(initial);
+  // Published catalog (contract § 13): asked once the first screen is drawn, never before (the
+  // start never waits for it), then again on returns to the foreground (hourly at most).
+  WidgetsBinding.instance.addPostFrameCallback((_) => unawaited(model.startCatalogUpdates()));
   return (handler: handler, model: model);
 }
 
@@ -175,7 +162,7 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
   );
   if (Env.demoModeRequested) debugPrint('Eventide: demo mode ${demo ? 'on' : 'off (not the demo package)'}');
   final bundled = _bundledAssets();
-  final catalog = await _showableCatalog(await loadCatalog(), bundled);
+  final base = await loadCatalog();
   final support = await getApplicationSupportDirectory();
   // Problem report: the log file survives a crash; the exits recorded by Android are read once.
   unawaited(Breadcrumbs.log.attach(Directory('${support.path}/diagnostics')));
@@ -205,6 +192,17 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
     deviceSalt: Env.deviceHashSalt,
     cloudProjectNumber: Env.playCloudProjectNumber,
   );
+  // The catalog shown: the published one kept from an earlier launch (contract § 13), else the
+  // bundled one, without the landscapes this phone can never show (contract § 12). Without a
+  // backend, only the bundled one: nothing is read from a file or the network.
+  final catalogUpdates = CatalogUpdates(
+    api: api,
+    store: store,
+    base: base,
+    bundledRemote: await _remoteLandscapeMedia(),
+    bundledAssets: () => bundled,
+  );
+  final shown = await catalogUpdates.load();
   final connectivity = HttpConnectivityChecker(client: client, apiBaseUrl: Env.apiBaseUrl, native: native);
   final content = ContentRepository(
     directory: Directory('${support.path}/content'),
@@ -213,7 +211,7 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
     bundledAssets: () => bundled,
     connectivity: connectivity,
     devBaseUrl: Env.devContentBaseUrl,
-    remoteMedia: _remoteLandscapeMedia,
+    remoteMedia: () async => shown.remote,
   );
   // Pictures of the media card, kept in the app's cache folder (made again if Android empties it).
   final cache = await getTemporaryDirectory();
@@ -224,7 +222,7 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
       final data = await rootBundle.load(asset);
       return data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
     },
-    downloadedPoster: (id) => content.cachedPath(LandscapeMediaKeys.image(id)),
+    downloadedPoster: (id) => content.cachedPath(content.imageKey(id)),
   );
   // Live wallpaper of the landscape videos (files the wallpaper process reads).
   final wallpaper = LandscapeWallpaper(
@@ -241,7 +239,7 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
       ? DemoBilling()
       : PlayBilling(api: api, localAcknowledgement: Env.localPurchaseAcknowledgement);
   final model = RealAppModel(
-    catalog: catalog,
+    catalog: shown.catalog,
     store: store,
     handler: handler,
     content: content,
@@ -266,6 +264,7 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
     artwork: artwork,
     problems: problems,
     wallpaper: wallpaper,
+    catalogUpdates: catalogUpdates,
   );
   await model.init();
   return model;

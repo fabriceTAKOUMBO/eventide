@@ -186,6 +186,7 @@ class CatalogItem {
     required this.kind,
     this.landscapeId,
     this.events,
+    this.mediaRev,
   }) : aliases = List.unmodifiable(aliases);
 
   final String id;
@@ -200,6 +201,13 @@ class CatalogItem {
   final List<String> aliases;
 
   final LayerKind kind;
+
+  /// `media_rev` (contract § 13): revision of the files of an item published from the dashboard
+  /// (an integer >= 1, part of its content key). Null for an item of the bundled base.
+  final int? mediaRev;
+
+  /// Published from the dashboard (contract § 13), not part of the bundled base.
+  bool get isPublished => mediaRev != null;
 
   /// `paysage`: the landscape this sound belongs to (its ambiance, the sound of its video,
   /// contract § 11). « Mon mix » offers it only with that landscape. Null for every other item.
@@ -239,6 +247,7 @@ class CatalogItem {
       kind: kind,
       landscapeId: landscape is String && landscape.isNotEmpty ? landscape : null,
       events: events,
+      mediaRev: _mediaRev(json['media_rev']),
     );
   }
 
@@ -284,6 +293,7 @@ class Landscape {
     List<String> decorIds = const [],
     this.lightning = false,
     this.periodSeconds,
+    this.mediaRev,
   }) : aliases = List.unmodifiable(aliases),
        decorIds = List.unmodifiable(rendering == LandscapeRendering.scene3d ? decorIds : const <String>[]),
        defaultMix = Map.unmodifiable({
@@ -314,6 +324,13 @@ class Landscape {
 
   /// `periode_s` (3D scenes): the scene repeats exactly after this many seconds.
   final int? periodSeconds;
+
+  /// `media_rev` (contract § 13): revision of the video and poster of a landscape published from
+  /// the dashboard (part of their content keys). Null for a landscape of the bundled base.
+  final int? mediaRev;
+
+  /// Published from the dashboard (contract § 13), not part of the bundled base.
+  bool get isPublished => mediaRev != null;
 
   /// Default layers loaded with the landscape (`mix`), one list per kind.
   final Map<LayerKind, List<Layer>> defaultMix;
@@ -353,6 +370,7 @@ class Landscape {
       }.toList(),
       lightning: json['eclairs'] == true,
       periodSeconds: period is num && period > 0 ? period.round() : null,
+      mediaRev: _mediaRev(json['media_rev']),
     );
   }
 
@@ -422,7 +440,8 @@ class Limits {
   };
 }
 
-/// The closed catalog, read from `assets/catalog.json`.
+/// The closed catalog: the bundled base `assets/catalog.json`, plus the items published from the
+/// dashboard when the app has received them (contract § 13, [withPublished]).
 class Catalog {
   Catalog._({
     required this.version,
@@ -433,17 +452,38 @@ class Catalog {
     required List<CatalogItem> decors,
     required this.limits,
     Set<String> hiddenLandscapeIds = const {},
+    Set<String> withdrawnLandscapeIds = const {},
+    Map<LayerKind, Set<String>> withdrawnItemIds = const {},
+    List<Landscape> lingeringLandscapes = const [],
+    List<CatalogItem> lingeringItems = const [],
   }) : _hiddenLandscapeIds = Set.unmodifiable(hiddenLandscapeIds),
+       _withdrawnLandscapeIds = Set.unmodifiable(withdrawnLandscapeIds),
+       _withdrawnItemIds = Map.unmodifiable({
+         for (final e in withdrawnItemIds.entries) e.key: Set<String>.unmodifiable(e.value),
+       }),
+       _lingeringLandscapes = List.unmodifiable(lingeringLandscapes),
+       _lingeringItems = List.unmodifiable(lingeringItems),
        themes = List.unmodifiable(themes),
        landscapes = List.unmodifiable(landscapes),
        sounds = List.unmodifiable(sounds),
        music = List.unmodifiable(music),
        decors = List.unmodifiable(decors),
-       _landscapeById = {for (final l in landscapes) l.id: l},
+       _landscapeById = {
+         for (final l in lingeringLandscapes) l.id: l,
+         for (final l in landscapes) l.id: l,
+       },
        _itemById = {
-         LayerKind.son: {for (final i in sounds) i.id: i},
-         LayerKind.musique: {for (final i in music) i.id: i},
-         LayerKind.decor: {for (final i in decors) i.id: i},
+         for (final kind in LayerKind.values)
+           kind: {
+             for (final i in lingeringItems)
+               if (i.kind == kind) i.id: i,
+             for (final i in switch (kind) {
+               LayerKind.son => sounds,
+               LayerKind.musique => music,
+               LayerKind.decor => decors,
+             })
+               i.id: i,
+           },
        };
 
   /// Parses the catalog. Throws [FormatException] when a required field is
@@ -490,6 +530,33 @@ class Catalog {
     );
   }
 
+  /// A copy with some fields replaced; everything else (hidden, withdrawn and lingering ids)
+  /// is kept.
+  Catalog _copy({
+    List<ThemeInfo>? themes,
+    List<Landscape>? landscapes,
+    List<CatalogItem>? sounds,
+    List<CatalogItem>? music,
+    Set<String>? hiddenLandscapeIds,
+    Set<String>? withdrawnLandscapeIds,
+    Map<LayerKind, Set<String>>? withdrawnItemIds,
+    List<Landscape>? lingeringLandscapes,
+    List<CatalogItem>? lingeringItems,
+  }) => Catalog._(
+    version: version,
+    themes: themes ?? this.themes,
+    landscapes: landscapes ?? this.landscapes,
+    sounds: sounds ?? this.sounds,
+    music: music ?? this.music,
+    decors: decors,
+    limits: limits,
+    hiddenLandscapeIds: hiddenLandscapeIds ?? _hiddenLandscapeIds,
+    withdrawnLandscapeIds: withdrawnLandscapeIds ?? _withdrawnLandscapeIds,
+    withdrawnItemIds: withdrawnItemIds ?? _withdrawnItemIds,
+    lingeringLandscapes: lingeringLandscapes ?? _lingeringLandscapes,
+    lingeringItems: lingeringItems ?? _lingeringItems,
+  );
+
   /// The 2D landscapes drawn by the app until 29 October 2026, replaced by the 3D scenes of
   /// « Imaginaire » (contract § 12). A favourite, a schedule, a link or the saved scene that
   /// names one opens on [defaultLandscape], sounds, music and timer kept.
@@ -504,6 +571,176 @@ class Catalog {
     'lune-lac',
   };
 
+  /// Id of an item published from the dashboard (contract § 14: `[a-z0-9]+(-[a-z0-9]+)*`). It
+  /// names files on the phone (`content/<key>`), so nothing else is ever accepted.
+  static final RegExp _publishedId = RegExp(r'^[a-z0-9]+(?:-[a-z0-9]+)*$');
+
+  static bool _validPublishedId(String id) => id.length <= 64 && _publishedId.hasMatch(id);
+
+  /// This catalog (the bundled base) with the items of [received] that were published from the
+  /// dashboard (contract § 13), each appended after the base items of its list.
+  ///
+  /// The base is fixed: themes, decors, limits, 3D scenes and every base item keep their
+  /// bundled definition, whatever [received] says of them. A published item is an item of
+  /// [received] that is not in the base; it is left out (and named in `dropped`) when its id is
+  /// not a dashboard id, repeats an earlier one, or it has no valid `media_rev`; a published
+  /// landscape also when it is not filmed (`rendu: video`) or its theme is not a base theme of
+  /// filmed landscapes (`nature`, `urbain`: never the 3D scenes' `imaginaire`); a
+  /// published sound also when it is played by events (its variant files have no published key).
+  /// The default mix of a published landscape keeps only sounds and music of the result (never a
+  /// decor). Checking that [received] holds the whole base is the caller's job ([missingFrom]).
+  ({Catalog catalog, List<String> dropped}) withPublished(Catalog received) {
+    final dropped = <String>[];
+    final published = <LayerKind, List<CatalogItem>>{LayerKind.son: [], LayerKind.musique: []};
+    for (final kind in const [LayerKind.son, LayerKind.musique]) {
+      final seen = <String>{};
+      for (final candidate in received.items(kind)) {
+        final id = candidate.id;
+        if (item(kind, id) != null) continue;
+        final label = '${kind.cible} $id';
+        if (!seen.add(id)) {
+          dropped.add('$label (en double)');
+        } else if (!_validPublishedId(id)) {
+          dropped.add('$label (identifiant invalide)');
+        } else if (candidate.mediaRev == null) {
+          dropped.add('$label (media_rev absent)');
+        } else if (candidate.events != null) {
+          dropped.add('$label (son à événements)');
+        } else {
+          published[kind]!.add(candidate);
+        }
+      }
+    }
+    final known = <LayerKind, Set<String>>{
+      for (final kind in const [LayerKind.son, LayerKind.musique])
+        kind: {
+          for (final i in items(kind)) i.id,
+          for (final i in published[kind]!) i.id,
+        },
+    };
+    // Themes of filmed landscapes in the base (`nature`, `urbain`; never `imaginaire`, the 3D
+    // scenes' theme): a published landscape goes in one of them.
+    final themeIds = {
+      for (final l in landscapes)
+        if (!l.is3d && theme(l.themeId) != null) l.themeId,
+    };
+    final publishedLandscapes = <Landscape>[];
+    final seen = <String>{};
+    for (final candidate in received.landscapes) {
+      final id = candidate.id;
+      if (_landscapeById.containsKey(id)) continue;
+      final label = 'paysage $id';
+      if (!seen.add(id)) {
+        dropped.add('$label (en double)');
+      } else if (!_validPublishedId(id)) {
+        dropped.add('$label (identifiant invalide)');
+      } else if (candidate.mediaRev == null) {
+        dropped.add('$label (media_rev absent)');
+      } else if (candidate.rendering != LandscapeRendering.video) {
+        dropped.add('$label (pas un paysage filmé)');
+      } else if (!themeIds.contains(candidate.themeId)) {
+        dropped.add('$label (thème ${candidate.themeId} refusé)');
+      } else {
+        publishedLandscapes.add(Landscape(
+          id: id,
+          themeId: candidate.themeId,
+          name: candidate.name,
+          free: candidate.free,
+          aliases: candidate.aliases,
+          defaultMix: {
+            for (final kind in const [LayerKind.son, LayerKind.musique])
+              kind: [
+                for (final layer in candidate.defaultMix[kind] ?? const <Layer>[])
+                  if (known[kind]!.contains(layer.id)) layer,
+              ],
+          },
+          lightning: candidate.lightning,
+          mediaRev: candidate.mediaRev,
+        ));
+      }
+    }
+    if (publishedLandscapes.isEmpty && published.values.every((l) => l.isEmpty)) {
+      return (catalog: this, dropped: dropped);
+    }
+    return (
+      catalog: _copy(
+        landscapes: [...landscapes, ...publishedLandscapes],
+        sounds: [...sounds, ...published[LayerKind.son]!],
+        music: [...music, ...published[LayerKind.musique]!],
+      ),
+      dropped: dropped,
+    );
+  }
+
+  /// The ids of [base] (themes, landscapes, sounds, music, decors) missing from this catalog,
+  /// each named `<list>:<id>`. A published catalog that misses one is refused whole
+  /// (contract § 13: a withdrawal only concerns published items).
+  List<String> missingFrom(Catalog base) => [
+    for (final t in base.themes)
+      if (theme(t.id) == null) 'themes:${t.id}',
+    for (final l in base.landscapes)
+      if (!landscapes.any((x) => x.id == l.id)) 'paysages:${l.id}',
+    for (final kind in LayerKind.values)
+      for (final i in base.items(kind))
+        if (!items(kind).any((x) => x.id == i.id)) '${kind.catalogKey}:${i.id}',
+  ];
+
+  /// This catalog knowing that the published [landscapes] and [items] were withdrawn (contract
+  /// § 13): a favourite, a schedule, a link or a stored scene naming such a landscape opens on
+  /// [defaultLandscape] (like a retired one), and [sanitize] removes such a sound or music from
+  /// a mix. Ids still in this catalog (published again) are ignored.
+  Catalog withdrawing({
+    Set<String> landscapes = const {},
+    Map<LayerKind, Set<String>> items = const {},
+  }) {
+    final gone = {
+      for (final id in landscapes)
+        if (_landscapeById[id] == null) id,
+    };
+    final goneItems = <LayerKind, Set<String>>{
+      for (final e in items.entries)
+        if (e.key.isAudio)
+          e.key: {
+            for (final id in e.value)
+              if (item(e.key, id) == null) id,
+          },
+    };
+    if (gone.isEmpty && goneItems.values.every((s) => s.isEmpty)) return this;
+    return _copy(
+      withdrawnLandscapeIds: {..._withdrawnLandscapeIds, ...gone},
+      withdrawnItemIds: {
+        for (final kind in const [LayerKind.son, LayerKind.musique])
+          kind: {...?_withdrawnItemIds[kind], ...?goneItems[kind]},
+      },
+    );
+  }
+
+  /// This catalog plus, for lookups only, the landscape and the sounds and music of [scene] that
+  /// [previous] had and this catalog no longer has (withdrawn while the scene was being played,
+  /// contract § 13: never interrupted). They stay out of every list ([landscapes],
+  /// [landscapesOfTheme], [items]), so they disappear from the screens; [landscape] and [item]
+  /// still find them, so the scene keeps playing and its card and picture keep working. A
+  /// favourite, a schedule or a link that names such a landscape still opens on
+  /// [defaultLandscape] ([landscapeFor]).
+  Catalog keeping(Catalog previous, Scene scene) {
+    final kept = [
+      if (landscape(scene.landscapeId) == null) ?previous.landscape(scene.landscapeId),
+    ];
+    final keptItems = [
+      for (final kind in const [LayerKind.son, LayerKind.musique])
+        for (final layer in scene.layers(kind))
+          if (item(kind, layer.id) == null) ?previous.item(kind, layer.id),
+    ];
+    if (kept.isEmpty && keptItems.isEmpty) return this;
+    return _copy(
+      lingeringLandscapes: [..._lingeringLandscapes, ...kept],
+      lingeringItems: [..._lingeringItems, ...keptItems],
+    );
+  }
+
+  /// Some withdrawn items are only kept for the scene being played ([keeping]).
+  bool get hasLingering => _lingeringLandscapes.isNotEmpty || _lingeringItems.isNotEmpty;
+
   /// This catalog without the landscapes the app cannot show ([showable] false: a filmed
   /// landscape with neither its video nor its still picture on the phone or on the content
   /// server). A theme left without landscape is hidden (contract § 12); a stored scene naming a
@@ -516,17 +753,12 @@ class Catalog {
     ];
     if (kept.length == landscapes.length) return this;
     final themeIds = {for (final l in kept) l.themeId};
-    return Catalog._(
-      version: version,
+    return _copy(
       themes: [
         for (final t in themes)
           if (themeIds.contains(t.id)) t,
       ],
       landscapes: kept,
-      sounds: sounds,
-      music: music,
-      decors: decors,
-      limits: limits,
       hiddenLandscapeIds: {
         ..._hiddenLandscapeIds,
         for (final l in landscapes)
@@ -551,15 +783,43 @@ class Catalog {
   /// Landscapes of the full catalog left out by [showing].
   final Set<String> _hiddenLandscapeIds;
 
+  /// Published landscapes and items withdrawn from the dashboard ([withdrawing]).
+  final Set<String> _withdrawnLandscapeIds;
+  final Map<LayerKind, Set<String>> _withdrawnItemIds;
+
+  /// Withdrawn items still being played ([keeping]): found by id, never listed.
+  final List<Landscape> _lingeringLandscapes;
+  final List<CatalogItem> _lingeringItems;
+
+  /// The landscape [id] (also one withdrawn while being played, see [keeping]), or null.
   Landscape? landscape(String id) => _landscapeById[id];
 
-  /// The landscape a stored or shared landscape id opens on (contract § 12): itself, or
-  /// [defaultLandscape] for a retired landscape (or one this phone cannot show). Null for any
-  /// other unknown id.
+  /// [landscapeId] is in the lists of the catalog (shown on the screens), not only kept for the
+  /// scene being played ([keeping]).
+  bool lists(String landscapeId) {
+    final found = _landscapeById[landscapeId];
+    return found != null && !_lingeringLandscapes.contains(found);
+  }
+
+  /// [id] is in the [kind] list of the catalog, not only kept for the scene being played
+  /// ([keeping]).
+  bool listsItem(LayerKind kind, String id) {
+    final found = _itemById[kind]![id];
+    return found != null && !_lingeringItems.contains(found);
+  }
+
+  /// The landscape a stored or shared landscape id opens on (contract § 12, § 13): itself, or
+  /// [defaultLandscape] for a retired landscape, a withdrawn published one (even while it is
+  /// still being played, [keeping]), or one this phone cannot show. Null for any other unknown
+  /// id.
   Landscape? landscapeFor(String id) {
-    final known = _landscapeById[id];
-    if (known != null) return known;
-    if (retiredLandscapeIds.contains(id) || _hiddenLandscapeIds.contains(id)) return defaultLandscape;
+    if (lists(id)) return _landscapeById[id];
+    if (_landscapeById.containsKey(id) ||
+        retiredLandscapeIds.contains(id) ||
+        _hiddenLandscapeIds.contains(id) ||
+        _withdrawnLandscapeIds.contains(id)) {
+      return defaultLandscape;
+    }
     return null;
   }
 
@@ -575,10 +835,11 @@ class Catalog {
       if (item(LayerKind.decor, id) case final CatalogItem decor) decor,
   ];
 
-  /// [scene] in line with the catalog (contract § 12), or null when its landscape is unknown:
-  /// a retired landscape is replaced by [defaultLandscape] (sounds, music, timer, moment and
-  /// mutes kept), and the decor keeps only the elements that apply to the landscape. Returns
-  /// the same instance when nothing changes.
+  /// [scene] in line with the catalog (contract § 12, § 13), or null when its landscape is
+  /// unknown: a retired or withdrawn landscape is replaced by [defaultLandscape] (sounds, music,
+  /// timer, moment and mutes kept), a withdrawn published sound or music is removed, and the
+  /// decor keeps only the elements that apply to the landscape. Returns the same instance when
+  /// nothing changes.
   Scene? sanitize(Scene scene) {
     final landscape = landscapeFor(scene.landscapeId);
     if (landscape == null) return null;
@@ -586,13 +847,31 @@ class Catalog {
       for (final layer in scene.decor)
         if (landscape.allowsDecor(layer.id)) layer,
     ];
-    if (landscape.id == scene.landscapeId && decor.length == scene.decor.length) return scene;
-    return scene.copyWith(landscapeId: landscape.id, decor: decor);
+    List<Layer> audio(LayerKind kind) {
+      final gone = _withdrawnItemIds[kind];
+      final layers = scene.layers(kind);
+      if (gone == null || gone.isEmpty) return layers;
+      return [
+        for (final layer in layers)
+          if (!gone.contains(layer.id)) layer,
+      ];
+    }
+
+    final sounds = audio(LayerKind.son);
+    final music = audio(LayerKind.musique);
+    if (landscape.id == scene.landscapeId &&
+        decor.length == scene.decor.length &&
+        sounds.length == scene.sounds.length &&
+        music.length == scene.music.length) {
+      return scene;
+    }
+    return scene.copyWith(landscapeId: landscape.id, decor: decor, sounds: sounds, music: music);
   }
 
   /// Number of landscapes of the free plan (« 2 en gratuit »).
   int get freeLandscapeCount => landscapes.where((l) => l.free).length;
 
+  /// The item [id] of [kind] (also one withdrawn while being played, see [keeping]), or null.
   CatalogItem? item(LayerKind kind, String id) => _itemById[kind]![id];
 
   List<CatalogItem> items(LayerKind kind) => switch (kind) {
@@ -638,6 +917,9 @@ String _string(Map<String, dynamic> json, String key) {
   }
   return value;
 }
+
+/// `media_rev`: an integer >= 1, or null (absent, or anything else).
+int? _mediaRev(Object? value) => value is int && value >= 1 ? value : null;
 
 List<String> _stringList(Object? value) => value is List
     ? [

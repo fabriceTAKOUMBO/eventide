@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:eventide/core/catalog.dart';
 import 'package:eventide/core/landscape_media.dart';
+import 'package:eventide/core/published_catalog.dart';
 import 'package:eventide/services/api_client.dart';
 import 'package:eventide/services/audio/audio_engine.dart';
 import 'package:eventide/services/connectivity.dart';
@@ -13,6 +14,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 import 'fakes.dart';
+import 'published_fixtures.dart';
 
 void main() {
   late Directory dir;
@@ -266,6 +268,113 @@ void main() {
       expect(count, audioFileCount(catalog) + 1);
       expect(fetched.map((u) => u.path), contains('/images/paysages/pluie-ville.jpg'));
       expect(fetched.map((u) => u.path), isNot(contains('/videos/paysages/pluie-ville.mp4')));
+    });
+  });
+
+  group('published items (contract § 13)', () {
+    final published = PublishedCatalog.parse(
+      catalogResponse(
+        landscapes: [lacBrume(free: true)],
+        sounds: [ambianceLacBrume(free: true)],
+      ),
+      loadTestCatalog(),
+    );
+
+    ContentRepository publishedRepo({ConnectivityChecker? connectivity}) =>
+        build(backend: true, remote: published.distant, connectivity: connectivity)..useCatalog(published.catalog);
+
+    test('keys carry the revision: a sound, a music, a video, a poster', () async {
+      final repo = publishedRepo();
+      expect(repo.audioKey(LayerKind.son, 'ambiance-lac-brume'), 'audio/sons/ambiance-lac-brume.v2.ogg');
+      expect(repo.audioKey(LayerKind.musique, 'harpe-celeste'), 'audio/musiques/harpe-celeste.v1.ogg');
+      expect(repo.videoKey('lac-brume'), 'videos/paysages/lac-brume.v2.mp4');
+      expect(repo.imageKey('lac-brume'), 'images/paysages/lac-brume.v2.jpg');
+      // Base items and variants of event sounds keep today's keys.
+      expect(repo.audioKey(LayerKind.son, 'vagues'), 'audio/sons/vagues.ogg');
+      expect(repo.audioKey(LayerKind.son, 'tonnerre-coup-01'), 'audio/sons/tonnerre-coup-01.ogg');
+      expect(repo.videoKey('pluie-ville'), 'videos/paysages/pluie-ville.mp4');
+      final source = await repo.resolve(LayerKind.son, 'ambiance-lac-brume', allowNetwork: true);
+      expect(fetched.map((u) => u.toString()), [
+        'https://api.test/v1/content/urls',
+        'https://cdn.test/audio/sons/ambiance-lac-brume.v2.ogg?sig=1',
+      ]);
+      expect(source, FileAudioSource(repo.cachedPath('audio/sons/ambiance-lac-brume.v2.ogg')));
+      expect(await repo.isAvailableOffline(LayerKind.son, 'ambiance-lac-brume'), isTrue);
+    });
+
+    test('a new revision is a new key, hence a new download', () async {
+      final repo = publishedRepo();
+      await repo.resolve(LayerKind.son, 'ambiance-lac-brume', allowNetwork: true);
+      final next = PublishedCatalog.parse(
+        catalogResponse(revision: 8, sounds: [ambianceLacBrume(free: true, rev: 3)]),
+        loadTestCatalog(),
+      );
+      repo.useCatalog(next.catalog, remote: next.distant);
+      expect(await repo.isAvailableOffline(LayerKind.son, 'ambiance-lac-brume'), isFalse);
+      fetched.clear();
+      await repo.resolve(LayerKind.son, 'ambiance-lac-brume', allowNetwork: true);
+      expect(fetched.last.path, '/audio/sons/ambiance-lac-brume.v3.ogg');
+    });
+
+    test('the free path: a free published landscape is downloaded (poster, then video)', () async {
+      final repo = publishedRepo();
+      expect(await repo.landscapeImage('lac-brume', allowDownload: true, wifiOnly: false), endsWith('/lac-brume.v2.jpg'));
+      expect(
+        await repo.landscapeVideo('lac-brume', allowDownload: true, wifiOnly: false),
+        FileLandscapeVideo(repo.cachedPath('videos/paysages/lac-brume.v2.mp4')),
+      );
+      expect(await repo.downloadedLandscapeImages(), {'lac-brume'});
+      // The poster of an older revision does not count as downloaded.
+      final next = PublishedCatalog.parse(catalogResponse(revision: 8, landscapes: [lacBrume(rev: 3)]), loadTestCatalog());
+      repo.useCatalog(next.catalog, remote: next.distant);
+      expect(await repo.downloadedLandscapeImages(), isEmpty);
+    });
+
+    test('background posters of published landscapes: only those on the server, Wi-Fi respected', () async {
+      final connectivity = FakeConnectivity(unmetered: false);
+      final repo = publishedRepo(connectivity: connectivity);
+      expect(await repo.prefetchPosters(['lac-brume'], wifiOnly: true), 0);
+      expect(fetched, isEmpty);
+      connectivity.unmetered = true;
+      expect(await repo.prefetchPosters(['lac-brume', 'pas-sur-le-serveur'], wifiOnly: true), 1);
+      expect(fetched.last.path, '/images/paysages/lac-brume.v2.jpg');
+      expect(await repo.prefetchPosters(['lac-brume'], wifiOnly: true), 0, reason: 'already on the phone');
+    });
+
+    test('files of older revisions go at start; current, base, wallpaper and other files stay', () async {
+      final repo = publishedRepo();
+      final content = '${dir.path}/content';
+      void put(String key) => File('$content/$key')
+        ..createSync(recursive: true)
+        ..writeAsStringSync('x');
+      const keep = [
+        'audio/sons/ambiance-lac-brume.v2.ogg',
+        'audio/sons/vagues.ogg',
+        'audio/musiques/harpe-celeste.v1.ogg',
+        'videos/paysages/lac-brume.v2.mp4',
+        'images/paysages/pluie-ville.jpg',
+        'images/paysages/lac-brume.v2.jpg.part',
+        'videos/paysages/fond-ecran.v1.mp4',
+        'images/paysages/fond-ecran.v1.jpg',
+      ];
+      const stale = [
+        'audio/sons/ambiance-lac-brume.v1.ogg',
+        'audio/musiques/retiree.v4.ogg',
+        'videos/paysages/lac-brume.v1.mp4',
+        'images/paysages/lac-brume.v1.jpg',
+      ];
+      for (final key in [...keep, ...stale]) {
+        put(key);
+      }
+      expect(await repo.removeStaleFiles(keepLandscapes: {'fond-ecran'}), stale.length);
+      for (final key in keep) {
+        expect(File('$content/$key').existsSync(), isTrue, reason: key);
+      }
+      for (final key in stale) {
+        expect(File('$content/$key').existsSync(), isFalse, reason: key);
+      }
+      // Without a catalog (nothing known of the revisions), nothing goes.
+      expect(await build().removeStaleFiles(), 0);
     });
   });
 }
