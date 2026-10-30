@@ -526,16 +526,16 @@ Mesures (`node tools/imaginaire/render.js stats`, Chromium sans écran, WebGL lo
 
 | Scène | Appels de dessin (sans décor / défaut / tout à 100) | Triangles (défaut / tout à 100) | Points (défaut) | Programmes (défaut) | Temps logiciel par image, 540 × 1170 |
 |---|---|---|---|---|---|
-| `foret-lucioles` (v2, § 20.7) | 41 / 42 / 45 | 480 102 / 483 142 | 248 | 21 | 1 891 ms (`low` : 966 ms) |
-| `lac-lune` | 15 / 23 / 28 | 5 474 / 5 498 | 3 254 | 7 | 146 ms |
-| `aurore` | 19 / 22 / 30 | 8 658 / 8 694 | 5 272 | 8 | 166 ms |
-| `jardin-zen` | 33 / 37 / 44 | 41 272 / 43 484 | 990 | 12 | 149 ms |
-| `mer-nuages` | 7 / 10 / 15 | 3 757 / 3 775 | 0 | 8 | 392 ms |
-| `ondes` | 2 / 3 / 6 | 960 / 2 764 | 32 876 | 3 | 32 ms |
+| `foret-lucioles` (v2, § 20.7) | 41 / 42 / 44 | 480 102 / 482 702 | 248 | 21 | 2 132 ms (`low` : 966 ms) |
+| `lac-lune` (v2) | 41 / 42 / 45 | 243 432 / 243 444 | 1 167 | 13 | 952 ms |
+| `aurore` (v2) | 42 / 44 / 45 | 242 052 / 242 064 | 3 420 | 13 | 913 ms |
+| `jardin-zen` (v2) | 63 / 69 / 70 | 239 852 / 242 252 | 320 | 23 | 1 642 ms |
+| `mer-nuages` (v2) | 21 / 24 / 26 | 108 045 / 108 057 | 0 | 15 | 765 ms |
+| `ondes` (v2) | 13 / 14 / 15 | 33 970 / 35 370 | 30 200 | 8 | 187 ms |
 
-Les appels de dessin comptent le reflet de l'eau (`lac-lune`, `aurore`, `jardin-zen` dessinent la scène deux fois) et, pour la forêt, la carte d'ombre de la lune et les 10 passes de la finition HDR. Toutes les scènes restent sous 50 appels, loin du budget de 150 ; les autres scènes sous 45 000 triangles, la forêt v2 à 480 000 (dont 156 000 pour la carte d'ombre).
+Mesures du 30 octobre 2026, versions 2 des six scènes. Les appels de dessin comptent les 10 passes de la finition HDR (les six scènes), le reflet de l'eau (`lac-lune`, `aurore`, `jardin-zen` dessinent la scène deux fois) et, pour la forêt, la carte d'ombre de la lune redessinée à chaque image. Toutes les scènes restent sous 75 appels (le jardin, le plus chargé, à 70), loin du budget de 150 ; de 34 000 triangles (ondes) à 243 000 (lac, aurore, jardin), la forêt à 480 000 (dont 156 000 pour la carte d'ombre). Cibles de la finition : identiques pour les six (HDR demi-flottante MSAA 4× et bloom, voir § 20.7).
 
-Le temps logiciel n'est qu'un **indicateur relatif** du coût GPU (un GPU de téléphone est de l'ordre de 50 à 100 fois plus rapide que SwiftShader sur 4 cœurs). La forêt v2 (vraie géométrie, matériaux physiques, finition HDR) est de loin la plus coûteuse, puis la mer de nuages (recouvrement de 1 300 nuages) ; `quality: 'low'` les allège.
+Le temps logiciel n'est qu'un **indicateur relatif** du coût GPU (un GPU de téléphone est de l'ordre de 50 à 100 fois plus rapide que SwiftShader sur 4 cœurs). La forêt (2,1 s) et le jardin (1,6 s) sont les plus coûteuses, puis le lac, l'aurore et la mer de nuages (0,8 à 0,95 s), enfin les ondes (0,19 s) ; les versions 1, sans finition HDR, coûtaient de 32 à 392 ms. `quality: 'low'` les allège.
 
 ### 20.5 Image fixe et boucle de fond d'écran
 
@@ -550,26 +550,26 @@ Mesures (`node tools/imaginaire/render.js seam`, H.264 High, yuv420p, 1080 × 19
 | Scène | Boucle | Taille | CRF | Image fixe | Raccord du master (dernière → première / pas médian) | Raccord publié / pas médian aux images clés |
 |---|---|---|---|---|---|---|
 | `foret-lucioles` (v2) | embarquée | 3,43 Mo | 36 | 172 Ko | 1,16 | 1,16 |
-| `lac-lune` | S3 | 2,23 Mo | 31 | 99 Ko | 0,96 | 1,03 |
-| `aurore` | S3 | 2,83 Mo | 31 | 86 Ko | 1,19 | 1,12 |
-| `jardin-zen` | S3 | 2,49 Mo | 30 | 117 Ko | 1,18 | 1,11 |
-| `mer-nuages` | S3 | 2,20 Mo | 28 | 71 Ko | 1,08 | 1,14 |
-| `ondes` | S3 | 3,77 Mo | 32 | 83 Ko | 1,11 | 1,07 |
+| `lac-lune` (v2) | S3 | 2,95 Mo | 31 | 88 Ko | 1,24 | 1,10 |
+| `aurore` (v2) | S3 | 3,03 Mo | 31 | 112 Ko | 1,19 | 1,13 |
+| `jardin-zen` (v2) | S3 | 3,48 Mo | 32 | 133 Ko | 1,18 | 1,17 |
+| `mer-nuages` (v2) | S3 | 3,93 Mo | 35 | 139 Ko | 0,98 | 1,04 |
+| `ondes` (v2) | S3 | 2,84 Mo | 31 | 69 Ko | 1,21 | 1,18 |
 
-- **Raccord** : écart moyen (gris, 270 × 480) entre la dernière et la première image, rapporté à l'écart médian entre deux images consécutives ; 1 signifie que le passage de 30 s à 0 s ressemble à n'importe quel autre pas. Dans le master sans perte, le raccord est partout inférieur au plus grand pas ordinaire de la boucle. Dans la vidéo publiée, la première image est une image clé : le raccord se compare donc aux autres passages sur une image clé (toutes les 2 s), qui portent le même petit saut d'encodage.
-- **Taille** : l'encodeur prend le plus petit CRF (au plus 30) qui tient dans 2,5 Mo (contrat § 8) ; sinon le plus petit qui tient dans 4 Mo. `aurore` (voiles fins qui bougent sur tout le ciel) et `ondes` (32 000 points en mouvement) dépassent 2,5 Mo sans dépasser 4 Mo : à 2,5 Mo (CRF 33 et 36), les voiles se lissent en aplats et les points lointains s'effacent. C'est un écart au contrat § 8, à trancher par le product owner : l'accepter (et l'écrire au contrat) ou réencoder avec `render.js video --reuse-master --strict --scene aurore,ondes`.
-- **Forêt v2** : la vraie géométrie (aiguilles, fougères) bouge avec la caméra à chaque image ; même sans grain, la boucle ne tient dans 4 Mo qu'au CRF 36 (3,43 Mo), et dans 2,5 Mo vers le CRF 39 (images nettement dégradées). Un léger flou avant l'encodage, ou deux fois moins de mouvement de caméra, n'y changent presque rien (−17 % au mieux). C'est le même écart au contrat § 8 que `aurore` et `ondes`, sur un fichier **embarqué** (+1,1 Mo dans l'APK par rapport à la v1). Les images clés (toutes les 2 s) rafraîchissent ce que les images P ont perdu : leur saut moyen vaut 3,5 fois un pas ordinaire (comme les autres boucles, mais plus fort au CRF 36).
-- **Image fixe** : la première image décodée de la vidéo, en JPEG (écart moyen à cette image : 0,17 à 0,31 sur 255).
+- **Raccord** : écart moyen (gris, 270 × 480) entre la dernière et la première image, rapporté à l'écart médian entre deux images consécutives ; 1 signifie que le passage de 30 s à 0 s ressemble à n'importe quel autre pas. Dans le master sans perte, le raccord est partout inférieur au plus grand pas ordinaire de la boucle. La mer de nuages v2 ne l'était pas au premier rendu (1,60, au-delà du plus grand pas) : le relief fin des nuages glissait avec le temps sans boucler et sautait à la fin de chaque période, en direct aussi ; il suit désormais les deux copies du champ en fondu enchaîné (30 octobre 2026). Dans la vidéo publiée, la première image est une image clé : le raccord se compare donc aux autres passages sur une image clé (toutes les 2 s), qui portent le même petit saut d'encodage.
+- **Taille** : l'encodeur prend le plus petit CRF (au plus 30) qui tient dans 2,5 Mo ; sinon le plus petit qui tient dans 4 Mo, le plafond d'une scène 3D (contrat § 8, décision du 30 octobre 2026). Les six boucles v2 (vraie géométrie qui bouge avec la caméra, finition HDR) dépassent 2,5 Mo et tiennent entre 2,8 et 3,9 Mo ; la mer de nuages, dont toute la surface bouge, demande le CRF 35 (le relief le plus fin des nuages s'adoucit un peu).
+- **Forêt v2** : la vraie géométrie (aiguilles, fougères) bouge avec la caméra à chaque image ; même sans grain, la boucle ne tient dans 4 Mo qu'au CRF 36 (3,43 Mo), et dans 2,5 Mo vers le CRF 39 (images nettement dégradées). Un léger flou avant l'encodage, ou deux fois moins de mouvement de caméra, n'y changent presque rien (−17 % au mieux). Le contrat § 8 le permet depuis le 30 octobre 2026 (4 Mo pour une scène 3D) ; c'est un fichier **embarqué** (+1,1 Mo dans l'APK par rapport à la v1). Les images clés (toutes les 2 s) rafraîchissent ce que les images P ont perdu : leur saut moyen vaut 3,5 fois un pas ordinaire (comme les autres boucles, mais plus fort au CRF 36).
+- **Image fixe** : la première image décodée de la vidéo, en JPEG (écart moyen à cette image : 0,15 à 0,32 sur 255).
 
 ### 20.6 À vérifier sur le Galaxy S24
 
 1. Chaque scène s'affiche en moins d'une seconde, sans image noire (l'app garde l'image fixe jusqu'au message `ready`).
 2. 30 i/s stables dans les six scènes, décor par défaut puis tous les éléments à 100 ; message `stats` toutes les 10 s.
-3. Téléphone tiède mais pas chaud après 30 min sur la forêt et la mer de nuages (les deux plus coûteuses) ; sinon `quality: 'low'`.
+3. Téléphone tiède mais pas chaud après 30 min sur la forêt et le jardin zen (les deux plus coûteuses) ; sinon `quality: 'low'`.
 4. Transitions d'un élément de 0 à 100 et retour : douces, environ 1 s.
 5. Pause : plus aucune consommation GPU (la boucle s'arrête).
 6. Fond d'écran animé : la boucle repart sans saut visible.
-7. Forêt (finition HDR, § 20.7) : pas de message `error` au démarrage (cible demi-flottante et MSAA acceptés par le pilote), 30 i/s en `high` après 2 min, téléphone tiède après 30 min ; sinon `low`, et le noter ici.
+7. Les six scènes (finition HDR, § 20.7) : pas de message `error` au démarrage (cible demi-flottante et MSAA acceptés par le pilote), 30 i/s en `high` après 2 min, téléphone tiède après 30 min, aucun bloc noir (pixels NaN, voir `post.js`) ; sinon `low`, et le noter ici.
 
 ### 20.7 Forêt aux lucioles, version 2 (rendu HDR)
 
