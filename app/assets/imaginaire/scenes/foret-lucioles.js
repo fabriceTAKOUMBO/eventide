@@ -721,7 +721,7 @@
   // ------------------------------------------------------------------ scene
   E.register({
     id: 'foret-lucioles',
-    decors: ['lucioles', 'brume', 'feuilles', 'pluie', 'etoiles'],
+    decors: ['lucioles', 'brume', 'pluie', 'etoiles'],
     defaults: { lucioles: 60, brume: 30 },
     post: true,
 
@@ -1479,88 +1479,6 @@
       rain.frustumCulled = false;
       rain.renderOrder = 23;
 
-      // leaves: lit, two-sided, translucent against the moon, tumbling down
-      var leafCount = 110;
-      var leafGeo = new THREE.InstancedBufferGeometry();
-      var lpos = [], luv = [], lnor = [], lidx = [];
-      for (var ly = 0; ly <= 2; ly++) {
-        for (var lx = 0; lx <= 1; lx++) {
-          var cu = lx * 2 - 1, cv = ly / 2;
-          lpos.push(cu * 0.5, cv - 0.5, cu * cu * 0.08 - Math.sin(cv * Math.PI) * 0.06);
-          lnor.push(0, 0, 1);
-          luv.push(lx, cv);
-        }
-      }
-      lidx.push(0, 1, 2, 1, 3, 2, 2, 3, 4, 3, 5, 4);
-      leafGeo.setAttribute('position', new THREE.Float32BufferAttribute(lpos, 3));
-      leafGeo.setAttribute('normal', new THREE.Float32BufferAttribute(lnor, 3));
-      leafGeo.setAttribute('uv', new THREE.Float32BufferAttribute(luv, 2));
-      leafGeo.setIndex(lidx);
-      var la = [], lb = [], lc = [], ld = [];
-      var lq = ctx.rng('leaves');
-      for (var li = 0; li < leafCount; li++) {
-        la.push(lq(), lq(), lq(), lq());                                                            // x, z, phase, rank
-        lb.push(1 + Math.floor(lq() * 2), 2 + Math.floor(lq() * 3), 3 + Math.floor(lq() * 4), 1 + Math.floor(lq() * 3)); // fall, spin, flutter, sway
-        lc.push(lq(), lq(), lq(), lq());                                                            // axis, phases
-        ld.push(0.09 + lq() * 0.05, lq(), 0.25 + lq() * 0.4, 0);                                 // size, colour, sway amp
-      }
-      leafGeo.setAttribute('aA', new THREE.InstancedBufferAttribute(new Float32Array(la), 4));
-      leafGeo.setAttribute('aB', new THREE.InstancedBufferAttribute(new Float32Array(lb), 4));
-      leafGeo.setAttribute('aC', new THREE.InstancedBufferAttribute(new Float32Array(lc), 4));
-      leafGeo.setAttribute('aD', new THREE.InstancedBufferAttribute(new Float32Array(ld), 4));
-      leafGeo.instanceCount = leafCount;
-      var leafLevel = { value: 0 };
-      var leafMat = pbr(THREE.MeshStandardMaterial, {
-        color: 0xffffff, roughness: 0.65, metalness: 0, map: leafTex, alphaTest: 0.5, alphaToCoverage: quality === 'high',
-        side: THREE.DoubleSide,
-      }, {
-        key: 'leaves',
-        env: 0.8,
-        uniforms: { uLevel: leafLevel, uDensity: ctx.uniforms.uDensity },
-        vertexPars: [
-          'uniform float uLevel; uniform float uDensity;',
-          'attribute vec4 aA; attribute vec4 aB; attribute vec4 aC; attribute vec4 aD;',
-          'varying float vLeafMix;',
-          'mat3 foRot(vec3 a, float ang) {',
-          '  float s = sin(ang); float c = cos(ang); float oc = 1.0 - c;',
-          '  return mat3(oc * a.x * a.x + c, oc * a.x * a.y + a.z * s, oc * a.z * a.x - a.y * s,',
-          '              oc * a.x * a.y - a.z * s, oc * a.y * a.y + c, oc * a.y * a.z + a.x * s,',
-          '              oc * a.z * a.x + a.y * s, oc * a.y * a.z - a.x * s, oc * a.z * a.z + c);',
-          '}',
-        ].join('\n'),
-        normalVertex: [
-          'float foTh = aC.x * EV_TAU; float foEl = (aC.y - 0.5) * 2.4;',
-          'vec3 foAxis = normalize(vec3(sin(foTh) * cos(foEl), sin(foEl), cos(foTh) * cos(foEl)));',
-          'float foAng = EV_TAU * (aB.y * uTime / EV_PERIOD + aC.z);',
-          'float foFl = 0.6 * sin(EV_TAU * (aB.z * uTime / EV_PERIOD + aC.w));',
-          'mat3 foR = foRot(foAxis, foAng) * foRot(vec3(1.0, 0.0, 0.0), foFl);',
-          'objectNormal = foR * objectNormal;',
-        ].join('\n'),
-        vertex: [
-          'float foPh = fract(aA.z + aB.x * uTime / EV_PERIOD);',
-          'vec3 foMin = vec3(-3.4, -0.3, -12.0), foMax = vec3(3.4, 7.5, 4.6);',
-          'vec3 foP = vec3(mix(foMin.x, foMax.x, aA.x), mix(foMax.y, foMin.y, foPh), mix(foMin.z, foMax.z, aA.y));',
-          'float foT = EV_TAU * uTime / EV_PERIOD;',
-          'foP.x += aD.z * sin(foT * aB.w + aC.z * EV_TAU) + 0.8 * sin((8.0 - foP.z) * 0.05);',
-          'foP.z += aD.z * 0.5 * cos(foT * aB.w + aC.w * EV_TAU);',
-          'float foPresent = clamp((uLevel * uDensity * 1.12 - aA.w) / 0.12, 0.0, 1.0);',
-          'float foEnv = smoothstep(0.0, 0.05, foPh) * smoothstep(1.0, 0.95, foPh);',
-          'transformed = foP + foR * (position * aD.x * foPresent * foEnv);',
-          'vLeafMix = aD.y;',
-        ].join('\n'),
-        fragmentPars: 'varying float vLeafMix;',
-        map: [
-          'vec4 foTx = texture2D(map, vMapUv);',
-          'vec3 foLc = vLeafMix < 0.5 ? mix(vec3(0.20, 0.08, 0.02), vec3(0.36, 0.18, 0.03), vLeafMix * 2.0) : mix(vec3(0.36, 0.18, 0.03), vec3(0.28, 0.26, 0.05), vLeafMix * 2.0 - 1.0);',
-          'diffuseColor.rgb *= foLc * mix(0.35, 0.65, foTx.r);',
-          'diffuseColor.a *= foTx.a;',
-        ].join('\n'),
-        light: translucency(0.45, [1.0, 0.85, 0.45]),
-      });
-      var leaves = new THREE.Mesh(leafGeo, leafMat);
-      leaves.frustumCulled = false;
-      leaves.receiveShadow = true;
-
       var stars = D.etoiles(ctx, {
         count: quality === 'high' ? 1100 : 700, azimuth: [4, 38], elevation: [10, 78], size: 1.15, brightness: 6.0,
         tint: ['#cfe0ff', '#f6efe0'],
@@ -1570,11 +1488,9 @@
       var decors = {
         lucioles: levelOnly(fireflies, [ffMat.uniforms]),
         brume: levelOnly(new THREE.Group(), [], function (v) { applyMist(v); }),
-        feuilles: { object: leaves, setLevel: function (v) { leafLevel.value = v; } },
         pluie: levelOnly(rain, [rainMat.uniforms], function (v) { shared.uWet.value = v; }),
         etoiles: stars,
       };
-      leaves.visible = false;
       Object.keys(decors).forEach(function (id) { scene.add(decors[id].object); });
 
       var mistLevel = 0;

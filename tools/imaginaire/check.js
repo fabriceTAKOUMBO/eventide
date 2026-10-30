@@ -13,7 +13,7 @@ const { chromium } = require('playwright');
 const { start } = require('./serve');
 
 const ALLOWED = {
-  'foret-lucioles': ['lucioles', 'brume', 'feuilles', 'pluie', 'etoiles'],
+  'foret-lucioles': ['lucioles', 'brume', 'pluie', 'etoiles'],
   'lac-lune': ['brume', 'etoiles', 'etoiles-filantes', 'lucioles', 'neige'],
   aurore: ['neige', 'etoiles', 'etoiles-filantes', 'brume'],
   'jardin-zen': ['petales', 'rayons-soleil', 'brume', 'pluie'],

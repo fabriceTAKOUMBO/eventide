@@ -449,7 +449,7 @@ Messages vers l'application par le canal JavaScript `EventideScene` (JSON) : `{"
 
 | id | Scène | Décors permis (défaut) |
 |---|---|---|
-| `foret-lucioles` (gratuite) | Sentier dans une forêt d'épicéas, la nuit : lune basse dans la brume, rayons entre les branches, fougères, rochers moussus, tronc couché, lucioles ; vraie forêt 3D et finition HDR (§ 20.7) | lucioles 60, brume 30, feuilles, pluie, étoiles |
+| `foret-lucioles` (gratuite) | Sentier dans une forêt d'épicéas, la nuit : lune basse dans la brume, rayons entre les branches, fougères, rochers moussus, tronc couché, lucioles ; vraie forêt 3D et finition HDR (§ 20.7) | lucioles 60, brume 30, pluie, étoiles (pas de feuilles qui tombent : incohérent dans une forêt d'épicéas, décision du product owner) |
 | `lac-lune` | Lac de montagne la nuit : grande lune voilée de nuages fins, chaînes de montagnes bleues, rive de sapins, reflet réel dans l'eau ridée, chemin de reflets de lune, roseaux | étoiles 60, brume 30, étoiles filantes, lucioles, neige |
 | `aurore` | Nuit arctique : trois voiles d'aurore qui se plient lentement derrière des montagnes enneigées, reflétés par un lac immobile, sapins enneigés | étoiles 50, neige 30, étoiles filantes, brume |
 | `jardin-zen` | Jardin sec au petit matin : gravier ratissé en cercles autour de pierres moussues, haie taillée, bambous dans la brume dorée, branche de cerisier en fleur, bassin sombre au premier plan | pétales 40, rayons de soleil 30, brume, pluie |
@@ -460,7 +460,7 @@ Le tiers inférieur reste sombre et calme dans les six scènes (sol, eau sombre 
 
 ### 20.3 Éléments du décor (`decors.js`)
 
-Chaque élément est **un seul appel de dessin** (les rayons de soleil : deux, avec leurs poussières), animé entièrement dans le shader de sommets. Chaque particule a un rang dans [0, 1] et n'apparaît que si le niveau dépasse son rang, avec un fondu : le niveau règle la densité, et un peu l'intensité. Les paramètres (volume, couleurs, lumière) viennent de la scène. La forêt (§ 20.7) a ses propres versions HDR de `lucioles`, `brume`, `feuilles` et `pluie`, dans `scenes/foret-lucioles.js` ; ses `etoiles` viennent de `decors.js`.
+Chaque élément est **un seul appel de dessin** (les rayons de soleil : deux, avec leurs poussières), animé entièrement dans le shader de sommets. Chaque particule a un rang dans [0, 1] et n'apparaît que si le niveau dépasse son rang, avec un fondu : le niveau règle la densité, et un peu l'intensité. Les paramètres (volume, couleurs, lumière) viennent de la scène. La forêt (§ 20.7) a ses propres versions HDR de `lucioles`, `brume` et `pluie`, dans `scenes/foret-lucioles.js` ; ses `etoiles` viennent de `decors.js`.
 
 | Élément | Rendu |
 |---|---|
@@ -541,7 +541,7 @@ Demande du product owner (29-30 octobre 2026) : « je ne demande pas que tu repr
 
 **Finition** (`post.js`, réutilisable par les autres scènes) : rendu dans une cible HDR demi-flottante avec MSAA 4× ; bloom à demi-résolution (5 niveaux, filtre « dual », moyenne de Karis contre le scintillement) ; **une seule** passe de composition : exposition, courbe ACES, bloom, rayons de lune (12 pas vers la lune sur le niveau ¼ du bloom, autour de la lune seulement : les trouées entre les branches font les rayons), aberration chromatique légère vers les bords, vignette, grain de film (un motif par 1/24 s du temps de la scène : l'image reste une fonction du temps, la boucle reste exacte), tramage. Le grain n'existe qu'en direct : dans la boucle de fond d'écran, un motif neuf à chaque image est ce que H.264 garde le plus mal (essai : 3,7 Mo au CRF 35). Sans demi-flottant rendu par le pilote, la cible passe en 8 bits.
 
-**Décor** : `lucioles` (points émissifs HDR que le bloom auréole, clignotements, trajectoires lentes, atténués par la brume), `brume` (air plus épais, nappe au sol plus dense), `feuilles` (matériau physique, ombres de la lune, translucides à contre-jour), `pluie` (traits éclairés par la lune là où elle passe, d'après la carte d'ombre ; sol, écorce et aiguilles mouillés, flaques sur le sentier qui reflètent la lueur, anneaux de gouttes), `etoiles` (`decors.js`, plus brillantes).
+**Décor** : `lucioles` (points émissifs HDR que le bloom auréole, clignotements, trajectoires lentes, atténués par la brume), `brume` (air plus épais, nappe au sol plus dense), `pluie` (traits éclairés par la lune là où elle passe, d'après la carte d'ombre ; sol, écorce et aiguilles mouillés, flaques sur le sentier qui reflètent la lueur, anneaux de gouttes), `etoiles` (`decors.js`, plus brillantes).
 
 **`quality: 'low'`** : sans MSAA (test alpha), sans bloom, rayons, aberration ni grain (courbe de tons seule), brume plus légère et sans dérive ni lumière propre, ombre en 512² ; au démarrage en `low`, aussi 140 lucioles, 110 fougères et 800 gouttes.
 
