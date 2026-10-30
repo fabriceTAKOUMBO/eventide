@@ -378,9 +378,11 @@
     'uniform vec4 uMist;',       // band height, band width, band density, noise scale
     'uniform sampler2D uNoiseTex;',
     'uniform sampler2DShadow uShadowMap; uniform mat4 uShadowMatrix; uniform float uShadowReady;',
+    // (bases kept above 0: pow() of a negative number is NaN on mobile GPUs)
     'float fo_phase(float c) {',
-    '  float a = 0.3276 / pow(1.6724 - 1.64 * c, 1.5);',
-    '  float b = 0.8775 / pow(1.1225 - 0.7 * c, 1.5);',
+    '  c = clamp(c, -1.0, 1.0);',
+    '  float a = 0.3276 / pow(max(1.6724 - 1.64 * c, 0.03), 1.5);',
+    '  float b = 0.8775 / pow(max(1.1225 - 0.7 * c, 0.4), 1.5);',
     '  return (0.72 * a + 0.28 * b) * 0.0796;',
     '}',
     'float fo_shadow(vec3 wp) {',
@@ -400,7 +402,8 @@
     '}',
     'float fo_heightOD(float y0, float dy, float L) {',
     '  float k = uFog.z;',
-    '  float a = k * dy * L;',
+    // (a ray far below the ground would overflow exp(): it is hidden anyway)
+    '  float a = max(k * dy * L, -40.0);',
     '  return exp(-k * y0) * (abs(a) > 1e-3 ? (1.0 - exp(-a)) / (k * dy) : L);',
     '}',
     'float fo_bandOD(float y0, float dy, float L) {',
@@ -596,7 +599,7 @@
         '  float c = dot(d, uSunDir);',
         '  float y = max(d.y, 0.0);',
         // dawn: gold and rose low on the horizon (gold toward the sun), violet, then deep blue
-        '  float az = 0.5 + 0.5 * dot(normalize(d.xz + 1e-4), normalize(uSunDir.xz));',
+        '  float az = 0.5 + 0.5 * dot(d.xz / max(length(d.xz), 1e-4), normalize(uSunDir.xz));',
         '  vec3 low = mix(uHorizon, uGold, smoothstep(0.35, 1.0, az));',
         '  vec3 col = mix(low, uMid, smoothstep(0.0, 0.22, y));',
         '  col = mix(col, uZenith, smoothstep(0.15, 0.85, y));',
@@ -834,7 +837,7 @@
         fragmentShader: FO_GLSL + '\n' + BUMP_GLSL + '\n' + [
           'uniform vec3 uSunCol; uniform vec3 uAmbHi; uniform vec3 uAmbLo; uniform vec3 uAlbedo; uniform vec2 uDrift;',
           'varying vec3 vWorld; varying vec3 vN; varying float vVis; varying float vTop;',
-          'float cl_phase(float c, float g) { return (1.0 - g * g) / pow(1.0 + g * g - 2.0 * g * c, 1.5) * 0.0796; }',
+          'float cl_phase(float c, float g) { return (1.0 - g * g) / pow(max(1.0 + g * g - 2.0 * g * clamp(c, -1.0, 1.0), 1e-3), 1.5) * 0.0796; }',
           'void main() {',
           '  vec3 V = cameraPosition - vWorld;',
           '  float dist = length(V);',
@@ -856,7 +859,7 @@
           // forward scattering toward the sun: the tops and the crests seen against it glow
           '  float c = dot(-V, uSunDir);',
           '  float ph = 0.7 * cl_phase(c, 0.75) + 0.3 * cl_phase(c, 0.3);',
-          '  float back = smoothstep(0.0, 0.6, -dot(N.xz, normalize(V.xz)));',
+          '  float back = smoothstep(0.0, 0.6, -dot(N.xz, V.xz / max(length(V.xz), 1e-4)));',
           '  vec3 fwd = uSunCol * ph * (0.02 + 0.35 * back + 0.3 * vTop) * mix(0.25, 1.0, shade);',
           '  float sky = clamp(Ns.y * 0.8 + 0.2, 0.0, 1.0);',
           '  vec3 amb = mix(uAmbLo, uAmbHi, sky) * mix(0.45, 1.1, vTop);',

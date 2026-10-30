@@ -1090,7 +1090,9 @@
           '    vec2 o = vec2(fract(s * 13.7), fract(s * 71.3)) - 0.5;',
           '    float ph = fract(uTime / EV_PERIOD * 12.0 + s);',
           '    float r = length(f - o * 0.6);',
-          '    h += sin((r - ph * 0.45) * 60.0) * exp(-pow((r - ph * 0.45) * 14.0, 2.0)) * (1.0 - ph);',
+          // (q * q, not pow(q, 2.0): pow() of a negative base is NaN on mobile GPUs)
+          '    float q = (r - ph * 0.45) * 14.0;',
+          '    h += sin((r - ph * 0.45) * 60.0) * exp(-q * q) * (1.0 - ph);',
           '  }',
           '  return h;',
           '}',

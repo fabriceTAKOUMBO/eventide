@@ -6,6 +6,8 @@
  * a whole number of times per period, so the period loops without a seam. The level sets the
  * density (each element has a rank in [0, 1] and shows when level > rank, with a soft fade) and
  * the intensity. One draw call per decor (two for the sun rays, which carry their dust).
+ * GLSL pow(x, y) is undefined for x < 0 (NaN on GPUs that compute exp2(y * log2(x))): every base
+ * that rounding or interpolation can push below 0 is clamped first.
  */
 (function () {
   'use strict';
@@ -282,14 +284,14 @@
         '  vec3 tv = (modelViewMatrix * vec4(dome(tail), 1.0)).xyz;',
         '  gl_Position = ev_streak(hv, tv, corner, uWidth * uViewport.y / 1920.0 * 2.0);',
         '  vAlong = corner.y; vAcross = corner.x;',
-        '  vAlpha = ev_present(aEv.z) * aEv.w * pow(sin(3.14159 * p), 0.8);',
+        '  vAlpha = ev_present(aEv.z) * aEv.w * pow(max(sin(3.14159 * p), 0.0), 0.8);',
         '}',
       ].join('\n'),
       fragmentShader: [
         'uniform vec3 uColor;',
         'varying float vAlong; varying float vAcross; varying float vAlpha;',
         'void main() {',
-        '  float along = pow(1.0 - vAlong, 2.2);',
+        '  float along = pow(max(1.0 - vAlong, 0.0), 2.2);',
         '  float across = exp(-vAcross * vAcross * 5.0);',
         '  gl_FragColor = vec4(uColor * along * across * vAlpha * 1.3, 1.0);',
         '}',
@@ -494,13 +496,13 @@
         '  float w; float shade;',
         '  if (uShape > 0.5) {',
         // cherry petal: rounded, widest above the middle, small notch at the tip
-        '    w = 0.95 * pow(sin(3.14159 * clamp(y * 0.82 + 0.1, 0.0, 1.0)), 0.6) * (0.55 + 0.45 * y);',
+        '    w = 0.95 * pow(max(sin(3.14159 * clamp(y * 0.82 + 0.1, 0.0, 1.0)), 0.0), 0.6) * (0.55 + 0.45 * y);',
         '    float notch = 1.0 - (1.0 - smoothstep(0.0, 0.16, x)) * smoothstep(0.86, 1.0, y);',
         '    w *= notch;',
         '    shade = mix(0.82, 1.0, y);',
         '  } else {',
         // leaf: pointed oval with a stem and a midrib
-        '    w = 0.92 * pow(sin(3.14159 * clamp(y * 1.05 - 0.05, 0.0, 1.0)), 0.85);',
+        '    w = 0.92 * pow(max(sin(3.14159 * clamp(y * 1.05 - 0.05, 0.0, 1.0)), 0.0), 0.85);',
         '    if (y < 0.08) w = max(w, 0.06);',
         '    shade = 1.0 - 0.25 * (1.0 - smoothstep(0.0, 0.07, x)) * step(0.06, y);',
         '  }',
@@ -730,7 +732,7 @@
         'varying vec2 vC; varying float vAlpha; varying float vSeed;',
         'void main() {',
         '  float across = exp(-vC.x * vC.x * 3.2) - 0.04;',
-        '  float along = smoothstep(0.0, 0.18, vC.y) * pow(1.0 - vC.y, uFalloff);',
+        '  float along = smoothstep(0.0, 0.18, vC.y) * pow(max(1.0 - vC.y, 0.0), uFalloff);',
         '  float streak = 0.75 + 0.25 * ev_noise(vec2(vC.x * 3.0 + vSeed * 40.0, vC.y * 2.0));',
         '  float a = max(across, 0.0) * along * streak * vAlpha * uIntensity;',
         '  gl_FragColor = vec4(uColor * a, 1.0);',

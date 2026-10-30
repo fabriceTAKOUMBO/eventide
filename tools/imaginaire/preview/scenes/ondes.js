@@ -79,7 +79,8 @@
     // into a soft glow (same mean light) where they would shrink below a pixel
     'float wv_line(float ph, float fw) {',
     '  float n = mix(24.0, 1.5, smoothstep(0.25, 1.6, fw));',
-    '  return pow(0.5 + 0.5 * sin(ph), n) * sqrt(n / 24.0);',
+    // (pow() of a base rounded below 0 is NaN on mobile GPUs: clamp it)
+    '  return pow(max(0.5 + 0.5 * sin(ph), 0.0), n) * sqrt(n / 24.0);',
     '}',
     'float wv_lines(vec3 fw) {',
     '  float a = wv_line(wv_ph.x, fw.x), b = wv_line(wv_ph.y, fw.y), c = wv_line(wv_ph.z, fw.z);',
@@ -102,7 +103,7 @@
     '}',
     'vec3 wv_fog(vec3 col, vec3 wp) {',
     '  vec3 d = wp - cameraPosition;',
-    '  float L = length(d);',
+    '  float L = max(length(d), 1e-3);',
     '  float f = 1.0 - exp(-L * (0.0075 + 0.012 * uMist));',
     '  vec3 dir = d / L;',
     '  return mix(col, wv_sky(vec3(dir.x, max(dir.y, 0.0) * 0.3, dir.z)), f);',
@@ -203,7 +204,7 @@
           '  g *= 1.0 - smoothstep(0.02, 0.09, px);',
           '  vec3 N = normalize(vec3(-g.x, 1.0, -g.y));',
           '  vec3 R = reflect(-V, N);',
-          '  float F = 0.04 + 0.96 * pow(1.0 - max(dot(N, V), 0.0), 5.0);',
+          '  float F = 0.04 + 0.96 * pow(clamp(1.0 - dot(N, V), 0.0, 1.0), 5.0);',
           '  vec3 env = wv_sky(vec3(R.x, abs(R.y), R.z));',
           '  vec3 ph = wv_ph;',
           '  float lines = wv_lines(fwidth(ph) * 1.0 + vec3(1e-4));',
@@ -260,7 +261,7 @@
           '  float I = (0.22 + 1.8 * crest + 3.0 * pulse) * tw;',
           // quiet near the viewer (the lower third), gone before they shimmer far away
           '  I *= smoothstep(8.0, 32.0, dist) * (1.0 - smoothstep(90.0, 220.0, dist));',
-          '  float size = 0.035 * uFocal / dist;',
+          '  float size = 0.035 * uFocal / max(dist, 0.1);',
           '  vSoft = clamp(size / 4.0, 0.0, 1.0);',
           '  gl_PointSize = clamp(size * 2.6, 1.5, 16.0 * uPixelRatio);',
           // a point smaller than its sprite carries the light of its true size

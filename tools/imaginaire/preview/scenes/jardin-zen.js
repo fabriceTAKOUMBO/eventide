@@ -491,9 +491,11 @@
     'uniform vec4 uMist;',       // band height, band width, band density, noise scale
     'uniform sampler2D uNoiseTex;',
     'uniform sampler2DShadow uShadowMap; uniform mat4 uShadowMatrix; uniform float uShadowReady;',
+    // (bases kept above 0: pow() of a negative number is NaN on mobile GPUs)
     'float fo_phase(float c) {',
-    '  float a = 0.3276 / pow(1.6724 - 1.64 * c, 1.5);',
-    '  float b = 0.8775 / pow(1.1225 - 0.7 * c, 1.5);',
+    '  c = clamp(c, -1.0, 1.0);',
+    '  float a = 0.3276 / pow(max(1.6724 - 1.64 * c, 0.03), 1.5);',
+    '  float b = 0.8775 / pow(max(1.1225 - 0.7 * c, 0.4), 1.5);',
     '  return (0.72 * a + 0.28 * b) * 0.0796;',
     '}',
     'float fo_shadow(vec3 wp) {',
@@ -513,7 +515,8 @@
     '}',
     'float fo_heightOD(float y0, float dy, float L) {',
     '  float k = uFog.z;',
-    '  float a = k * dy * L;',
+    // (a ray far below the ground would overflow exp(): it is hidden anyway)
+    '  float a = max(k * dy * L, -40.0);',
     '  return exp(-k * y0) * (abs(a) > 1e-3 ? (1.0 - exp(-a)) / (k * dy) : L);',
     '}',
     'float fo_bandOD(float y0, float dy, float L) {',
@@ -606,6 +609,12 @@
   // Wind on the bamboo, the cherry branch and its blossoms: a world offset (gusts loop over the
   // period), converted to the instance's local space so that every chunk sees the moved vertex.
   var SWAY_GLSL = [
+    // a world vector in the space of an instance whose matrix is rotation x scale (columns
+    // orthogonal): its inverse is S^-1 R^T, no inverse() in the shader
+    'vec3 gz_toLocal(mat4 m, vec3 w) {',
+    '  vec3 a = m[0].xyz, b = m[1].xyz, c = m[2].xyz;',
+    '  return vec3(dot(a, w) / max(dot(a, a), 1e-8), dot(b, w) / max(dot(b, b), 1e-8), dot(c, w) / max(dot(c, c), 1e-8));',
+    '}',
     'vec3 gz_wind(vec3 w, float weight) {',
     '  float T = EV_TAU * uTime / EV_PERIOD;',
     '  float ph = w.x * 0.11 + w.z * 0.07;',
@@ -727,7 +736,7 @@
         '  float y = max(d.y, 0.0);',
         '  vec3 col = mix(uHorizon, uZenith, pow(smoothstep(-0.02, 0.85, y), 0.55));',
         // a warm band low on the horizon toward the sun, cooler on the other side
-        '  float az = 0.5 + 0.5 * dot(normalize(d.xz + 1e-4), normalize(uSunDir.xz));',
+        '  float az = 0.5 + 0.5 * dot(d.xz / max(length(d.xz), 1e-4), normalize(uSunDir.xz));',
         '  col *= mix(vec3(0.85, 0.9, 1.05), vec3(1.12, 1.0, 0.86), az * (1.0 - smoothstep(0.0, 0.5, y)));',
         '  col += uSunFog * fo_phase(c) * 0.35;',
         // high veils of cloud lit from below by the low sun
@@ -860,7 +869,7 @@
           '  return p.x;',
           '}',
           // furrow profile (height in [0, 1]): rounded ridges, narrower grooves
-          'float gz_prof(float u) { return pow(0.5 + 0.5 * cos(u * EV_TAU / 0.085), 0.65); }',
+          'float gz_prof(float u) { return pow(max(0.5 + 0.5 * cos(u * EV_TAU / 0.085), 0.0), 0.65); }',
           'float gz_furrowShadow;',
           'vec3 gz_furrowNormal;',
           'float gz_ridge;',
@@ -1083,7 +1092,7 @@
       var culmHooks = {
         key: 'culm',
         drySpecular: 0.5,
-        vertex: 'transformed += inverse(mat3(instanceMatrix)) * gz_wind((instanceMatrix * vec4(transformed, 1.0)).xyz, 0.05 * pow(position.y / ' + BAMBOO_H.toFixed(1) + ', 2.0));',
+        vertex: 'float gzT = max(position.y, 0.0) / ' + BAMBOO_H.toFixed(1) + ';\ntransformed += gz_toLocal(instanceMatrix, gz_wind((instanceMatrix * vec4(transformed, 1.0)).xyz, 0.05 * gzT * gzT));',
         color: [
           'float gzNodeL = 0.34;',
           'float gzY = vFoUv.y / gzNodeL;',
@@ -1104,7 +1113,7 @@
       var leafMat = cardMaterial(bambooTex, lin('#5a7a2a'), 0.65, 'bamboo-leaves', {
         hooks: {
           map: cardMap([0.85, 1.0, 0.75], [1.15, 1.08, 0.62], 0.55, 1.2),
-          vertex: 'transformed += inverse(mat3(instanceMatrix)) * gz_wind((instanceMatrix * vec4(transformed, 1.0)).xyz, 0.06 * pow(position.y / ' + BAMBOO_H.toFixed(1) + ', 2.0) + 0.012);',
+          vertex: 'float gzT = max(position.y, 0.0) / ' + BAMBOO_H.toFixed(1) + ';\ntransformed += gz_toLocal(instanceMatrix, gz_wind((instanceMatrix * vec4(transformed, 1.0)).xyz, 0.06 * gzT * gzT + 0.012));',
           light: translucency(1.1, [1.05, 1.0, 0.5]),
           drySpecular: 0.35,
         },
@@ -1269,7 +1278,7 @@
         params: { vertexColors: false },
         hooks: {
           map: cardMap([0.95, 0.4, 0.52], [1.0, 0.68, 0.76], 0.55, 1.0),
-          vertex: 'transformed += inverse(mat3(instanceMatrix)) * gz_wind((instanceMatrix * vec4(transformed, 1.0)).xyz, uBranchFlex * smoothstep(' + limbCtl[1].x.toFixed(2) + ', ' + limbCtl[limbCtl.length - 1].x.toFixed(2) + ', instanceMatrix[3].x) + uBranchFlex * 0.5 * smoothstep(0.0, 0.8, ' + limbCurve.getPoint(0.5).y.toFixed(2) + ' - instanceMatrix[3].y));',
+          vertex: 'transformed += gz_toLocal(instanceMatrix, gz_wind((instanceMatrix * vec4(transformed, 1.0)).xyz, uBranchFlex * smoothstep(' + limbCtl[1].x.toFixed(2) + ', ' + limbCtl[limbCtl.length - 1].x.toFixed(2) + ', instanceMatrix[3].x) + uBranchFlex * 0.5 * smoothstep(0.0, 0.8, ' + limbCurve.getPoint(0.5).y.toFixed(2) + ' - instanceMatrix[3].y)));',
           vertexPars: 'uniform float uBranchFlex;',
           uniforms: { uBranchFlex: branchFlex },
           light: translucency(0.55, [1.0, 0.75, 0.8]),
@@ -1334,7 +1343,8 @@
           '    vec2 o = vec2(fract(s * 13.7), fract(s * 71.3)) - 0.5;',
           '    float ph = fract(uTime / EV_PERIOD * 10.0 + s);',
           '    float r = length(f - o * 0.6);',
-          '    h += sin((r - ph * 0.42) * 70.0) * exp(-pow((r - ph * 0.42) * 12.0, 2.0)) * (1.0 - ph);',
+          '    float q = (r - ph * 0.42) * 12.0;',
+          '    h += sin((r - ph * 0.42) * 70.0) * exp(-q * q) * (1.0 - ph);',
           '  }',
           '  return h;',
           '}',
@@ -1357,7 +1367,7 @@
           '  vec2 uv = vMirror.xy / vMirror.w + n.xz * 0.06;',
           '  vec3 refl = ev_mirror(uv);',
           '  float cosT = max(dot(V, n), 0.0);',
-          '  float F = 0.02 + 0.98 * pow(1.0 - cosT, 5.0);',
+          '  float F = 0.02 + 0.98 * pow(clamp(1.0 - cosT, 0.0, 1.0), 5.0);',
           // the water itself: dark, a hint of the sky scattered in it
           // looking down into it near the viewer, the dark water swallows more of the reflection
           '  vec3 c = uDeep * (1.0 - F) + refl * F * 0.4 * mix(0.55, 1.0, smoothstep(4.0, 11.0, dist));',

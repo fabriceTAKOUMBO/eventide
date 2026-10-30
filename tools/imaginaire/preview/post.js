@@ -8,6 +8,11 @@
  *   quarter-resolution bloom level, near the light only: the gaps between the trees cast rays), slight chromatic
  *   aberration, vignette, film grain ('high' only), dither.
  *
+ * Safety: a pixel of the HDR target that is not a finite, non-negative number (NaN or Inf made by a
+ * shader on some mobile GPU, e.g. pow() of a base rounded below 0) or that exceeds 2^14 is replaced
+ * (0, or the cap) before any filtering, in the bloom prefilter and in the composite: one bad pixel
+ * can never spread through the bloom levels into blocks (seen on a Galaxy S24, Xclipse 940).
+ *
  * The grain is a pure function of the scene time (one pattern per 1/24 s, modulo the period), so
  * the image stays a pure function of t and the 30 s period still loops without a seam.
  *
@@ -24,6 +29,12 @@
   var LEVELS = 5;   // bloom: 1/2, 1/4, 1/8, 1/16, 1/32 of the buffer
   var RAY_SAMPLES = 12;
 
+  // NaN, Inf and negatives become 0, the rest is capped (a select, never arithmetic on NaN)
+  var SAFE = [
+    'float ev_safe1(float x) { return (isnan(x) || isinf(x) || !(x >= 0.0)) ? 0.0 : min(x, 16384.0); }',
+    'vec3 ev_safe(vec3 c) { return vec3(ev_safe1(c.r), ev_safe1(c.g), ev_safe1(c.b)); }',
+  ].join('\n');
+
   var VERTEX = [
     'varying vec2 vUv;',
     'void main() {',
@@ -35,6 +46,7 @@
   // Threshold with a soft knee, on four bilinear taps covering 4x4 source texels, averaged with
   // Karis weights (1 / (1 + luma)): a lone bright pixel cannot make the bloom flicker.
   var PREFILTER = [
+    SAFE,
     'uniform sampler2D tSrc; uniform vec2 uTexel; uniform vec2 uCurve;',
     'varying vec2 vUv;',
     'vec3 knee(vec3 c) {',
@@ -44,7 +56,7 @@
     '  return c * (max(soft, br - uCurve.x) / max(br, 1e-5));',
     '}',
     'vec4 tap(vec2 o) {',
-    '  vec3 c = knee(texture2D(tSrc, vUv + o * uTexel).rgb);',
+    '  vec3 c = knee(ev_safe(texture2D(tSrc, vUv + o * uTexel).rgb));',
     '  return vec4(c, 1.0) / (1.0 + dot(c, vec3(0.2126, 0.7152, 0.0722)));',
     '}',
     'void main() {',
@@ -81,6 +93,7 @@
   ].join('\n');
 
   var COMPOSITE = [
+    SAFE,
     'uniform sampler2D tScene; uniform sampler2D tBloom; uniform sampler2D tRays;',
     'uniform float uExposure; uniform float uBloom; uniform float uAberration; uniform float uVignette;',
     'uniform float uGrain; uniform float uFrame; uniform vec2 uAspect;',
@@ -125,6 +138,7 @@
     '#else',
     '  vec3 col = texture2D(tScene, vUv).rgb;',
     '#endif',
+    '  col = ev_safe(col);',
     '#ifdef EV_BLOOM',
     '  col += texture2D(tBloom, vUv).rgb * uBloom;',
     '#endif',
@@ -142,7 +156,7 @@
     '  }',
     '  col += rays * uRays.x / float(EV_RAYS);',
     '#endif',
-    '  col = max(col, 0.0) * uExposure;',
+    '  col = ev_safe(col) * uExposure;',
     '#ifdef EV_NEUTRAL',
     '  col = neutral(col);',
     '#else',
@@ -345,6 +359,9 @@
 
       uniforms: compositeUniforms,
 
+      // Tools only (tools/imaginaire/check.js scans it for NaN, Inf and overflow): the HDR target.
+      hdrTarget: function () { return hdr; },
+
       dispose: function () {
         hdr.dispose();
         down.concat(up).forEach(function (t) { t.dispose(); });
@@ -352,8 +369,10 @@
         triangle.dispose();
       },
     };
+    // tools only: the finish of the running scene
+    window.EventidePost.last = api;
     return api;
   }
 
-  window.EventidePost = { create: create, LEVELS: LEVELS };
+  window.EventidePost = { create: create, LEVELS: LEVELS, last: null };
 })();
