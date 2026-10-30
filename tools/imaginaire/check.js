@@ -5,7 +5,7 @@
 //   - setPaused(true) stops drawing, setPaused(false) resumes; at most 30 images per second;
 //   - recording mode: the image at t = 30 s is the image at t = 0 (the period loops exactly).
 //
-// Usage: node tools/imaginaire/check.js [--scene id,...]     exit code 1 on any failure
+// Usage: node tools/imaginaire/check.js [--scene id,...] [--port n]     exit code 1 on any failure
 
 'use strict';
 
@@ -108,12 +108,15 @@ async function main() {
   const args = process.argv.slice(2);
   const i = args.indexOf('--scene');
   const ids = i >= 0 ? args[i + 1].split(',') : Object.keys(ALLOWED);
-  const server = await start(8779);
+  // --port: another free port when two checks run side by side (default 8779)
+  const j = args.indexOf('--port');
+  const port = j >= 0 ? Number(args[j + 1]) : 8779;
+  const server = await start(port);
   const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   let ok = true;
   try {
     for (const id of ids) {
-      const r = await checkScene(browser, 8779, id);
+      const r = await checkScene(browser, port, id);
       ok = ok && r.ok;
       console.log(`${r.ok ? 'OK  ' : 'FAIL'} ${id}${r.failures.length ? ': ' + r.failures.join('; ') : ''}`);
     }
