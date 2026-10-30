@@ -602,3 +602,28 @@ Demande du product owner (29-30 octobre 2026) : « je ne demande pas que tu repr
 | Temps logiciel par image, 540 × 1170 | 344 ms | 1 891 ms (× 5,5) | 966 ms (× 2,8) |
 
 L'essentiel du coût vient des houppiers (cartes d'aiguilles superposées, ombrées en matériau physique) ; `high` coûte deux fois `low` (MSAA, finition, brume qui dérive et s'éclaire, ombre 1024²). Déjà retiré en cours de travail : l'image d'environnement sur les aiguilles, fougères et troncs (−36 %), la brume dérivante et l'ombre dans la brume pour les rayons qui montent (−28 %). Le coût réel sur le S24 (GPU Xclipse 940) n'est pas mesuré ici : c'est l'élément 7 du § 20.6 qui tranche ; sinon `low`, ou moins d'arbres proches.
+
+## 21. Catalogue publié et tableau de bord (30 octobre 2026)
+
+Demande du product owner : publier de nouveaux paysages filmés, sons et musiques depuis un tableau de bord, et que l'application se mette à jour seule. Contrat : [§ 13 et § 14](../api/contrat-v1.md) ; infrastructure : [ADR § 12](../infra/hebergement-mutualise.md) ; marche à suivre : [runbook du tableau de bord](../runbooks/tableau-de-bord.md).
+
+### 21.1 Application
+
+- **Où vit le catalogue** : `RealAppModel._catalog`, désormais remplaçable en cours de route. `CatalogUpdates` (`lib/services/catalog_updates.dart`) charge au démarrage la dernière réponse valide (`<appSupport>/eventide/catalog-publie.json`, écrite par fichier temporaire puis renommage ; fichier corrompu effacé), interroge `GET /v1/catalog` après la première image puis au retour au premier plan si la dernière réponse date de plus d'une heure (`If-None-Match` sur la révision). Un échec réseau ne compte pas comme une réponse. Sans `API_BASE_URL` (démo actuelle) : aucun fichier lu, aucune requête.
+- **Validation** (`lib/core/published_catalog.dart`) : toute la réponse est ignorée si elle est mal formée, si `catalog.version` n'est pas 1, ou s'il manque un identifiant de la base. Un élément publié seul est écarté (avec une ligne au journal des problèmes) s'il a un identifiant invalide ou en double, pas de `media_rev`, un paysage qui n'est pas filmé ou d'un thème sans paysage filmé, ou un son à événements (le contrat ne donne pas de clé pour ses variantes). La base (thèmes, décors, limites, scènes 3D, éléments embarqués) garde toujours sa définition embarquée.
+- **Mise à jour en direct** : le nouveau catalogue remplace l'ancien et tous les écrans se reconstruisent. Favoris, programmations (renvoyées au natif) et mémoire par thème sont nettoyés ; images fixes et sons se téléchargent en arrière-plan ; la carte de l'écran de verrouillage se rafraîchit. **La scène en cours n'est jamais interrompue** : ce qu'elle utilise et qui a été retiré reste trouvable par son identifiant mais sort des listes ; à l'arrêt de la lecture, un paysage retiré revient à `cascade-foret` et les sons retirés quittent le mix. Les identifiants retirés sont mémorisés d'un lancement à l'autre.
+- **Clés** : `<id>.v<media_rev>` pour un élément publié (`LandscapeMedia.revisionSuffix`). Un paysage publié gratuit se télécharge aussi pour un utilisateur gratuit. Au démarrage, seuls les fichiers versionnés d'une ancienne révision sont effacés du cache (jamais la base ni le paysage du fond d'écran).
+- **Fond d'écran** : un paysage retiré qui est le fond d'écran animé passe à son image fixe.
+
+### 21.2 API et tableau de bord
+
+- `apps/publishing` : éléments publiés (états du contrat, drapeau « au catalogue » séparé : un élément dont on remplace le fichier reste en ligne avec ses anciens fichiers), révision du catalogue (une ligne, incrémentée sous verrou), journal des administrateurs (gardé un an). Le catalogue publié est mis en cache par révision : une lecture de la révision par requête.
+- `/tableau/` : connexion Google réservée à `ADMIN_EMAILS` (seule l'empreinte de l'adresse est gardée en session), catalogue, nouvel élément, envoi direct du navigateur vers S3 (formulaire signé, 300 Mo, 15 min), **une seule tâche de traitement à la fois** (une seconde est refusée avec un message), aperçu, publier / retirer / remplacer / modifier, utilisateurs (lecture seule), journal. Vérifié à 390 px de large.
+- `manage.py process_media` (tâche `ev-<env>-media`, 1 vCPU / 2 Go) : boucle vidéo de 10 s au plus par fondu enchaîné de 1,5 s, recadrage 9:16 en 1080 × 1920, H.264 sous 2,5 Mo (CRF cherché de 18 à 36), image fixe = première image ; ambiance = son de la vidéo en boucle (fondu de 1 s, au moins 60 s, −23 LUFS, Opus 96 kbit/s sans blanc). Environ 2 min pour une source de 20 s en 1080p sur un cœur. Connexion à la base fermée pendant ffmpeg.
+- Différence avec les outils `tools/media/` : pas de synthèse de texture pour l'ambiance (simple boucle par fondu), pas d'effacement des éclairs ni du tonnerre (les prompts en demandent l'absence).
+
+### 21.3 À vérifier au premier déploiement
+
+1. Bouton Google avec le vrai client web (origine JavaScript du domaine déclarée).
+2. Taille réelle de l'image Docker avec ffmpeg (estimée à 285 Mo compressés contre 100 Mo avant).
+3. Un envoi réel de bout en bout : traitement, aperçu, publication, apparition dans l'app au retour au premier plan.
