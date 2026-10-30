@@ -51,7 +51,7 @@ Fichiers publiés de `preview/` : `index.html`, `runtime.js`, `decors.js`, `scen
 ## Vérifications du runtime
 
 ```sh
-node tools/imaginaire/check.js [--scene id,...]
+node tools/imaginaire/check.js [--scene id,...] [--port n] [--mediump]
 ```
 
 Pour chaque scène, dans Chromium sans écran : `start()` envoie `ready`, ne garde que les décors
@@ -60,7 +60,18 @@ refuse un décor que la scène n'a pas et fait la transition en environ 1 s ; au
 seconde ; `setPaused(true)` n'en dessine plus aucune, `setPaused(false)` reprend ; `dispose()`
 retire tout ; en mode enregistrement, l'image à 30 s est exactement celle à 0 s. Sortie non nulle
 au moindre échec. La fin de la transition est attendue jusqu'à 12 s : le WebGL logiciel met des
-images en file, puis se fige plusieurs secondes le temps de les dessiner.
+images en file, puis se fige plusieurs secondes le temps de les dessiner (la page du téléphone est
+petite, 180 × 390 px à rapport 2, pour la même raison).
+
+**Sûreté HDR** : pour une scène à finition HDR (`post.js`), la cible demi-flottante est lue à 0, 7,5,
+15 et 22,5 s, avec le décor par défaut et avec tout à 100 : aucun pixel NaN ni infini, aucun au-delà
+de 60 000 (limite du demi-flottant : 65 504) ; la plus grande valeur est affichée. Un seul de ces
+pixels se répand par le bloom en blocs noirs sur un GPU de téléphone (vu sur le S24) ; `post.js`
+les remplace désormais par 0 avant tout filtrage. `--mediump` refait la lecture avec le moteur forcé
+en `mediump` (un `runtime.js` modifié est servi à la page) : cela détecte un shader qui ne compile
+pas à cette précision, mais le WebGL logiciel calcule toujours en 32 bits, donc seul le téléphone
+montre les arrondis du `mediump`. `--port` choisit un autre port quand deux vérifications tournent en
+même temps.
 
 ## Rendus hors ligne
 
