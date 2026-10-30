@@ -843,11 +843,18 @@
           '  float dist = length(V);',
           '  V /= dist;',
           '  vec3 N = normalize(vN);',
-          // cauliflower detail near the viewer (drifting with the field, fading with distance)
-          '  vec2 dp = vWorld.xz - uDrift * (uTime - 15.0);',
+          // cauliflower detail near the viewer, fading with distance; it drifts with the field and
+          // loops the same way (two copies half a period apart, crossfaded): a plain drift would
+          // jump at the end of the period
           '  float fine = smoothstep(1400.0, 200.0, dist);',
           '#ifndef FO_LOW',
-          '  float det = texture2D(uNoiseTex, dp / 55.0).a * 0.6 + texture2D(uNoiseTex, dp / 21.0 + 0.3).a * 0.4;',
+          '  float tau = uTime / EV_PERIOD;',
+          '  vec2 dw = fo_weights(uTime);',
+          '  vec2 da = vWorld.xz - uDrift * EV_PERIOD * (fract(tau) - 0.5);',
+          '  vec2 db = vWorld.xz - uDrift * EV_PERIOD * (fract(tau + 0.5) - 0.5) + vec2(731.0, 377.0);',
+          '  float detA = texture2D(uNoiseTex, da / 55.0).a * 0.6 + texture2D(uNoiseTex, da / 21.0 + 0.3).a * 0.4;',
+          '  float detB = texture2D(uNoiseTex, db / 55.0).a * 0.6 + texture2D(uNoiseTex, db / 21.0 + 0.3).a * 0.4;',
+          '  float det = clamp(0.5 + (dw.x * (detA - 0.5) + dw.y * (detB - 0.5)) / sqrt(dw.x * dw.x + dw.y * dw.y), 0.0, 1.0);',
           '  N = fo_bump(N, vWorld, 1.0 - det, 2.2 * fine);',
           '#endif',
           // light diffuses inside a cloud: soften the normal, wrap the sun far around

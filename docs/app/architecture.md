@@ -480,7 +480,7 @@ Décision du product owner (29 octobre 2026, [contrat § 12](../api/contrat-v1.m
 | `setDecor(id, niveau)` | 0 à 100, transition adoucie d'1 s ; 0 retire l'élément (plus aucun dessin) |
 | `setMoment(m)` | accepté ; les six scènes ont leur propre lumière et l'ignorent |
 | `setPaused(bool)` | `true` arrête la boucle de rendu (plus aucune image, aucun calcul) |
-| `setQuality(q)` | `low` : rapport de pixels 1 et 60 % des particules ; `high` : rapport de pixels ≤ 1,5 et toutes les particules. `low` allège aussi la forêt (sans MSAA, bloom, rayons, aberration ni grain : courbe de tons seule ; brume plus légère et immobile ; ombre de lune en 512²) et, au démarrage, la mer de nuages (800 nuages au lieu de 1 300) ; l'anticrénelage (MSAA) n'existe qu'en `high` |
+| `setQuality(q)` | `low` : rapport de pixels 1 et 60 % des particules ; `high` : rapport de pixels ≤ 1,5 et toutes les particules. `low` allège aussi la finition HDR des six scènes (sans MSAA, bloom, rayons, aberration ni grain : courbe de tons seule) et leurs shaders : forêt (brume plus légère et immobile, ombre de lune en 512²), jardin et mer de nuages (sans le relief fin), lac et aurore (air simplifié, 60 % des épicéas lointains) ; l'anticrénelage (MSAA) n'existe qu'en `high` |
 | `dispose()` | libère tout (géométries, matériaux, contexte WebGL) |
 
 Messages vers l'application par le canal JavaScript `EventideScene` (JSON) : `{"type":"ready"}` après la première image, `{"type":"error","detail":"…"}` (erreur JavaScript, scène inconnue, `webglcontextlost`), `{"type":"stats","fps":n,"ms":n}` toutes les 10 s (`ms` : temps JavaScript moyen d'une image). Sans canal (navigateur de bureau), les messages vont dans la console. Un contexte WebGL perdu puis rendu reconstruit la scène.
@@ -520,7 +520,7 @@ Chaque élément est **un seul appel de dessin** (les rayons de soleil : deux, a
 
 ### 20.4 Budget et mesures
 
-Budget (téléphone) : ≤ 30 i/s, rapport de pixels ≤ 1,5, moins de 150 appels de dessin, géométrie et textures procédurales (aucune image chargée). Aucun post-traitement, sauf la finition HDR de la forêt (§ 20.7 : une cible HDR, un bloom à demi-résolution, une passe de composition) ; ailleurs, le seul rendu supplémentaire est le reflet de l'eau, dans une texture à 35-40 % de la taille de l'écran.
+Budget (téléphone) : ≤ 30 i/s, rapport de pixels ≤ 1,5, moins de 150 appels de dessin, géométrie et textures procédurales (aucune image chargée). Les six scènes ont la même finition HDR (`post.js`, § 20.7 : une cible HDR, un bloom à demi-résolution, une passe de composition) ; s'y ajoutent les cartes d'ombre (dessinées une fois quand le soleil et les ombres sont immobiles : jardin, mer de nuages) et le reflet de l'eau, dans une texture à 35-40 % de la taille de l'écran.
 
 Mesures (`node tools/imaginaire/render.js stats`, Chromium sans écran, WebGL logiciel SwiftShader sur 4 cœurs, faute de GPU) :
 
