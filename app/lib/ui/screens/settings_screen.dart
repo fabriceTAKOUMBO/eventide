@@ -109,7 +109,7 @@ class SettingsScreen extends StatelessWidget {
           _ProblemReportRow(model: model),
           const SizedBox(height: 18),
           Text(
-            'Eventide · Version 1.0',
+            'Full Relax · Version 1.0',
             textAlign: TextAlign.center,
             style: VitreType.small(size: 13, color: p.text(0.56)),
           ),

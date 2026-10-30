@@ -179,7 +179,7 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
   final support = await getApplicationSupportDirectory();
   // Problem report: the log file survives a crash; the exits recorded by Android are read once.
   unawaited(Breadcrumbs.log.attach(Directory('${support.path}/diagnostics')));
-  Breadcrumbs.add('démarrage : Eventide ${Env.appVersion}${demo ? ' (version démo)' : ''}');
+  Breadcrumbs.add('démarrage : Full Relax ${Env.appVersion}${demo ? ' (version démo)' : ''}');
   // Crash guard (docs/app/architecture.md § 19): what the previous run left decides a safe start
   // and which 3D scenes are shown as their poster. Its breadcrumbs are written before returning:
   // they must be on the phone if a native crash follows.

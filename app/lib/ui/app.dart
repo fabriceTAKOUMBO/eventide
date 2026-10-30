@@ -138,7 +138,7 @@ class _EventideAppState extends State<EventideApp> {
   Widget build(BuildContext context) {
     final settings = _settings;
     return MaterialApp(
-      title: 'Eventide',
+      title: 'Full Relax',
       debugShowCheckedModeBanner: false,
       navigatorKey: _navigator,
       navigatorObservers: [_routes],

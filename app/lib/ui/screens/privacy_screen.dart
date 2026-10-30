@@ -45,7 +45,7 @@ class _PrivacyScreenState extends State<PrivacyScreen> {
       context,
       icon: VIcons.download,
       title: 'Vos données',
-      message: 'Tout ce qu’Eventide garde à votre sujet.',
+      message: 'Tout ce que Full Relax garde à votre sujet.',
       confirm: 'Copier',
       cancel: 'Fermer',
       extra: Container(

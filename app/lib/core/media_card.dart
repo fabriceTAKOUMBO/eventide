@@ -8,7 +8,7 @@ import 'format.dart';
 import 'scene.dart';
 
 /// Album line of the card.
-const String mediaCardAlbum = 'Eventide';
+const String mediaCardAlbum = 'Full Relax';
 
 /// Subtitle when every sound and music of the mix is muted (`sourdine`).
 const String mediaCardMutedSummary = 'Son en sourdine';

@@ -20,7 +20,7 @@
         android:name="android.software.live_wallpaper"
         android:required="false" />
 
-    <!-- Label: « Eventide », or « Eventide Démo » for the demo build (appLabel placeholder,
+    <!-- Label: « Full Relax », or « Full Relax Démo » for the demo build (appLabel placeholder,
          app/build.gradle.kts). -->
     <application
         android:label="${appLabel}"

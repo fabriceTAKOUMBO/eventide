@@ -1,5 +1,5 @@
 {% extends "web/base.html" %}
-{% block title %}Un mix Eventide{% endblock %}
+{% block title %}Un mix Full Relax{% endblock %}
 {% block content %}
   <h1>On vous a partagé un mix</h1>
   <p class="paysage">{{ mix.paysage }}{% if mix.paysage_premium %} <span class="premium">Premium</span>{% endif %}{% if mix.moment %} · {{ mix.moment }}{% endif %}</p>
@@ -12,7 +12,7 @@
     </ul>
   {% endfor %}
   <p class="actions">
-    <a class="bouton" href="{{ intent_url }}">Ouvrir dans Eventide</a>
+    <a class="bouton" href="{{ intent_url }}">Ouvrir dans Full Relax</a>
     <a class="bouton secondaire" href="{{ store_url }}">Télécharger sur Google Play</a>
   </p>
   <p class="note">Les éléments marqués Premium s'écoutent avec l'abonnement.</p>

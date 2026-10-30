@@ -25,7 +25,7 @@ val shareHost: String = (project.findProperty("eventide.shareHost") as String?) 
 val admobAppId: String =
     (project.findProperty("eventide.admobAppId") as String?) ?: "ca-app-pub-3940256099942544~3347511713"
 
-// Demo build (« Eventide Démo », docs/app/architecture.md): -Peventide.demo=true, i.e.
+// Demo build (« Full Relax Démo », docs/app/architecture.md): -Peventide.demo=true, i.e.
 //   flutter build apk --release --dart-define=DEMO_MODE=true --android-project-arg=eventide.demo=true
 // Its own package (be.cinaf.eventide.demo) and launcher label, so it can never be uploaded or
 // installed in place of the production app, and a manifest flag that the Dart side requires
@@ -57,7 +57,7 @@ android {
         versionName = flutter.versionName
         manifestPlaceholders["shareHost"] = shareHost
         manifestPlaceholders["admobAppId"] = admobAppId
-        manifestPlaceholders["appLabel"] = if (demoBuild) "Eventide D\u00e9mo" else "Eventide"
+        manifestPlaceholders["appLabel"] = if (demoBuild) "Full Relax D\u00e9mo" else "Full Relax"
         manifestPlaceholders["demoBuild"] = demoBuild.toString()
     }
 

@@ -516,7 +516,7 @@ class PlaybackHandler extends BaseAudioHandler {
     }
     // Nothing loaded: ask the app what to play. The loading state is published first so that
     // the foreground notification exists within Android's deadline (headless engine start).
-    markLoading('Eventide');
+    markLoading('Full Relax');
     final scheduleId = await _native.consumePendingStart();
     if (scheduleId != null) debugPrint('$scheduleLogTag: play requested for schedule $scheduleId');
     await _playFromHost(scheduleId);
@@ -525,7 +525,7 @@ class PlaybackHandler extends BaseAudioHandler {
   /// Runs a scheduled start found by the app (fallback « Lancer » tapped).
   Future<void> playScheduled(String scheduleId) async {
     if (_status.playing || _status.loading) return;
-    markLoading('Eventide');
+    markLoading('Full Relax');
     await _playFromHost(scheduleId);
   }
 

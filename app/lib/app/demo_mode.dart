@@ -1,9 +1,9 @@
-// Demo build (« Eventide Démo »): Premium unlocked on the phone, for showing and testing the app
+// Demo build (« Full Relax Démo »): Premium unlocked on the phone, for showing and testing the app
 // without Google Play or a backend. See docs/app/architecture.md, « Version démo ».
 //
 // It can never be confused with production: the Android build must be made with the Gradle
 // property `eventide.demo=true` (separate package `be.cinaf.eventide.demo`, launcher label
-// « Eventide Démo », manifest flag read by NativeBridge.isDemoBuild()) AND the Dart side must be
+// « Full Relax Démo », manifest flag read by NativeBridge.isDemoBuild()) AND the Dart side must be
 // compiled with `--dart-define=DEMO_MODE=true`. A production package built by mistake with the
 // dart-define stays a normal app.
 import '../core/plan.dart';

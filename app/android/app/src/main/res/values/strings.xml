@@ -12,7 +12,7 @@
     <string name="no_connection_title">Pas de connexion</string>
     <string name="no_connection_text">La version gratuite a besoin d’internet pour démarrer le son. Premium fonctionne sans connexion.</string>
     <!-- Live wallpaper (LandscapeWallpaperService). -->
-    <string name="wallpaper_label">Eventide · paysage vivant</string>
-    <string name="wallpaper_description">Le paysage choisi dans Eventide, en vidéo muette et en boucle. Il se met en pause dès qu’il n’est plus visible.</string>
-    <string name="wallpaper_author">Eventide</string>
+    <string name="wallpaper_label">Full Relax · paysage vivant</string>
+    <string name="wallpaper_description">Le paysage choisi dans Full Relax, en vidéo muette et en boucle. Il se met en pause dès qu’il n’est plus visible.</string>
+    <string name="wallpaper_author">Full Relax</string>
 </resources>

@@ -583,6 +583,7 @@ void main() {
       await model.shareMix();
       expect(h.share.shared.single, contains(link.toString()));
       expect(h.share.shared.single, contains('Cascade en forêt'));
+      expect(h.share.shared.single, contains('sur Full Relax'));
       await model.copyShareLink();
       expect(h.share.copied.single, link.toString());
     });
@@ -749,6 +750,7 @@ void main() {
       await model.completeOnboarding();
       await model.toggleFavorite();
       final export = jsonDecode(await model.exportData()) as Map<String, dynamic>;
+      expect(export['application'], 'Full Relax');
       expect(export['telephone'][StoreKeys.favorites], hasLength(1));
       expect(export.containsKey('serveur'), isFalse);
       await model.deleteAccountData();
@@ -1093,7 +1095,7 @@ void main() {
       final item = h.handler.mediaItem.value!;
       expect(item.title, 'Cascade en forêt');
       expect(item.artist, 'Ambiance de la cascade · Oiseaux · Vent · Piano doux');
-      expect(item.album, 'Eventide');
+      expect(item.album, 'Full Relax');
       expect(item.duration, const Duration(hours: 1));
       expect(actions(), [MediaAction.pause, MediaAction.custom, MediaAction.custom]);
       expect(h.handler.playbackState.value.androidCompactActionIndices, [0]);

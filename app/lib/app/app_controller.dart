@@ -674,7 +674,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
     return _Prepared(
       PlayRequest(
         landscapeId: scene.landscapeId,
-        title: landscape?.name ?? 'Eventide',
+        title: landscape?.name ?? 'Full Relax',
         subtitle: subtitle,
         layers: layers,
         timer: scene.timer,
@@ -1525,8 +1525,8 @@ class RealAppModel extends AppModel implements PlaybackHost {
   @override
   Future<void> shareMix() async {
     final link = await createShareLink();
-    final name = _catalog.landscape(_scene.landscapeId)?.name ?? 'Eventide';
-    await _share.share('Écoutez mon ambiance « $name » sur Eventide : $link', subject: 'Mon ambiance Eventide');
+    final name = _catalog.landscape(_scene.landscapeId)?.name ?? 'Full Relax';
+    await _share.share('Écoutez mon ambiance « $name » sur Full Relax : $link', subject: 'Mon ambiance Full Relax');
   }
 
   @override
@@ -1722,7 +1722,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
       }
     }
     return const JsonEncoder.withIndent('  ').convert({
-      'application': 'Eventide',
+      'application': 'Full Relax',
       'exporte_le': _now().toIso8601String(),
       'telephone': phone,
       'serveur': ?server,
@@ -1807,7 +1807,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
     if (problems == null) return false;
     try {
       final text = await problems.report();
-      await _share.share(text, subject: 'Eventide — rapport de problème');
+      await _share.share(text, subject: 'Full Relax — rapport de problème');
       return true;
     } catch (e) {
       debugPrint('RealAppModel: problem report not shared ($e)');

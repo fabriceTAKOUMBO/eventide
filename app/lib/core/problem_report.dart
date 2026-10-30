@@ -280,7 +280,7 @@ String buildProblemReport({
   int maxLogLines = 400,
 }) {
   final b = StringBuffer()
-    ..writeln('Eventide — rapport de problème')
+    ..writeln('Full Relax — rapport de problème')
     ..writeln('Créé le ${formatExitDate(now)} (heure du téléphone, ${_offset(now)})')
     ..writeln('Ce rapport ne contient aucune donnée personnelle : ni compte, ni identifiant, ni historique d’écoute.')
     ..writeln()

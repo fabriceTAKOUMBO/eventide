@@ -108,7 +108,7 @@ void main() {
       expect(model.lastAbnormalExit?.reason, ExitReason.crashNative);
       expect(await model.shareProblemReport(), isTrue);
       final text = setup.share.shared.single;
-      expect(text, contains('Eventide — rapport de problème'));
+      expect(text, contains('Full Relax — rapport de problème'));
       expect(text, contains('SM-S921B'));
       expect(text, contains('Plantage natif'));
       expect(text, isNot(contains('android-id')), reason: 'no identifier');

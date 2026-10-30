@@ -8,7 +8,7 @@ import android.os.Build
 /**
  * Build-time flags written into the manifest by app/build.gradle.kts.
  *
- * DEMO_BUILD is true only in the « Eventide Démo » package (Gradle property eventide.demo=true,
+ * DEMO_BUILD is true only in the « Full Relax Démo » package (Gradle property eventide.demo=true,
  * application id be.cinaf.eventide.demo). Dart turns demo mode on only when this flag AND its
  * own DEMO_MODE dart-define agree (lib/app/demo_mode.dart).
  */
