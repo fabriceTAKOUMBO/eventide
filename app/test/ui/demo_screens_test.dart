@@ -1,4 +1,4 @@
-// Demo build (« Eventide Démo ») texts on the Premium and Réglages screens.
+// Demo build (« Full Relax Démo ») texts on the Premium and Réglages screens.
 import 'package:eventide/core/plan.dart';
 import 'package:eventide/ui/navigation.dart';
 import 'package:eventide/ui/screens/premium_screen.dart';

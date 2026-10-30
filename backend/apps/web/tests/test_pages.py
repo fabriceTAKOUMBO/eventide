@@ -27,6 +27,9 @@ def test_share_landing_page(client):
     assert "Nappes apaisantes" in html and "40 %" in html
     assert "https://play.google.com/store/apps/details?id=app.eventide.test" in html
     assert "intent://eventide.test/m/Ab12Cd34#Intent;scheme=https;package=app.eventide.test" in html
+    # The product is « Full Relax » for users; « Eventide » stays an internal name.
+    assert "<title>Un mix Full Relax</title>" in html and "Ouvrir dans Full Relax" in html
+    assert '<p class="marque">Full Relax</p>' in html and "Eventide" not in html
     assert "script-src 'self'" in response["Content-Security-Policy"]
     assert "<script>" not in html
 
@@ -50,7 +53,9 @@ def test_share_page_of_a_retired_landscape_shows_what_the_app_opens(client):
 def test_unknown_share_page_is_404(client, code):
     response = client.get(f"/m/{code}")
     assert response.status_code == 404
-    assert "n'existe plus" in response.content.decode()
+    html = response.content.decode()
+    assert "n'existe plus" in html
+    assert "<title>Mix introuvable — Full Relax</title>" in html and "Eventide" not in html
 
 
 def test_standalone_share_page_embeds_the_catalog_safely(client):
@@ -58,6 +63,8 @@ def test_standalone_share_page_embeds_the_catalog_safely(client):
     assert response.status_code == 200
     html = response.content.decode()
     assert '<script id="catalogue" type="application/json">' in html
+    assert "<title>Un mix Full Relax</title>" in html and "Si Full Relax est installé" in html
+    assert "Eventide" not in html
     assert "web/partage.js" in html
     catalogue = json.loads(html.split('type="application/json">')[1].split("</script>")[0])
     assert catalogue["paysages"]["cascade-foret"] == {"nom": "Cascade en forêt", "gratuit": True}
@@ -96,6 +103,8 @@ def test_privacy_policy_mentions_us_hosting_and_no_microphone(client, settings):
     assert "États-Unis (Virginie du Nord)" in html
     assert "L'application n'utilise pas le micro" in html
     assert "confidentialite@exemple.test" in html
+    assert "<title>Politique de confidentialité — Full Relax</title>" in html
+    assert "Full Relax est une application Android" in html and "Eventide" not in html
     # The voice assistant is gone (contract § 7): no model, no voice data.
     assert "Gemini" not in html and "assistant" not in html
 

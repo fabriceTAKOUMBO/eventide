@@ -1,5 +1,5 @@
-// Identity (dossier, annex D): the drop logo and the « Eventide » wordmark whose « i »
-// has a small drop as its dot.
+// Identity: the app logo (the bundled brand picture, or a drawn drop as fallback) and the
+// « Full Relax » wordmark, set in the title face of the « Galerie » style.
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -7,6 +7,9 @@ import 'package:flutter/material.dart';
 import '../landscape/landscape_image.dart';
 import '../theme/vitre.dart';
 import 'vicons.dart';
+
+/// Name of the product as users see it.
+const String _brandName = 'Full Relax';
 
 /// App logo in its rounded tile. Uses the generated brand asset when bundled,
 /// otherwise draws the drop.
@@ -20,7 +23,7 @@ class BrandLogo extends StatelessWidget {
     final radius = BorderRadius.circular(size / 4);
     return Semantics(
       image: true,
-      label: 'Logo Eventide',
+      label: 'Logo $_brandName',
       child: Container(
         width: size,
         height: size,
@@ -331,8 +334,9 @@ class BrandDropPainter extends CustomPainter {
   bool shouldRepaint(BrandDropPainter oldDelegate) => false;
 }
 
-/// « Eventide » in Fraunces 500 with a drop as the dot of the « i ». Not scaled by
-/// the text size setting: it is a drawing (alternative text « Eventide »).
+/// « Full Relax » in Cormorant Garamond 500 upright (the title face of the « Galerie » style),
+/// slightly tracked, in warm white with a soft shadow. Not scaled by the text size setting: it is
+/// a drawing (alternative text « Full Relax »).
 class Wordmark extends StatelessWidget {
   const Wordmark({super.key, this.fontSize = 40});
 
@@ -342,7 +346,7 @@ class Wordmark extends StatelessWidget {
   Widget build(BuildContext context) {
     final painter = _WordmarkPainter(fontSize);
     return Semantics(
-      label: 'Eventide',
+      label: _brandName,
       container: true,
       excludeSemantics: true,
       child: CustomPaint(size: painter.measure(), painter: painter),
@@ -354,18 +358,23 @@ class _WordmarkPainter extends CustomPainter {
   _WordmarkPainter(this.fontSize);
 
   final double fontSize;
-  static final Path _dropPath = parseSvgPath(
-    'M10 1 C10 1 2 11 2 18 a8 8 0 0 0 16 0 C18 11 10 1 10 1 Z',
-  );
+
+  /// Tracking in em: opens the Garamond a little, as display type is set for a name.
+  static const double _trackingEm = 0.04;
 
   TextPainter _layout() {
-    final style = fraunces(fontSize).copyWith(
+    final style = VitreType.title(
+      size: fontSize,
+      color: VitreColors.wordmark,
+      height: 1.1,
+    ).copyWith(
+      letterSpacing: _trackingEm * fontSize,
       shadows: const [
         Shadow(color: Color(0x8C000000), blurRadius: 18, offset: Offset(0, 2)),
       ],
     );
     return TextPainter(
-      text: TextSpan(text: 'Eventıde', style: style),
+      text: TextSpan(text: _brandName, style: style),
       textDirection: TextDirection.ltr,
       textScaler: TextScaler.noScaling,
     )..layout();
@@ -382,37 +391,7 @@ class _WordmarkPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final tp = _layout();
     tp.paint(canvas, Offset.zero);
-    final em = fontSize;
-    final end = tp
-        .getOffsetForCaret(const TextPosition(offset: 6), Rect.zero)
-        .dx;
-    final baseline = tp.computeDistanceToActualBaseline(
-      TextBaseline.alphabetic,
-    );
     tp.dispose();
-    final w = 0.21 * em;
-    final h = 0.29 * em;
-    final left = end - 0.26 * em;
-    final bottom = baseline - 0.54 * em;
-    canvas.save();
-    canvas.translate(left, bottom - h);
-    canvas.scale(w / 20, h / 28);
-    canvas.drawPath(
-      _dropPath,
-      Paint()
-        ..shader = ui.Gradient.linear(
-          const Offset(0, 0),
-          const Offset(0, 28),
-          const [Color(0xFFEAFCF3), Color(0xFF74C4AB)],
-        ),
-    );
-    canvas.translate(7, 17);
-    canvas.rotate(12 * 3.14159265 / 180);
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset.zero, width: 3.2, height: 6.4),
-      Paint()..color = const Color(0xD9FFFFFF),
-    );
-    canvas.restore();
   }
 
   @override

@@ -11,14 +11,14 @@ const List<(String, List<String>)> _brands = [
   (
     'Samsung',
     [
-      'Paramètres › Applications › Eventide',
+      'Paramètres › Applications › Full Relax',
       'Batterie › « Non restreinte »',
     ],
   ),
   (
     'Xiaomi, Redmi, Poco',
     [
-      'Paramètres › Applications › Gérer les applications › Eventide',
+      'Paramètres › Applications › Gérer les applications › Full Relax',
       'Économiseur de batterie › « Aucune restriction »',
       'Activez « Démarrage automatique »',
     ],
@@ -27,20 +27,20 @@ const List<(String, List<String>)> _brands = [
     'Huawei, Honor',
     [
       'Paramètres › Batterie › Lancement d’applications',
-      'Eventide : désactivez la gestion automatique, laissez tout activé',
+      'Full Relax : désactivez la gestion automatique, laissez tout activé',
     ],
   ),
   (
     'Oppo, OnePlus, Realme',
     [
       'Paramètres › Batterie › Plus de paramètres (ou Optimisation)',
-      'Eventide › « Ne pas optimiser » (ou « Autoriser l’activité en arrière-plan »)',
+      'Full Relax › « Ne pas optimiser » (ou « Autoriser l’activité en arrière-plan »)',
     ],
   ),
   (
     'Autres téléphones',
     [
-      'Paramètres › Applications › Eventide › Batterie',
+      'Paramètres › Applications › Full Relax › Batterie',
       '« Sans restriction »',
     ],
   ),
@@ -62,7 +62,7 @@ class BatteryGuideScreen extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SheetText(
-            'Laissez Eventide fonctionner en arrière-plan :',
+            'Laissez Full Relax fonctionner en arrière-plan :',
           ),
           const SizedBox(height: 14),
           for (final (brand, steps) in _brands)
@@ -112,7 +112,7 @@ class BatteryGuideScreen extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 8),
-          // Opens Eventide's page in Android settings (first step of every guide).
+          // Opens the app's page in Android settings (first step of every guide).
           PrimaryButton(
             label: 'Ouvrir les réglages',
             onPressed: () => context.readModel.openBatteryGuide(),

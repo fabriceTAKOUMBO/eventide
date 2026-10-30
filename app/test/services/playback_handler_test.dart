@@ -369,7 +369,7 @@ void main() {
         expect(item.id, 'cascade-foret');
         expect(item.title, 'Cascade en forêt');
         expect(item.artist, 'Eau vive · Oiseaux · Piano doux');
-        expect(item.album, 'Eventide');
+        expect(item.album, 'Full Relax');
         expect(item.duration, const Duration(minutes: 30));
         expect(item.artUri, isNull);
         expect(item.displayDescription, isNull);
@@ -540,9 +540,9 @@ void main() {
         final handler = build(async, t0);
         host.card.value = card;
         host.next = null;
-        handler.markLoading('Eventide');
+        handler.markLoading('Full Relax');
         expect(actions(handler), [MediaAction.pause]);
-        expect(handler.mediaItem.value!.title, 'Eventide');
+        expect(handler.mediaItem.value!.title, 'Full Relax');
       });
     });
 

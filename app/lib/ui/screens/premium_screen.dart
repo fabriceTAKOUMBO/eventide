@@ -61,7 +61,7 @@ ProductOffer offerFor(AppModel model, PurchaseChoice choice) {
   };
 }
 
-/// Demo build (« Eventide Démo »): what the purchase button and the note say instead.
+/// Demo build (« Full Relax Démo »): what the purchase button and the note say instead.
 const String kDemoPremiumButton = 'Premium est déjà actif';
 const String kDemoPremiumNote = 'Version démo : Premium est déjà actif.';
 

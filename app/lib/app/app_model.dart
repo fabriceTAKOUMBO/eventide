@@ -252,7 +252,7 @@ abstract class AppModel extends ChangeNotifier {
   /// The full privacy policy online (`https://<SHARE_HOST>/confidentialite`).
   Future<void> openPrivacyPolicy() async {}
 
-  /// Demo build (« Eventide Démo »): Premium is forced on the phone, nothing can be bought.
+  /// Demo build (« Full Relax Démo »): Premium is forced on the phone, nothing can be bought.
   bool get demoMode => false;
 
   // ---- Living landscapes (looping videos and their posters, docs/app/architecture.md § 14)

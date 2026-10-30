@@ -1,4 +1,4 @@
-// Eventide — lien de partage autonome : https://<domaine>/s#<base64url(JSON compact de la scène)>.
+// Full Relax — lien de partage autonome : https://<domaine>/s#<base64url(JSON compact de la scène)>.
 // Le fragment ne quitte jamais le navigateur ; ce script l'affiche avec les noms du catalogue.
 (function () {
   "use strict";
