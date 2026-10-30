@@ -297,9 +297,11 @@
       // ---------------------------------------------------------------- decor
       var D = ctx.decors;
       function hex(c) { return '#' + c.getHexString(); }
+      // the sky seen here spans about 0 to 15 degrees of elevation (the camera looks 10 degrees down
+      // with a 52-degree field): the stars are placed in that window
       var stars = D.etoiles(ctx, {
-        count: high ? 1200 : 720, radius: 1500, azimuth: [0, 46], elevation: [5, 85], size: 0.95, brightness: 1.6,
-        tint: ['#bcd8ff', '#e9d6ff'], band: { normal: [0.4, 0.5, 0.75], width: 0.12, count: high ? 900 : 540 },
+        count: high ? 200 : 120, radius: 1500, azimuth: [0, 18], elevation: [2.5, 17], size: 0.95, brightness: 1.6,
+        tint: ['#bcd8ff', '#e9d6ff'], band: { normal: [0.4, 0.5, 0.75], width: 0.12, count: high ? 500 : 300 },
       });
       var rain = D.pluie(ctx, {
         count: high ? 700 : 420, box: { min: [-9, -1.6, -40], max: [9, 9, 6] }, speed: [7, 9.5], color: hex(lin('#8fa8ff')),

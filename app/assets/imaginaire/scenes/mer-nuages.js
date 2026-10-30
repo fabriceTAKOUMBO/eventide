@@ -1020,11 +1020,14 @@
         motes: 0, spreadAxis: [0, 0, 1],
         onLevel: function (v) { post.uniforms.uRays.value.x = 0.18 + 0.55 * v; },
       });
+      // the sky seen here spans about 0 to 20 degrees of elevation (the camera looks 5 degrees down
+      // with a 50-degree field) around an azimuth of -3.4 degrees: the stars and the shooting stars
+      // are placed in that window (higher, they would never be seen)
       var stars = D.etoiles(ctx, {
-        count: high ? 700 : 450, radius: 19000, azimuth: [0, 40], elevation: [26, 85], size: 0.9, brightness: 2.2,
+        count: high ? 160 : 100, radius: 19000, azimuth: [-3.5, 17], elevation: [7, 22], size: 0.9, brightness: 2.2,
         tint: ['#cfe0ff', '#f6efe0'],
       });
-      var meteors = D['etoiles-filantes'](ctx, { radius: 18000, azimuth: [12, 26], elevation: [38, 70] });
+      var meteors = D['etoiles-filantes'](ctx, { radius: 18000, azimuth: [-4, 11], elevation: [13, 21] });
       meteors.object.material.uniforms.uColor.value.multiplyScalar(2.5);
       var mistLevel = 0;
       function applyMist(v) {
