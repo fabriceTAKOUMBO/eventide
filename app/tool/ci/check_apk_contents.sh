@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Checks what a release APK is, so that the demo build can never pass for production:
-#   production: package be.cinaf.eventide, label « Eventide », free audio (with the free
+#   production: package be.cinaf.eventide, label « Full Relax », free audio (with the free
 #               landscape ambiance) and free landscape videos only: no Premium audio (the Premium
 #               ambiances and the thunder variants tonnerre-<part>-NN included), no Premium landscape
 #               video or poster (content/videos, content/images: served by the API), and none of
 #               the third-party test-only media (medias-test/, non-distributable);
 #   both:       the Imaginaire 3D runtime and scenes (assets/imaginaire/) and the poster of every
 #               scene (assets/landscapes/<id>.jpg), with the free scene's loop (foret-lucioles.mp4);
-#   demo:       package be.cinaf.eventide.demo, label « Eventide Démo », every Premium sound and
+#   demo:       package be.cinaf.eventide.demo, label « Full Relax Démo », every Premium sound and
 #               music of content/audio, every landscape video and poster of content/ and of
 #               medias-test/, and the test-only ambiances of medias-test/audio bundled.
 #
@@ -23,11 +23,11 @@ content="${3:-$repo/content/audio}"
 case "$kind" in
   production)
     want_package="be.cinaf.eventide"
-    want_label="Eventide"
+    want_label="Full Relax"
     ;;
   demo)
     want_package="be.cinaf.eventide.demo"
-    want_label="Eventide Démo"
+    want_label="Full Relax Démo"
     ;;
   *)
     echo "unknown kind '$kind' (production or demo)" >&2

@@ -138,7 +138,7 @@ jobs:
       - name: Bundle the Premium audio and landscape media (demo build only)
         run: bash tool/ci/bundle_demo_media.sh
 
-      - name: Demo release APKs (« Eventide Démo », be.cinaf.eventide.demo)
+      - name: Demo release APKs (« Full Relax Démo », be.cinaf.eventide.demo)
         run: |
           flutter build apk --release --split-per-abi --target-platform android-arm64,android-x64 \
             --dart-define=DEMO_MODE=true --android-project-arg=eventide.demo=true
