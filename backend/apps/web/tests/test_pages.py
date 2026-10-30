@@ -58,6 +58,7 @@ def test_unknown_share_page_is_404(client, code):
     assert "<title>Mix introuvable — Full Relax</title>" in html and "Eventide" not in html
 
 
+@pytest.mark.django_db  # the page embeds the published catalog (contract § 13)
 def test_standalone_share_page_embeds_the_catalog_safely(client):
     response = client.get("/s")
     assert response.status_code == 200

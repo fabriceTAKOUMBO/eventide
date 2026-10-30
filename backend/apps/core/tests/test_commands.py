@@ -16,7 +16,12 @@ def test_purge_expired_removes_old_rate_counters_only():
     out = StringIO()
     call_command("purge_expired", stdout=out)
     summary = json.loads(out.getvalue())
-    assert summary == {"event": "purge_expired_done", "rate_counters": 1}
+    assert summary == {
+        "event": "purge_expired_done",
+        "rate_counters": 1,
+        "admin_log_entries": 0,
+        "sessions": 0,
+    }
     assert RateCounter.objects.count() == 1
 
 

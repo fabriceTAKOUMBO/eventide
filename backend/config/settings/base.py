@@ -38,6 +38,8 @@ APPEND_SLASH = False
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",
+    # Database sessions: the administration dashboard only (/tableau/, contract § 14).
+    "django.contrib.sessions",
     "django.contrib.staticfiles",
     "rest_framework",
     "apps.core",
@@ -47,6 +49,7 @@ INSTALLED_APPS = [
     "apps.shares",
     "apps.content",
     "apps.web",
+    "apps.publishing",
 ]
 
 MIDDLEWARE = [
@@ -57,6 +60,9 @@ MIDDLEWARE = [
     "apps.core.middleware.RequestSizeLimitMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    # Lazy: the session table is only read when a view touches ``request.session`` (dashboard
+    # pages under /tableau/); the v1 API never does, so it gets no cookie and no query.
+    "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -128,6 +134,31 @@ SECURE_CROSS_ORIGIN_OPENER_POLICY = "same-origin"
 X_FRAME_OPTIONS = "DENY"
 CSRF_COOKIE_HTTPONLY = True
 
+# ---------------------------------------------------------------------------
+# Administration dashboard (/tableau/, contract § 14): session and CSRF cookies are scoped to
+# its path, Strict same-site, Secure outside DEBUG. Sessions last 8 hours from sign-in (the
+# session row is not rewritten at each request); expired rows are purged daily.
+# ---------------------------------------------------------------------------
+SESSION_ENGINE = "django.contrib.sessions.backends.db"
+SESSION_COOKIE_NAME = "ev_tableau"
+SESSION_COOKIE_PATH = "/tableau/"
+SESSION_COOKIE_AGE = 8 * 3600
+SESSION_COOKIE_HTTPONLY = True
+SESSION_COOKIE_SAMESITE = "Strict"
+SESSION_COOKIE_SECURE = not DEBUG
+SESSION_SAVE_EVERY_REQUEST = False
+CSRF_COOKIE_NAME = "ev_csrf"
+CSRF_COOKIE_PATH = "/tableau/"
+CSRF_COOKIE_SAMESITE = "Strict"
+CSRF_COOKIE_SECURE = not DEBUG
+CSRF_FAILURE_VIEW = "apps.publishing.views.csrf_failure"
+# Administrators: Google addresses (secret, comma-separated), compared case-insensitively.
+# Empty: every dashboard sign-in is refused. Never stored, never logged.
+ADMIN_EMAILS = [e.strip().lower() for e in env.list("ADMIN_EMAILS", default=[]) if e.strip()]
+# OAuth web client of the « Se connecter avec Google » button (one of GOOGLE_OAUTH_CLIENT_IDS).
+GOOGLE_WEB_CLIENT_ID = env.str("GOOGLE_WEB_CLIENT_ID", default="")
+RATE_ADMIN_LOGIN_PER_15_MIN = env.int("RATE_ADMIN_LOGIN_PER_15_MIN", default=10)
+
 # Reverse proxies appending to X-Forwarded-For (0 locally, 1 behind the shared ALB).
 NUM_PROXIES = env.int("NUM_PROXIES", default=0)
 
@@ -151,13 +182,16 @@ REST_FRAMEWORK = {
 # ---------------------------------------------------------------------------
 # Origin of the share links (https://<domaine>), without a trailing slash.
 PUBLIC_WEB_BASE_URL = env.str("PUBLIC_WEB_BASE_URL", default="http://127.0.0.1:8000").rstrip("/")
+# The dashboard forms post to this origin (contract § 14).
+if PUBLIC_WEB_BASE_URL not in CSRF_TRUSTED_ORIGINS:
+    CSRF_TRUSTED_ORIGINS = [*CSRF_TRUSTED_ORIGINS, PUBLIC_WEB_BASE_URL]
 # Android package (Play Console) and SHA-256 fingerprints of the signing certificate(s).
 PLAY_PACKAGE_NAME = env.str("PLAY_PACKAGE_NAME", default="")
 ANDROID_CERT_FINGERPRINTS = env.list("ANDROID_CERT_FINGERPRINTS", default=[])
 # Privacy policy (/confidentialite): publisher and contact, given by the product owner.
 LEGAL_PUBLISHER_NAME = env.str("LEGAL_PUBLISHER_NAME", default="")
 LEGAL_CONTACT_EMAIL = env.str("LEGAL_CONTACT_EMAIL", default="")
-LEGAL_PRIVACY_UPDATED_ON = env.str("LEGAL_PRIVACY_UPDATED_ON", default="29 octobre 2026")
+LEGAL_PRIVACY_UPDATED_ON = env.str("LEGAL_PRIVACY_UPDATED_ON", default="30 octobre 2026")
 
 # ---------------------------------------------------------------------------
 # Google: Play Integrity, Play Developer API, Sign-In, RTDN
@@ -191,6 +225,7 @@ RATE_PURCHASES_PER_HOUR = env.int("RATE_PURCHASES_PER_HOUR", default=30)
 RATE_SHARES_PER_DAY = env.int("RATE_SHARES_PER_DAY", default=20)
 RATE_CONTENT_PER_HOUR = env.int("RATE_CONTENT_PER_HOUR", default=120)
 RATE_EXPORT_PER_HOUR = env.int("RATE_EXPORT_PER_HOUR", default=10)
+RATE_CATALOG_PER_HOUR = env.int("RATE_CATALOG_PER_HOUR", default=60)
 
 # ---------------------------------------------------------------------------
 # Content delivery: CloudFront signed URLs (contract § 8)
@@ -200,6 +235,32 @@ CLOUDFRONT_KEY_PAIR_ID = env.str("CLOUDFRONT_KEY_PAIR_ID", default="")
 # PEM of the private key (Secrets Manager eventide/<env>/cloudfront-private-key).
 CLOUDFRONT_PRIVATE_KEY = env.str("CLOUDFRONT_PRIVATE_KEY", default="", multiline=True)
 CONTENT_URL_TTL_SECONDS = env.int("CONTENT_URL_TTL_SECONDS", default=3600)
+
+# ---------------------------------------------------------------------------
+# Publishing from the dashboard (contract § 13-14): content bucket, media task.
+# ---------------------------------------------------------------------------
+# Content bucket (Eventide's own): the browser posts sources to uploads/<uuid>/source (signed
+# POST form); the media task writes the processed files under their versioned keys.
+CONTENT_BUCKET = env.str("CONTENT_BUCKET", default="")
+CONTENT_BUCKET_REGION = env.str("CONTENT_BUCKET_REGION", default="us-east-1")
+# Region of the ECS cluster (Fargate sets AWS_REGION in every container).
+AWS_REGION_NAME = env.str("AWS_REGION", default=CONTENT_BUCKET_REGION)
+# Largest source accepted (contract § 14: 300 Mo), and lifetime of the signed POST form.
+UPLOAD_MAX_BYTES = env.int("UPLOAD_MAX_BYTES", default=300_000_000)
+UPLOAD_FORM_TTL_SECONDS = env.int("UPLOAD_FORM_TTL_SECONDS", default=900)  # 900 s at most
+# Media task (ECS RunTask, the cluster's default capacity provider, no public IP, one at a
+# time): family ev-<env>-media, latest ACTIVE revision; same image, command
+# ``python manage.py process_media <element-uuid>`` (ADR hebergement-mutualise § 12.5).
+MEDIA_TASK_CLUSTER = env.str("MEDIA_TASK_CLUSTER", default="")
+MEDIA_TASK_DEFINITION = env.str("MEDIA_TASK_DEFINITION", default="")
+MEDIA_TASK_CONTAINER = env.str("MEDIA_TASK_CONTAINER", default="media")
+MEDIA_TASK_SUBNETS = env.list("MEDIA_TASK_SUBNETS", default=[])
+MEDIA_TASK_SECURITY_GROUPS = env.list("MEDIA_TASK_SECURITY_GROUPS", default=[])
+# Where the media task reads sources and writes outputs: ``s3`` (the content bucket) or
+# ``local:<dir>`` (development and tests).
+MEDIA_STORAGE = env.str("MEDIA_STORAGE", default="s3" if CONTENT_BUCKET else "")
+# A processing still running after this long is shown as failed (task killed, out of memory).
+MEDIA_PROCESSING_TIMEOUT_SECONDS = env.int("MEDIA_PROCESSING_TIMEOUT_SECONDS", default=45 * 60)
 
 # ---------------------------------------------------------------------------
 # Logging: JSON lines on stdout, never a token.

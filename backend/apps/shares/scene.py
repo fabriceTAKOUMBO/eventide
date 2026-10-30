@@ -9,13 +9,17 @@ Decor (contract § 12): it only applies to a 3D scene (``rendu: 3d``) and only f
 ``decors``. A well-formed decor element that does not apply (a filmed landscape, an id the scene
 cannot show, an id no longer in the catalog such as ``eclairs``) is dropped without an error,
 like a level 0. A malformed one (not an object, no id, bad level, duplicate) is still refused.
+
+Ids are checked against the published catalog (contract § 13): an element published from the
+dashboard is valid, a withdrawn one is unknown.
 """
 
 from __future__ import annotations
 
 from typing import Any
 
-from apps.core.catalog import MOMENTS, SCENE_SECTIONS, get_catalog
+from apps.core.catalog import MOMENTS, SCENE_SECTIONS, Catalog
+from apps.publishing.catalog import current_catalog
 
 
 class InvalidScene(Exception):
@@ -28,8 +32,8 @@ def _level(value: Any) -> int:
     return value
 
 
-def normalise_scene(scene: Any) -> dict:
-    catalog = get_catalog()
+def normalise_scene(scene: Any, catalog: Catalog | None = None) -> dict:
+    catalog = catalog or current_catalog()
     if not isinstance(scene, dict) or scene.get("version") != 1:
         raise InvalidScene
     if isinstance(scene.get("version"), bool):

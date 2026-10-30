@@ -24,6 +24,10 @@ class Installation(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     last_seen_at = models.DateTimeField()
 
+    class Meta:
+        # Users page of the dashboard: newest first, 50 per page (contract § 14).
+        indexes = [models.Index(fields=["-created_at"], name="installation_created_idx")]
+
     # DRF treats the authenticated installation as ``request.user``.
     is_authenticated = True
     is_anonymous = False

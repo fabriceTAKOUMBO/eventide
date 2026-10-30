@@ -19,6 +19,9 @@ FORBIDDEN_FIELDS = frozenset(
         "purchase_token",
         "authorization",
         "api_key",
+        # Dashboard sign-in (contract § 14): the Google ID token and the address it carries.
+        "credential",
+        "email",
     }
 )
 

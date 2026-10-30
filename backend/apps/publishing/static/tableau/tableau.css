@@ -1,0 +1,97 @@
+/* Full Relax — tableau de bord (même verre sombre que les pages web ; lisible à 390 px). */
+.vitre.large { max-width: 980px; }
+.tableau h1 { font-size: 26px; }
+.tableau h2 { font-size: 19px; }
+.entete { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 16px; }
+.entete .marque { margin: 0; }
+.menu { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; font-size: 16px; }
+.menu a { color: #f5f7fa; text-decoration: none; padding: 10px 0; border-bottom: 2px solid transparent; }
+.menu a[aria-current="page"] { border-bottom-color: #9fd3c7; }
+.en-ligne { display: inline; margin: 0; }
+.lien { background: none; border: 0; color: #cfe6ff; font: inherit; cursor: pointer; padding: 10px 0; min-height: 44px; text-decoration: underline; }
+.titre-ligne { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.titre-ligne h1 { margin: 0; overflow-wrap: anywhere; }
+.fil { font-size: 15px; opacity: 0.8; margin: 0 0 8px; }
+.message { border-radius: 12px; padding: 10px 14px; font-size: 16px; }
+.message.ok { background: rgba(110, 190, 160, 0.18); border: 1px solid rgba(110, 190, 160, 0.5); }
+.message.erreur { background: rgba(230, 120, 110, 0.16); border: 1px solid rgba(230, 120, 110, 0.55); }
+.aide { font-size: 15px; opacity: 0.75; margin: 4px 0 12px; }
+.erreur-champ { color: #ffb4a8; font-size: 15px; margin: 4px 0 12px; }
+.detail { font-size: 16px; opacity: 0.85; min-height: 1em; }
+code { font-size: 15px; overflow-wrap: anywhere; }
+button.bouton { border: 0; font: inherit; font-weight: 600; cursor: pointer; }
+button.bouton.secondaire { border: 1px solid rgba(255, 255, 255, 0.5); }
+button.bouton:disabled { opacity: 0.5; cursor: progress; }
+.actions form { margin: 0; }
+
+/* Formulaires */
+.formulaire label { display: block; margin: 16px 0 6px; font-size: 16px; }
+.formulaire label.choix, label.choix { display: inline-flex; align-items: center; gap: 8px; margin: 6px 20px 6px 0; min-height: 44px; }
+input[type="text"], input[type="number"], select {
+  width: 100%; min-height: 48px; padding: 8px 12px; border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.3); background: rgba(255, 255, 255, 0.06);
+  color: #f5f7fa; font: inherit; font-size: 17px;
+}
+select option { color: #0b1118; }
+input[type="radio"], input[type="checkbox"] { width: 20px; height: 20px; accent-color: #9fd3c7; }
+input[type="file"] { width: 100%; font-size: 16px; padding: 8px 0; }
+fieldset { border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 14px; padding: 8px 14px 14px; margin: 18px 0 0; min-width: 0; }
+legend { padding: 0 6px; font-size: 16px; opacity: 0.85; }
+.sous-titre { font-size: 16px; margin: 18px 0 6px; }
+.ligne-mix { display: grid; grid-template-columns: 1fr 88px auto; gap: 8px; align-items: center; margin: 8px 0; }
+.ligne-mix .erreur-champ { grid-column: 1 / -1; margin: 0; }
+.visuellement-cache { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* États */
+.etat { display: inline-block; font-size: 14px; border-radius: 999px; padding: 2px 10px; border: 1px solid rgba(255, 255, 255, 0.35); white-space: nowrap; }
+.etat-publie { border-color: #8fd6b6; color: #b9f0d6; }
+.etat-pret { border-color: #9fc7f0; color: #cfe6ff; }
+.etat-envoi, .etat-traitement { border-color: #e6cf86; color: #f2df9e; }
+.etat-echec { border-color: #f0998c; color: #ffc1b7; }
+.etat-retire, .etat-brouillon { opacity: 0.8; }
+.etat-bloc { margin: 16px 0; }
+.fiche { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 16px; margin: 16px 0; }
+.fiche dt { opacity: 0.7; }
+.fiche dd { margin: 0; overflow-wrap: anywhere; }
+
+/* Aperçu */
+.medias { display: flex; flex-wrap: wrap; gap: 16px; }
+.medias figure { margin: 0; }
+.medias img, .medias video { display: block; width: 216px; max-width: 100%; height: auto; aspect-ratio: 9 / 16; border-radius: 12px; background: #000; object-fit: cover; }
+.medias figcaption { font-size: 14px; opacity: 0.75; margin-top: 4px; }
+audio { width: 100%; max-width: 480px; }
+.mesures { font-size: 15px; opacity: 0.85; }
+progress { width: 100%; height: 14px; accent-color: #9fd3c7; }
+
+/* Listes : tableau sur grand écran, cartes sur téléphone */
+.liste { width: 100%; border-collapse: collapse; font-size: 16px; margin-top: 16px; }
+.liste th { text-align: left; font-weight: 600; font-size: 14px; opacity: 0.75; padding: 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.2); }
+.liste td { padding: 10px 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); vertical-align: top; overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+  .liste thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .liste, .liste tbody, .liste tr, .liste td { display: block; width: 100%; }
+  .liste tr { border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 14px; padding: 8px 12px; margin: 10px 0; }
+  .liste td { border: 0; padding: 4px 0; display: grid; grid-template-columns: 9.5em 1fr; gap: 8px; }
+  .liste td::before { content: attr(data-label); opacity: 0.65; font-size: 14px; }
+  .vitre { padding: 18px 16px; }
+  body.tableau { padding: 12px 8px; }
+}
+
+/* Totaux */
+.totaux { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin: 16px 0; }
+.total { border: 1px solid rgba(255, 255, 255, 0.14); border-radius: 14px; padding: 10px 12px; display: flex; flex-direction: column; font-size: 15px; }
+.total .chiffre { font-size: 26px; font-weight: 600; }
+.pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px; margin-top: 18px; font-size: 16px; }
+
+/* Connexion */
+.connexion { text-align: left; }
+.bouton-google { min-height: 48px; margin: 20px 0; max-width: 100%; overflow: hidden; }
+.bouton-google iframe { max-width: 100%; }
+/* Fallback drawn by Google in the page when its button frame cannot load (client or origin not
+   authorised): kept at button size. */
+.bouton-google svg { width: 20px; height: 20px; flex: none; }
+.bouton-google [role="button"] {
+  display: inline-flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 18px;
+  border: 1px solid rgba(255, 255, 255, 0.45); border-radius: 22px; cursor: pointer; font-size: 16px;
+}
+.bouton-google [role="button"] > div { display: inline-flex; align-items: center; gap: 10px; }

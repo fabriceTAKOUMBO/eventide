@@ -1,0 +1,9 @@
+{% extends "tableau/base.html" %}
+{% block title %}Accès refusé{% endblock %}
+{% block content %}
+<section class="connexion">
+  <h1>Accès refusé</h1>
+  {% if trop %}<p>Trop d'essais. Réessayez dans quelques minutes.</p>{% endif %}
+  <p class="actions"><a class="bouton secondaire" href="/tableau/connexion">Retour</a></p>
+</section>
+{% endblock %}

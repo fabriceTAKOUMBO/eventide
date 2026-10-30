@@ -1,0 +1,29 @@
+{% load static %}<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>{% block title %}Tableau de bord{% endblock %} — Full Relax</title>
+  <link rel="stylesheet" href="{% static 'web/style.css' %}">
+  <link rel="stylesheet" href="{% static 'tableau/tableau.css' %}">
+</head>
+<body class="tableau">
+  <main class="vitre large">
+    <header class="entete">
+      <p class="marque">Full Relax · tableau de bord</p>
+      {% if admin %}
+      <nav class="menu" aria-label="Sections">
+        <a href="/tableau/"{% if section == "catalogue" %} aria-current="page"{% endif %}>Catalogue</a>
+        <a href="/tableau/utilisateurs"{% if section == "utilisateurs" %} aria-current="page"{% endif %}>Utilisateurs</a>
+        <a href="/tableau/journal"{% if section == "journal" %} aria-current="page"{% endif %}>Journal</a>
+        <form method="post" action="/tableau/deconnexion" class="en-ligne">{% csrf_token %}<button type="submit" class="lien">Déconnexion</button></form>
+      </nav>
+      {% endif %}
+    </header>
+    {% if message %}<p class="message {{ message.kind }}" role="status">{{ message.text }}</p>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

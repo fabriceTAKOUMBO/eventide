@@ -25,6 +25,47 @@ def _isolated_google_session():
     google.reset_session_for_tests()
 
 
+@pytest.fixture(autouse=True)
+def aws_stubs(monkeypatch):
+    """Every AWS client is wrapped in an active botocore ``Stubber``: a call without a queued
+    response raises instead of reaching AWS. ``aws_stubs("ecs")`` returns the stubber of that
+    client (created on first use)."""
+    from botocore.stub import Stubber
+
+    from apps.publishing import aws
+
+    stubbers: dict[str, Stubber] = {}
+    real_make = aws._make
+
+    def make(service):
+        client = real_make(service)
+        stubber = Stubber(client)
+        stubber.activate()
+        stubbers[service] = stubber
+        return client
+
+    monkeypatch.setattr(aws, "_make", make)
+    aws.reset_clients()
+
+    def get(service):
+        aws.client(service)
+        return stubbers[service]
+
+    yield get
+    aws.reset_clients()
+
+
+@pytest.fixture(autouse=True)
+def _fresh_published_catalog():
+    """The published catalog is cached per process by revision; test transactions roll the
+    revision back, so each test starts from an empty cache."""
+    from apps.publishing.catalog import reset_cache_for_tests
+
+    reset_cache_for_tests()
+    yield
+    reset_cache_for_tests()
+
+
 @pytest.fixture
 def catalog():
     return get_catalog()

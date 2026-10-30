@@ -1,0 +1,24 @@
+{% extends "tableau/base.html" %}
+{% block title %}Journal{% endblock %}
+{% block content %}
+<h1>Journal</h1>
+<p class="note">Connexions, créations, envois, publications, modifications et retraits. Gardé un an.</p>
+{% if rows %}
+<table class="liste">
+  <thead><tr><th>Date</th><th>Compte</th><th>Action</th><th>Élément</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td data-label="Date">{{ r.at|date:"d/m/Y H:i:s" }}</td>
+      <td data-label="Compte"><code>{{ r.compte }}</code>{% if r.vous %} (vous){% endif %}</td>
+      <td data-label="Action">{{ r.action_label }}</td>
+      <td data-label="Élément">{% if r.element_id %}<a href="/tableau/elements/{{ r.element_id }}">{{ r.element_label }}</a>{% else %}{{ r.element_label|default:"—" }}{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% include "tableau/pagination.html" with base="/tableau/journal" %}
+{% else %}
+<p>Le journal est vide.</p>
+{% endif %}
+{% endblock %}

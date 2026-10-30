@@ -14,6 +14,7 @@ dependencies = [
     "requests>=2.32",
     "cryptography>=45.0",
     "python-json-logger>=3.3",
+    "boto3>=1.40",
 ]
 
 [dependency-groups]
