@@ -18,7 +18,7 @@ void main() {
   group('mix summary (card subtitle)', () {
     test('sounds then music, in mix order, with the catalog names', () {
       expect(mixSummary(sceneOf('cascade-foret'), catalog), 'Ambiance de la cascade · Oiseaux · Vent · Piano doux');
-      expect(mixSummary(sceneOf('sous-bois'), catalog), 'Vent · Oiseaux · Nappes apaisantes');
+      expect(mixSummary(sceneOf('foret-lucioles'), catalog), 'Ruisseau · Vent · Nappes apaisantes');
     });
 
     test('a muted category is left out; everything muted: « Son en sourdine »', () {
@@ -62,20 +62,23 @@ void main() {
 
   group('previous / next landscape of the theme', () {
     test('free plan: locked landscapes are skipped, no wrap at the edges', () {
+      // Cascade en forêt is alone in « Nature »; every scene after Forêt aux lucioles is Premium.
       expect(neighbourLandscape(catalog, 'cascade-foret', -1, freeUsable), isNull);
-      expect(neighbourLandscape(catalog, 'cascade-foret', 1, freeUsable), 'sous-bois');
-      expect(neighbourLandscape(catalog, 'sous-bois', -1, freeUsable), 'cascade-foret');
-      // Every landscape after sous-bois in « Nature » is Premium.
-      expect(neighbourLandscape(catalog, 'sous-bois', 1, freeUsable), isNull);
+      expect(neighbourLandscape(catalog, 'cascade-foret', 1, freeUsable), isNull);
+      expect(neighbourLandscape(catalog, 'foret-lucioles', -1, freeUsable), isNull);
+      expect(neighbourLandscape(catalog, 'foret-lucioles', 1, freeUsable), isNull);
+      // From a locked scene (browsed), back to the free one.
+      expect(neighbourLandscape(catalog, 'ondes', -1, freeUsable), 'foret-lucioles');
     });
 
     test('Premium: every landscape of the theme, still no wrap and never another theme', () {
-      expect(neighbourLandscape(catalog, 'sous-bois', 1, premiumUsable), 'berge-mousseuse');
-      expect(neighbourLandscape(catalog, 'lisiere-verte', 1, premiumUsable), isNull);
-      expect(neighbourLandscape(catalog, 'lisiere-verte', -1, premiumUsable), 'pierres-eau');
+      expect(neighbourLandscape(catalog, 'foret-lucioles', 1, premiumUsable), 'lac-lune');
+      expect(neighbourLandscape(catalog, 'ondes', 1, premiumUsable), isNull);
+      expect(neighbourLandscape(catalog, 'ondes', -1, premiumUsable), 'mer-nuages');
       expect(neighbourLandscape(catalog, 'pluie-ville', -1, premiumUsable), isNull);
+      expect(neighbourLandscape(catalog, 'pluie-ville', 1, premiumUsable), 'toits-pluie');
       expect(neighbourLandscape(catalog, 'toits-pluie', 1, premiumUsable), isNull);
-      expect(neighbourLandscape(catalog, 'ciel-etoile', 1, premiumUsable), 'aurore-boreale');
+      expect(neighbourLandscape(catalog, 'ciel-etoile', 1, premiumUsable), isNull);
     });
 
     test('unknown landscape or no direction: nothing', () {
@@ -125,7 +128,7 @@ void main() {
       landscapeId: 'cascade-foret',
       title: 'Cascade en forêt',
       artist: 'Eau vive',
-      nextId: 'sous-bois',
+      nextId: 'foret-lucioles',
     );
     final art = Uri.file('/cache/media_art/cascade-foret.jpg');
     expect(card.hasPrevious, isFalse);

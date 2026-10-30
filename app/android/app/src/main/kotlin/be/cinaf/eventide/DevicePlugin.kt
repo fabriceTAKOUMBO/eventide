@@ -13,7 +13,8 @@ import java.util.concurrent.RejectedExecutionException
 /**
  * Method channel be.cinaf.eventide/device (lib/services/diagnostics.dart,
  * lib/services/wallpaper_service.dart): problem report (process exits recorded by Android,
- * phone model), the media card's launch intent, and the landscape wallpaper. Registered with
+ * phone model), the media card's launch intent, the landscape wallpaper, and the renderer guard
+ * of the 3D scenes' WebView (SceneWebViewGuard.kt). Registered with
  * NativeBridgePlugin on the shared engine (app opened by the user or booted by a scheduled
  * start).
  */
@@ -22,9 +23,11 @@ class DevicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private var context: Context? = null
     private val main = Handler(Looper.getMainLooper())
     private var io: ExecutorService? = null
+    private var binding: FlutterPlugin.FlutterPluginBinding? = null
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         context = binding.applicationContext
+        this.binding = binding
         io = Executors.newSingleThreadExecutor()
         val c = MethodChannel(binding.binaryMessenger, CHANNEL)
         c.setMethodCallHandler(this)
@@ -35,6 +38,7 @@ class DevicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         channel?.setMethodCallHandler(null)
         channel = null
         context = null
+        this.binding = null
         io?.shutdown()
         io = null
     }
@@ -74,6 +78,19 @@ class DevicePlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 "clearWallpaper" -> {
                     WallpaperStore.clear(ctx)
                     result.success(true)
+                }
+                "guardSceneWebView" -> {
+                    val pluginBinding = binding
+                    val id = (call.argument<Any>("identifier") as? Number)?.toLong()
+                    if (pluginBinding == null || id == null) {
+                        result.success(false)
+                        return
+                    }
+                    result.success(
+                        SceneWebViewGuard.install(pluginBinding, id) { crashed ->
+                            channel?.invokeMethod("sceneRendererGone", mapOf("identifier" to id, "crashed" to crashed))
+                        },
+                    )
                 }
                 else -> result.notImplemented()
             }

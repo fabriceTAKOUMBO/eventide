@@ -89,10 +89,10 @@ void main() {
     expect(payload['requires_network'], isFalse);
     final synced = (payload['schedules'] as List).single as Map;
     expect(synced['id'], result.schedule.id);
-    expect(synced['paysage'], 'torrent-montagne');
-    expect(synced['paysage_nom'], 'Torrent de montagne');
+    expect(synced['paysage'], 'pluie-ville');
+    expect(synced['paysage_nom'], 'Pluie sur la ville');
     expect(handler.status.value.playing || handler.status.value.paused, isFalse);
-    expect(catalog.landscape('torrent-montagne')!.free, isFalse);
+    expect(catalog.landscape('pluie-ville')!.free, isFalse);
 
     await tester.pumpWidget(const SizedBox());
     await tester.pump(const Duration(seconds: 10));

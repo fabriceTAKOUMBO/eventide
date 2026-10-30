@@ -322,10 +322,7 @@ class _ScheduleEditorScreenState extends State<ScheduleEditorScreen> {
                     borderRadius: BorderRadius.circular(14),
                     child: SizedBox.square(
                       dimension: 44,
-                      child: LandscapeThumbnail(
-                        landscapeId: landscape.id,
-                        style: landscape.style,
-                      ),
+                      child: LandscapeThumbnail(landscapeId: landscape.id),
                     ),
                   ),
                   const SizedBox(width: 14),

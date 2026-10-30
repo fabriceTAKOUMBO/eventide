@@ -8,7 +8,7 @@ from conftest import make_installation
 
 SCENE = {
     "version": 1,
-    "paysage": "aurore-boreale",
+    "paysage": "aurore",
     "moment": "nuit",
     "sons": [{"id": "vent", "niveau": 30}],
     "musique": [{"id": "nappes-apaisantes", "niveau": 30}],
@@ -29,6 +29,20 @@ def test_share_landing_page(client):
     assert "intent://eventide.test/m/Ab12Cd34#Intent;scheme=https;package=app.eventide.test" in html
     assert "script-src 'self'" in response["Content-Security-Policy"]
     assert "<script>" not in html
+
+
+@pytest.mark.django_db
+def test_share_page_of_a_retired_landscape_shows_what_the_app_opens(client):
+    """Contract § 12: a share stored before the 2D landscapes were retired opens on the default
+    free landscape, sounds and music kept, its decor gone (a filmed landscape has none)."""
+    inst, _ = make_installation()
+    scene = {**SCENE, "paysage": "sous-bois", "decor": [{"id": "rayons-soleil", "niveau": 40}]}
+    Share.objects.create(code="Old2Dsb1", scene=scene, installation=inst)
+    response = client.get("/m/Old2Dsb1")
+    assert response.status_code == 200
+    html = response.content.decode()
+    assert "Cascade en forêt" in html and "Nappes apaisantes" in html
+    assert "Rayons de soleil" not in html and "Décor" not in html
 
 
 @pytest.mark.django_db

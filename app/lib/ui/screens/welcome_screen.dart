@@ -42,7 +42,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
           Positioned.fill(
             child: LandscapeBackground(
               landscapeId: landscape.id,
-              style: landscape.style,
               kenBurns: true,
               brightness: 0.92,
               saturation: 1.04,

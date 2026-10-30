@@ -1,4 +1,6 @@
-// Screen 3 · Paysages: tabs Nature / Urbain / Astral / Favoris, 2-column grid.
+// Screen 3 · Paysages: one tab per theme of the catalog (Nature / Urbain /
+// Imaginaire; a theme without any landscape the phone can show is left out by the catalog),
+// then Favoris; 2-column grid.
 // Also used to pick the landscape of a schedule ([pickFor] set): it then returns the id.
 import 'package:flutter/material.dart';
 
@@ -245,7 +247,7 @@ class _Grid extends StatelessWidget {
             child: Stack(
               children: [
                 Positioned.fill(
-                  child: LandscapeThumbnail(landscapeId: l.id, style: l.style),
+                  child: LandscapeThumbnail(landscapeId: l.id),
                 ),
                 const Positioned.fill(
                   child: DecoratedBox(
@@ -387,10 +389,7 @@ class _FavoritesList extends StatelessWidget {
                               borderRadius: BorderRadius.circular(14),
                               child: SizedBox.square(
                                 dimension: 56,
-                                child: LandscapeThumbnail(
-                                  landscapeId: l.id,
-                                  style: l.style,
-                                ),
+                                child: LandscapeThumbnail(landscapeId: l.id),
                               ),
                             ),
                             const SizedBox(width: 14),

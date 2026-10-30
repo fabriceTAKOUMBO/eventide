@@ -75,7 +75,7 @@ void main() {
           await settle(tester);
 
           await model.saveSchedule(sampleSchedule());
-          model.browseLandscape('aurore-boreale');
+          model.browseLandscape('aurore');
           await settle(tester);
           expect(tester.takeException(), isNull);
           expect(find.text('Avec Premium'), findsOneWidget);

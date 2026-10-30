@@ -75,8 +75,6 @@ class _ShareScreenState extends State<ShareScreen> {
                   Positioned.fill(
                     child: LandscapeImage(
                       landscapeId: landscape.id,
-                      style: landscape.style,
-                      moment: scene.moment,
                     ),
                   ),
                   const Positioned.fill(

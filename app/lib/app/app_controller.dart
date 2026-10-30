@@ -198,7 +198,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
   final ValueNotifier<MediaCardInfo?> _mediaCard = ValueNotifier(null);
   Object? _cardInputs;
 
-  /// Pictures asked for during this listening session (landscape|moment).
+  /// Pictures asked for during this listening session (landscape ids).
   final Set<String> _artRequested = {};
 
   bool _preparing = false;
@@ -241,7 +241,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
       ..add(_native.launchScheduleRequests.listen((_) => unawaited(_checkPendingStart())));
     if (!_ready.isCompleted) _ready.complete();
     notifyListeners();
-    // Not awaited: file system only, the UI shows procedural pictures until it answers.
+    // Not awaited: file system only, the UI shows bundled posters (or a plain picture) until it answers.
     unawaited(_refreshPosters());
     unawaited(_afterInit());
     unawaited(_initReportAndWallpaper());
@@ -261,18 +261,21 @@ class RealAppModel extends AppModel implements PlaybackHost {
   Future<void> _load() async {
     final sceneJson = await _store.readMap(StoreKeys.scene);
     if (sceneJson != null) {
-      // An unreadable or unknown scene keeps the default one.
+      // An unreadable or unknown scene keeps the default one; a retired landscape opens on the
+      // default one with its sounds, music and timer, and decor that does not apply is dropped
+      // (contract § 12).
       final scene = _tryParse(() => Scene.fromJson(sceneJson));
-      if (scene != null && _catalog.landscape(scene.landscapeId) != null) _scene = scene;
+      final sanitized = scene == null ? null : _catalog.sanitize(scene);
+      if (sanitized != null) _scene = sanitized;
     }
     _browsedId = _scene.landscapeId;
     _schedules = [
       for (final json in await _store.readList(StoreKeys.schedules))
-        if (_tryParse(() => Schedule.fromJson(json)) case final Schedule s) s,
+        if (_tryParse(() => Schedule.fromJson(json)) case final Schedule s) _sanitizeSchedule(s),
     ];
     _favorites = [
       for (final json in await _store.readList(StoreKeys.favorites))
-        if (_tryParse(() => Favorite.fromJson(json)) case final Favorite f) f,
+        if (_tryParse(() => Favorite.fromJson(json)) case final Favorite f) _sanitizeFavorite(f),
     ];
     _nights = [
       for (final json in await _store.readList(StoreKeys.nights))
@@ -305,9 +308,9 @@ class RealAppModel extends AppModel implements PlaybackHost {
   }
 
   /// The previous start died before running stably (crash guard, docs/app/architecture.md
-  /// § 19): back to the default free landscape (bundled video and poster, never drawn by the
-  /// painter), with no landscape remembered per theme, so that nothing drawn at the previous
-  /// start is drawn again. Favourites, schedules, settings, and the scene's moment, timer and
+  /// § 19): back to the default free landscape (a filmed one: bundled video and poster, no live
+  /// 3D scene), with no landscape remembered per theme, so that nothing shown at the previous
+  /// start is shown again. Favourites, schedules, settings, and the scene's moment, timer and
   /// mutes are kept. Written at once: a new crash before the usual save delay must not bring
   /// the old landscape back.
   Future<void> _applySafeStart() async {
@@ -319,6 +322,23 @@ class RealAppModel extends AppModel implements PlaybackHost {
     Breadcrumbs.add('démarrage protégé : paysage $previous remplacé par ${fallback.id}, paysages par thème oubliés');
     await _store.write(StoreKeys.scene, _scene.toJson());
     await _writeState();
+  }
+
+  /// A schedule naming a retired landscape starts the default one (contract § 12).
+  Schedule _sanitizeSchedule(Schedule schedule) {
+    final landscape = _catalog.landscapeFor(schedule.landscapeId);
+    return landscape == null || landscape.id == schedule.landscapeId
+        ? schedule
+        : schedule.copyWith(landscapeId: landscape.id);
+  }
+
+  /// A favourite in line with the catalog (contract § 12); an unknown landscape is kept as is
+  /// (it is simply not listed).
+  Favorite _sanitizeFavorite(Favorite favorite) {
+    final scene = _catalog.sanitize(favorite.scene);
+    return scene == null || identical(scene, favorite.scene)
+        ? favorite
+        : Favorite(id: favorite.id, scene: scene, createdAt: favorite.createdAt);
   }
 
   static T? _tryParse<T>(T Function() parse) {
@@ -833,7 +853,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
         if (s.id == scheduleId) schedule = s;
       }
       if (schedule == null || !schedule.active) return null; // deleted or switched off meanwhile
-      var landscape = _catalog.landscape(schedule.landscapeId);
+      var landscape = _catalog.landscapeFor(schedule.landscapeId);
       if (landscape == null || !_rules.canUseLandscape(_plan, landscape)) {
         // Premium ended since the schedule was made: fall back to a free landscape.
         landscape = _catalog.defaultLandscape;
@@ -994,6 +1014,9 @@ class RealAppModel extends AppModel implements PlaybackHost {
     if (item == null) return;
     final target = level.clamp(0, 100);
     final present = _scene.hasLayer(kind, id);
+    // Decor only where it applies: a 3D scene that can show it (contract § 12). Removing one
+    // that does not apply stays possible.
+    if (kind == LayerKind.decor && target > 0 && !_catalog.decorApplies(_scene.landscapeId, id)) return;
     if (target > 0 && !_rules.canUseItem(_plan, kind, id)) {
       _emit(const OpenPremiumEvent());
       return;
@@ -1087,14 +1110,16 @@ class RealAppModel extends AppModel implements PlaybackHost {
 
   @override
   void applyFavorite(Favorite favorite) {
-    final landscape = _catalog.landscape(favorite.landscapeId);
-    if (landscape == null) return;
+    // In line with the catalog (contract § 12): a retired landscape, decor that does not apply.
+    final saved = _catalog.sanitize(favorite.scene);
+    if (saved == null) return;
+    final landscape = _catalog.landscape(saved.landscapeId)!;
     if (!_rules.canUseLandscape(_plan, landscape)) {
       _emit(const OpenPremiumEvent());
       return;
     }
     _browseTimer?.cancel();
-    _scene = favorite.scene.copyWith(
+    _scene = saved.copyWith(
       timer: _scene.timer,
       sleepTracking: _scene.sleepTracking,
       mutedSounds: _scene.mutedSounds,
@@ -1153,7 +1178,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
     if (landscape == null) return;
     final art = _artwork;
     final moment = _scene.moment;
-    final inputs = (_scene, _favorites, id, _plan, art?.peek(id, moment));
+    final inputs = (_scene, _favorites, id, _plan, art?.peek(id));
     if (inputs != _cardInputs) {
       _cardInputs = inputs;
       final scene = id == _scene.landscapeId ? _scene : _scene.withLandscape(landscape);
@@ -1166,22 +1191,21 @@ class RealAppModel extends AppModel implements PlaybackHost {
         favorite: _favoriteOf(scene) != null,
         previousId: neighbourLandscape(_catalog, id, -1, usable),
         nextId: neighbourLandscape(_catalog, id, 1, usable),
-        artUri: art?.peek(id, moment),
+        artUri: art?.peek(id),
       );
     }
-    _requestArtwork(landscape, moment);
+    _requestArtwork(landscape);
   }
 
-  /// Makes the card's picture in the background, only while the card can be seen; the card
-  /// is published without it first and updated when it is ready. Not while a swipe or a
-  /// previous/next tap is pending: a quick series of landscapes would otherwise draw a picture
-  /// for each one passed (GPU work, docs/app/architecture.md § 19); the picture comes when the
-  /// sound follows ([browseLandscape] refreshes the card then).
-  void _requestArtwork(Landscape landscape, Moment moment) {
+  /// Finds the card's picture (the landscape's poster) in the background, only while the card
+  /// can be seen; the card is published without it first and updated when it is ready. Not
+  /// while a swipe or a previous/next tap is pending: the picture comes when the sound follows
+  /// ([browseLandscape] refreshes the card then), never one per landscape passed.
+  void _requestArtwork(Landscape landscape) {
     final art = _artwork;
-    if (art == null || !_audioActive || _browsePending || art.peek(landscape.id, moment) != null) return;
-    if (!_artRequested.add('${landscape.id}|${moment.name}')) return;
-    unawaited(art.resolve(landscape, moment).then((uri) {
+    if (art == null || !_audioActive || _browsePending || art.peek(landscape.id) != null) return;
+    if (!_artRequested.add(landscape.id)) return;
+    unawaited(art.resolve(landscape).then((uri) {
       if (uri != null) _refreshMediaCard();
     }));
   }
@@ -1231,7 +1255,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
     final max = _rules.maxSchedules(_plan);
     final out = <Schedule>[];
     for (final s in _schedules) {
-      if (!s.active || _catalog.landscape(s.landscapeId) == null) continue;
+      if (!s.active || _catalog.landscapeFor(s.landscapeId) == null) continue;
       if (max != null && out.length >= max) break;
       out.add(s);
     }
@@ -1241,7 +1265,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
   Future<void> _syncSchedules() async {
     final payload = jsonEncode({
       'schedules': [
-        for (final s in _armableSchedules()) {...s.toJson(), 'paysage_nom': _catalog.landscape(s.landscapeId)!.name},
+        for (final s in _armableSchedules()) {...s.toJson(), 'paysage_nom': _catalog.landscapeFor(s.landscapeId)!.name},
       ],
       'requires_network': !_rules.offlineAllowed(_plan),
     });

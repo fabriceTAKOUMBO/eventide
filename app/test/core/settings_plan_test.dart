@@ -99,8 +99,8 @@ void main() {
     final rules = ProductRules(catalog);
 
     test('landscapes', () {
-      final free = catalog.landscape('sous-bois')!;
-      final locked = catalog.landscape('aurore-boreale')!;
+      final free = catalog.landscape('foret-lucioles')!;
+      final locked = catalog.landscape('aurore')!;
       expect(rules.canUseLandscape(Plan.free, free), isTrue);
       expect(rules.canUseLandscape(Plan.free, locked), isFalse);
       for (final p in [Plan.monthly, Plan.annual, Plan.lifetime]) {
@@ -145,8 +145,15 @@ void main() {
         (kind: LayerKind.son, id: 'ambiance-toits-pluie'),
         (kind: LayerKind.son, id: 'tonnerre'),
         (kind: LayerKind.musique, id: 'cordes-lentes'),
-        (kind: LayerKind.decor, id: 'eclairs'),
       ]);
+      // A 3D scene: its Premium decor is locked too.
+      expect(rules.lockedElements(Plan.free, Scene.fromLandscape(catalog.landscape('jardin-zen')!)), [
+        (kind: null, id: 'jardin-zen'),
+        (kind: LayerKind.musique, id: 'bols-tibetains'),
+        (kind: LayerKind.decor, id: 'petales'),
+        (kind: LayerKind.decor, id: 'rayons-soleil'),
+      ]);
+      expect(rules.lockedElements(Plan.free, Scene.fromLandscape(catalog.landscape('foret-lucioles')!)), isEmpty);
     });
   });
 }

@@ -2,6 +2,8 @@
 // the theme (no wrap), horizontal swipe = theme, vertical swipe on the menu =
 // collapse/expand. Thresholds: 50 px and a clearly dominant axis (1.3×). The photo
 // follows the finger during the gesture; arrows and theme buttons double the swipes.
+// A 3D scene (« Imaginaire ») runs live only once a swipe has settled: the landscape sliding
+// in shows its poster (one live WebView at most).
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -9,12 +11,11 @@ import 'package:flutter/services.dart';
 
 import '../../../app/app_model.dart';
 import '../../../core/catalog.dart';
-import '../../../core/crash_guard.dart';
 import '../../../core/format.dart';
 import '../../../core/scene.dart';
-import '../../landscape/decor_layer.dart';
 import '../../landscape/landscape_background.dart';
 import '../../landscape/landscape_image.dart';
+import '../../landscape/lightning_layer.dart';
 import '../../model_scope.dart';
 import '../../navigation.dart';
 import '../../theme/vitre.dart';
@@ -331,16 +332,15 @@ class _HomeScreenState extends State<HomeScreen>
   }) {
     final l = _landscape(model, id);
     // Keyed by landscape: the incoming picture of a swipe keeps its state (and its video
-    // player) when it becomes the current one.
+    // player) when it becomes the current one; a 3D scene starts live then.
     return Positioned.fill(
       key: ValueKey('picture-$id'),
       child: Transform.translate(
         offset: offset,
         child: LandscapeBackground(
           landscapeId: l.id,
-          style: l.style,
-          moment: model.scene.moment,
           kenBurns: true,
+          live: current,
         ),
       ),
     );
@@ -387,7 +387,6 @@ class _HomeScreenState extends State<HomeScreen>
     final loading = model.loadingAudio && !locked;
     return HomeMenuData(
       landscapeId: shown.id,
-      style: shown.style,
       name: shown.name,
       subtitle: loading
           ? (_slow ? 'Réseau lent…' : 'Chargement…')
@@ -422,12 +421,11 @@ class _HomeScreenState extends State<HomeScreen>
     final index = ofTheme.indexWhere((l) => l.id == shown.id);
     final vertical = _vertical(model, id);
     final dragging = _offset != Offset.zero;
-    final decor = shown.id == model.scene.landscapeId && !dragging
-        ? [for (final l in model.scene.decor) DecorEffect(l.id, l.level)]
-        : const <DecorEffect>[];
+    // A filmed storm (contract § 11): its lightning, with the thunder of the mix playing.
+    final storm = shown.lightning && shown.id == model.scene.landscapeId;
     final topVisible = _expanded;
     final fade = motion(context, const Duration(milliseconds: 300));
-    _prewarmNeighbors(model, id, media.devicePixelRatio);
+    _prewarmNeighbors(model, id);
 
     return PopScope(
       // Accueil is the root route: back would close the app without asking us.
@@ -458,8 +456,8 @@ class _HomeScreenState extends State<HomeScreen>
                       current: false,
                     ),
                   Positioned.fill(
-                    child: DecorLayer(
-                      effects: decor,
+                    child: LightningLayer(
+                      enabled: storm,
                       active: !dragging,
                       // Contract § 11: a flash before each thunder, or rare silent ones.
                       lightningStrikes: model.lightningStrikes,
@@ -635,48 +633,21 @@ class _HomeScreenState extends State<HomeScreen>
 
   String? _prewarmedFor;
 
-  /// Rasterises the neighbouring landscapes (or decodes their posters) after the frame, so
-  /// that a swipe never waits for the first paint of the incoming picture. Procedural ones are
-  /// drawn one per frame, never together (GPU work, docs/app/architecture.md § 19); a style the
-  /// crash guard draws simplified needs nothing.
-  void _prewarmNeighbors(AppModel model, String id, double dpr) {
+  /// Decodes the posters of the neighbouring landscapes after the frame, so that a swipe never
+  /// waits for the first paint of the incoming picture (videos and 3D scenes start on it).
+  void _prewarmNeighbors(AppModel model, String id) {
     if (_prewarmedFor == id || _size.isEmpty) return;
     _prewarmedFor = id;
     final v = _vertical(model, id);
     final h = _horizontal(model, id);
     final ids = {v.previous, v.next, h.left, h.right}.whereType<String>();
-    final size = _size;
-    final ratio = dpr.clamp(1.0, 1.75);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final styles = <String>[];
       for (final other in ids) {
-        final l = model.catalog.landscape(other);
-        if (l == null) continue;
         final poster = LandscapeImages.providerFor(other);
-        if (poster != null) {
-          unawaited(precacheImage(poster, context, onError: (_, _) {}));
-          continue;
-        }
-        if (CrashGuard.current.isDead(l.style) ||
-            LandscapeRasterCache.contains(l.style, size, ratio)) {
-          continue;
-        }
-        styles.add(l.style);
+        if (poster != null) unawaited(precacheImage(poster, context, onError: (_, _) {}));
       }
-      _rasteriseInTurn(styles, size, ratio);
     });
-  }
-
-  void _rasteriseInTurn(List<String> styles, Size size, double ratio) {
-    if (styles.isEmpty || !mounted) return;
-    LandscapeRasterCache.obtain(styles.first, size, ratio);
-    if (styles.length == 1) return;
-    WidgetsBinding.instance
-      ..addPostFrameCallback(
-        (_) => _rasteriseInTurn(styles.sublist(1), size, ratio),
-      )
-      ..ensureVisualUpdate();
   }
 }
 

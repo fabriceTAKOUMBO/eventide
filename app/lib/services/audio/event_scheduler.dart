@@ -1,7 +1,7 @@
 // Sounds played by events (API contract § 11): instead of a loop, short sounds now and then,
 // never twice the same. Owned by the PlaybackHandler, so it lives in the background audio
-// service and keeps going with the screen off. Pure timing: the engine plays, the decor draws
-// the flash announced on [EventSoundScheduler.strikes].
+// service and keeps going with the screen off. Pure timing: the engine plays, the lightning
+// layer draws the flash announced on [EventSoundScheduler.strikes] over a filmed storm.
 //
 // Each event is a [StormPlan] (core/lightning.dart): with the catalog's `orage`, a storm
 // sequence (a distant rumble alone; a soft pre-rumble, the flash, the strike and its roll;
@@ -164,7 +164,7 @@ class EventSoundScheduler {
   /// An event starts at least this long after the end of the previous one.
   static const Duration eventGap = Duration(seconds: 1);
 
-  /// A flash before each strike (contract § 11): the `eclairs` decor draws it.
+  /// A flash before each strike (contract § 11): drawn over a filmed storm (`eclairs: true`).
   Stream<LightningStrike> get strikes => _strikes.stream;
 
   /// Each event as it starts (tests and logs).

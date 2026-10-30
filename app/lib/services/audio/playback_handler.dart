@@ -157,7 +157,7 @@ class PlaybackHandler extends BaseAudioHandler {
   /// with the screen off; nothing during a pause, the end-of-timer fade, or once stopped.
   final EventSoundScheduler _events;
 
-  /// A lightning flash just before each thunder (contract § 11), for the `eclairs` decor.
+  /// A lightning flash just before each thunder (contract § 11), drawn over a filmed storm.
   Stream<LightningStrike> get lightningStrikes => _events.strikes;
 
   late final StreamSubscription<FocusChange> _focusSub;

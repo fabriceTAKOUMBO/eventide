@@ -1,5 +1,7 @@
 // Screen 4 · Mon mix: Sons / Musique / Décor, levels by 10 % steps or slider,
 // 0 % removes, « Moment de la journée » in Décor. No microphone here (intended).
+// Décor exists for a 3D scene of « Imaginaire » only, with the elements that scene can show
+// (contract § 12): a filmed landscape's picture is never changed.
 // Sons and Musique have a mute switch (`sourdine`): every element and its level is
 // kept, shown dimmed and still adjustable; touching a level makes the category heard.
 import 'package:flutter/material.dart';
@@ -38,13 +40,21 @@ class _MixSheetState extends State<MixSheet> {
     final p = Vitre.of(context);
     final catalog = model.catalog;
     final scene = model.scene;
-    final texts = _texts[_kind]!;
-    final active = scene.layers(_kind);
-    final muted = model.categoryMuted(_kind);
+    // Décor only for a 3D scene, with the elements it can show (contract § 12): a filmed
+    // landscape is shown as it is.
+    final kinds = [
+      LayerKind.son,
+      LayerKind.musique,
+      if (catalog.landscape(scene.landscapeId)?.is3d ?? false) LayerKind.decor,
+    ];
+    final kind = kinds.contains(_kind) ? _kind : LayerKind.son;
+    final texts = _texts[kind]!;
+    final active = scene.layers(kind);
+    final muted = model.categoryMuted(kind);
     final activeIds = {for (final l in active) l.id};
     // A landscape's ambiance (the sound of its video) is offered with that landscape only.
     final available = [
-      for (final item in catalog.items(_kind))
+      for (final item in kind == LayerKind.decor ? catalog.decorsOf(scene.landscapeId) : catalog.items(kind))
         if (!activeIds.contains(item.id) && item.offeredWith(scene.landscapeId)) item,
     ];
 
@@ -68,16 +78,16 @@ class _MixSheetState extends State<MixSheet> {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
             child: SegmentedTabs(
-              labels: [for (final k in LayerKind.values) k.label],
-              selected: _kind.index,
-              onSelected: (i) => setState(() => _kind = LayerKind.values[i]),
+              labels: [for (final k in kinds) k.label],
+              selected: kinds.indexOf(kind),
+              onSelected: (i) => setState(() => _kind = kinds[i]),
               semanticGroupLabel: 'Type de réglage',
             ),
           ),
           Expanded(
             child: ListView(
               // One list per tab: switching tabs starts at the top.
-              key: ValueKey(_kind),
+              key: ValueKey(kind),
               padding: EdgeInsets.fromLTRB(
                 20,
                 0,
@@ -85,13 +95,13 @@ class _MixSheetState extends State<MixSheet> {
                 40 + MediaQuery.paddingOf(context).bottom,
               ),
               children: [
-                if (_kind.isAudio && (active.isNotEmpty || muted))
+                if (kind.isAudio && (active.isNotEmpty || muted))
                   _MuteSwitch(
-                    kind: _kind,
+                    kind: kind,
                     muted: muted,
-                    onChanged: (m) => model.setCategoryMuted(_kind, m),
+                    onChanged: (m) => model.setCategoryMuted(kind, m),
                   ),
-                if (_kind == LayerKind.decor) ...[
+                if (kind == LayerKind.decor) ...[
                   const SectionLabel(
                     'Moment',
                     padding: EdgeInsets.fromLTRB(4, 4, 4, 10),
@@ -133,11 +143,11 @@ class _MixSheetState extends State<MixSheet> {
                   ),
                 for (final layer in active)
                   _LevelRow(
-                    key: ValueKey('${_kind.name}-${layer.id}'),
-                    name: catalog.item(_kind, layer.id)?.name ?? layer.id,
+                    key: ValueKey('${kind.name}-${layer.id}'),
+                    name: catalog.item(kind, layer.id)?.name ?? layer.id,
                     level: layer.level,
                     muted: muted,
-                    onChanged: (v) => model.setLayerLevel(_kind, layer.id, v),
+                    onChanged: (v) => model.setLayerLevel(kind, layer.id, v),
                   ),
                 SectionLabel(
                   texts.$2,
@@ -146,8 +156,8 @@ class _MixSheetState extends State<MixSheet> {
                 for (final item in available)
                   _AddRow(
                     item: item,
-                    locked: !model.rules.canUseItem(model.plan, _kind, item.id),
-                    onTap: () => model.setLayerLevel(_kind, item.id, 30),
+                    locked: !model.rules.canUseItem(model.plan, kind, item.id),
+                    onTap: () => model.setLayerLevel(kind, item.id, 30),
                   ),
               ],
             ),

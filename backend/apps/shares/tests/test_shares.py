@@ -8,7 +8,8 @@ from conftest import client_for, make_installation
 
 SCENE = {
     "version": 1,
-    "paysage": "cascade-foret",
+    # A 3D scene (contract § 12): its decor applies.
+    "paysage": "foret-lucioles",
     "moment": "jour",
     "sons": [{"id": "eau-vive", "niveau": 60}, {"id": "oiseaux", "niveau": 0}],
     "musique": [{"id": "harpe", "niveau": 25}],
@@ -30,7 +31,7 @@ def test_create_and_read_a_share(api):
     scene = api.get(f"/v1/shares/{code}").json()["scene"]
     assert scene == {
         "version": 1,
-        "paysage": "cascade-foret",
+        "paysage": "foret-lucioles",
         "moment": "jour",
         "sons": [{"id": "eau-vive", "niveau": 60}],
         "musique": [{"id": "harpe", "niveau": 25}],
@@ -57,6 +58,45 @@ def test_the_mute_is_accepted_but_never_shared(api, sourdine):
 
 
 @pytest.mark.django_db
+@pytest.mark.parametrize(
+    ("paysage", "decor", "kept"),
+    [
+        # A filmed landscape: its decor is not editable, every element is dropped.
+        ("cascade-foret", [{"id": "brume", "niveau": 30}], []),
+        ("pluie-ville", [{"id": "neige", "niveau": 40}, {"id": "eclairs", "niveau": 50}], []),
+        # A 3D scene keeps the ids of its own ``decors`` only; ids removed from the catalog
+        # (``eclairs``, ``pluie-ecran``) are dropped like any other that does not apply.
+        (
+            "foret-lucioles",
+            [
+                {"id": "lucioles", "niveau": 60},
+                {"id": "neige", "niveau": 30},
+                {"id": "eclairs", "niveau": 50},
+                {"id": "pluie-ecran", "niveau": 20},
+                {"id": "brume", "niveau": 0},
+            ],
+            [{"id": "lucioles", "niveau": 60}],
+        ),
+        (
+            "aurore",
+            [{"id": "neige", "niveau": 30}, {"id": "petales", "niveau": 40}],
+            [{"id": "neige", "niveau": 30}],
+        ),
+    ],
+)
+def test_decor_that_does_not_apply_is_dropped_without_error(api, paysage, decor, kept):
+    """Contract § 12: decor only on a 3D scene, only for its ``decors``."""
+    response = api.post(
+        "/v1/shares", {"scene": {**SCENE, "paysage": paysage, "decor": decor}}, format="json"
+    )
+    assert response.status_code == 201
+    scene = api.get(f"/v1/shares/{response.json()['code']}").json()["scene"]
+    assert scene["paysage"] == paysage
+    assert scene["decor"] == kept
+    assert scene["sons"] == [{"id": "eau-vive", "niveau": 60}]
+
+
+@pytest.mark.django_db
 @pytest.mark.parametrize("code", ["NOPE1234", "short", "bad-code", "x" * 9])
 def test_unknown_share_is_404(api, code):
     response = api.get(f"/v1/shares/{code}")
@@ -79,6 +119,8 @@ def broken(**changes):
         broken(version=2),
         broken(version=True),
         broken(paysage="nulle-part"),
+        # Retired 2D landscape (contract § 12): never stored again.
+        broken(paysage="sous-bois"),
         broken(moment="midi"),
         broken(sons="eau-vive"),
         broken(sons=[{"id": "klaxon", "niveau": 10}]),
@@ -87,6 +129,13 @@ def broken(**changes):
         broken(sons=[{"id": "vent", "niveau": 10}, {"id": "vent", "niveau": 20}]),
         broken(musique=[{"id": "vent", "niveau": 10}]),
         broken(decor=["brume"]),
+        # A decor element that would be dropped must still be well formed.
+        broken(decor=[{"niveau": 30}]),
+        broken(decor=[{"id": "", "niveau": 30}]),
+        broken(decor=[{"id": "neige", "niveau": 101}]),
+        broken(decor=[{"id": "eclairs", "niveau": True}]),
+        broken(decor=[{"id": "brume", "niveau": 30}, {"id": "brume", "niveau": 10}]),
+        broken(paysage="cascade-foret", decor=[{"id": "brume", "niveau": "30"}]),
         broken(
             sons=[
                 {"id": i, "niveau": 10}

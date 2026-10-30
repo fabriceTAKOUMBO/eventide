@@ -12,9 +12,10 @@ void main() {
 
   test('reads every list of the real catalog', () {
     expect(catalog.version, 1);
-    expect(catalog.themes.map((t) => t.id), ['nature', 'urbain', 'astral']);
+    expect(catalog.themes.map((t) => t.id), ['nature', 'urbain', 'imaginaire']);
     expect(catalog.themes.first.name, 'Nature');
-    expect(catalog.landscapes, hasLength(12));
+    expect(catalog.theme('imaginaire')!.name, 'Imaginaire');
+    expect(catalog.landscapes, hasLength(10));
     expect(catalog.sounds, hasLength(13));
     expect(catalog.music, hasLength(8));
     expect(catalog.decors, hasLength(9));
@@ -37,7 +38,8 @@ void main() {
     expect(cascade.name, 'Cascade en forêt');
     expect(cascade.themeId, 'nature');
     expect(cascade.free, isTrue);
-    expect(cascade.style, 'cascade');
+    expect(cascade.rendering, LandscapeRendering.video);
+    expect(cascade.is3d, isFalse);
     expect(cascade.aliases, contains('cascade en forêt'));
     // Its ambiance (the sound of its video) first (contract § 11).
     expect(cascade.defaultMix[LayerKind.son], const [
@@ -49,31 +51,29 @@ void main() {
     expect(cascade.defaultMix[LayerKind.musique], const [
       Layer(id: 'piano-doux', level: 20),
     ]);
-    expect(cascade.defaultMix[LayerKind.decor], const [
-      Layer(id: 'brume', level: 30),
-    ]);
+    // A filmed landscape: its decor is not editable, none by default (contract § 12).
+    expect(cascade.defaultMix[LayerKind.decor], isEmpty);
+    expect(cascade.decorIds, isEmpty);
     expect(catalog.landscape('nope'), isNull);
   });
 
-  test('only two landscapes are free, both in Nature', () {
+  test('only two landscapes are free: Cascade en forêt (filmed) and Forêt aux lucioles (3D)', () {
     final free = catalog.landscapes.where((l) => l.free).map((l) => l.id);
-    expect(free, ['cascade-foret', 'sous-bois']);
+    expect(free, ['cascade-foret', 'foret-lucioles']);
+    expect(catalog.freeLandscapeCount, 2);
     expect(catalog.defaultLandscape.id, 'cascade-foret');
   });
 
   test('landscapesOfTheme keeps the swipe order', () {
-    expect(catalog.landscapesOfTheme('nature').map((l) => l.id), [
-      'cascade-foret',
-      'sous-bois',
-      'berge-mousseuse',
-      'torrent-montagne',
-      'pierres-eau',
-      'lisiere-verte',
-    ]);
-    expect(catalog.landscapesOfTheme('astral').map((l) => l.id), [
-      'ciel-etoile',
-      'aurore-boreale',
-      'lune-lac',
+    expect(catalog.landscapesOfTheme('nature').map((l) => l.id), ['cascade-foret', 'ciel-etoile']);
+    expect(catalog.landscapesOfTheme('urbain').map((l) => l.id), ['pluie-ville', 'toits-pluie']);
+    expect(catalog.landscapesOfTheme('imaginaire').map((l) => l.id), [
+      'foret-lucioles',
+      'lac-lune',
+      'aurore',
+      'jardin-zen',
+      'mer-nuages',
+      'ondes',
     ]);
     expect(catalog.landscapesOfTheme('unknown'), isEmpty);
     expect(catalog.theme('urbain')!.name, 'Urbain');
@@ -150,7 +150,7 @@ void main() {
         expect(catalog.ambianceOf(landscape.id), same(s));
       }
       expect(catalog.item(LayerKind.son, 'ambiance-pluie-ville')!.name, 'Ambiance de la ville');
-      expect(catalog.ambianceOf('lune-lac'), isNull);
+      expect(catalog.ambianceOf('lac-lune'), isNull);
       expect(catalog.item(LayerKind.son, 'vent')!.landscapeId, isNull);
     });
 
@@ -193,12 +193,16 @@ void main() {
       for (final s in catalog.sounds) {
         if (s.id != 'tonnerre') expect(s.events, isNull, reason: s.id);
       }
-      // The storm landscapes: their ambiance, the thunder, the lightning decor.
+      // The storm landscapes: their ambiance, the thunder, and their own lightning (`eclairs`,
+      // no longer a decor of the user, contract § 12).
       for (final id in ['pluie-ville', 'toits-pluie']) {
-        final mix = catalog.landscape(id)!.defaultMix;
-        expect(mix[LayerKind.son]!.map((l) => l.id), ['ambiance-$id', 'tonnerre'], reason: id);
-        expect(mix[LayerKind.decor]!.map((l) => l.id), contains('eclairs'), reason: id);
+        final landscape = catalog.landscape(id)!;
+        expect(landscape.defaultMix[LayerKind.son]!.map((l) => l.id), ['ambiance-$id', 'tonnerre'], reason: id);
+        expect(landscape.defaultMix[LayerKind.decor], isEmpty, reason: id);
+        expect(landscape.lightning, isTrue, reason: id);
       }
+      expect(catalog.landscapes.where((l) => l.lightning).map((l) => l.id), ['pluie-ville', 'toits-pluie']);
+      expect(catalog.item(LayerKind.decor, 'eclairs'), isNull);
     });
 
     test('defaults and lenient parsing', () {
@@ -271,6 +275,166 @@ void main() {
       expect(catalog.hasEventSound(pluie), isTrue);
       expect(catalog.hasEventSound(pluie.withoutLayer(LayerKind.son, 'tonnerre')), isFalse);
       expect(catalog.hasEventSound(Scene.fromLandscape(catalog.landscape('cascade-foret')!)), isFalse);
+    });
+  });
+
+  group('filmed landscapes and 3D scenes (contract § 12)', () {
+    test('six 3D scenes in Imaginaire, each with its decor, period and default mix', () {
+      final scenes = catalog.landscapes.where((l) => l.is3d).toList();
+      expect(scenes.map((l) => l.id), ['foret-lucioles', 'lac-lune', 'aurore', 'jardin-zen', 'mer-nuages', 'ondes']);
+      for (final l in scenes) {
+        expect(l.themeId, 'imaginaire', reason: l.id);
+        expect(l.periodSeconds, 30, reason: l.id);
+        expect(l.lightning, isFalse, reason: l.id);
+        expect(l.decorIds, isNotEmpty, reason: l.id);
+        for (final id in l.decorIds) {
+          expect(catalog.item(LayerKind.decor, id), isNotNull, reason: '${l.id}/$id');
+        }
+        for (final layer in l.defaultMix[LayerKind.decor]!) {
+          expect(l.allowsDecor(layer.id), isTrue, reason: '${l.id}/${layer.id}');
+        }
+      }
+      final lucioles = catalog.landscape('foret-lucioles')!;
+      expect(lucioles.free, isTrue);
+      expect(lucioles.decorIds, ['lucioles', 'brume', 'pluie', 'etoiles']);
+      expect(lucioles.defaultMix[LayerKind.son], const [Layer(id: 'ruisseau', level: 40), Layer(id: 'vent', level: 25)]);
+      expect(lucioles.defaultMix[LayerKind.musique], const [Layer(id: 'nappes-apaisantes', level: 20)]);
+      expect(lucioles.defaultMix[LayerKind.decor], const [Layer(id: 'lucioles', level: 60), Layer(id: 'brume', level: 30)]);
+      // The free scene's default mix is free.
+      for (final kind in LayerKind.values) {
+        for (final layer in lucioles.defaultMix[kind]!) {
+          expect(catalog.item(kind, layer.id)!.free, isTrue, reason: layer.id);
+        }
+      }
+      expect(catalog.landscape('ondes')!.decorIds, ['etoiles', 'brume', 'pluie']);
+    });
+
+    test('filmed landscapes: no decor, no period', () {
+      for (final l in catalog.landscapes.where((l) => !l.is3d)) {
+        expect(l.decorIds, isEmpty, reason: l.id);
+        expect(l.defaultMix[LayerKind.decor], isEmpty, reason: l.id);
+        expect(l.periodSeconds, isNull, reason: l.id);
+      }
+      expect(catalog.landscapes.where((l) => !l.is3d).map((l) => l.id),
+          ['cascade-foret', 'pluie-ville', 'toits-pluie', 'ciel-etoile']);
+    });
+
+    test('decor list: two free, Pétales, Pluie and Étoiles filantes added, Éclairs and Pluie sur l’écran gone', () {
+      expect(catalog.decors.map((d) => d.id), [
+        'brume',
+        'lucioles',
+        'rayons-soleil',
+        'petales',
+        'neige',
+        'pluie',
+        'etoiles',
+        'etoiles-filantes',
+        'oiseaux-vol',
+      ]);
+      expect(catalog.decors.where((d) => d.free).map((d) => d.id), ['brume', 'lucioles']);
+      expect(catalog.item(LayerKind.decor, 'petales')!.name, 'Pétales');
+      expect(catalog.item(LayerKind.decor, 'pluie-ecran'), isNull);
+    });
+
+    test('decorApplies and decorsOf: a 3D scene and its own elements only', () {
+      expect(catalog.decorApplies('foret-lucioles', 'lucioles'), isTrue);
+      expect(catalog.decorApplies('foret-lucioles', 'neige'), isFalse);
+      expect(catalog.decorApplies('cascade-foret', 'brume'), isFalse);
+      expect(catalog.decorApplies('nope', 'brume'), isFalse);
+      expect(catalog.decorsOf('jardin-zen').map((d) => d.name), ['Pétales', 'Rayons de soleil', 'Brume', 'Pluie']);
+      expect(catalog.decorsOf('pluie-ville'), isEmpty);
+    });
+
+    test('a retired landscape resolves to Cascade en forêt; an unknown one to nothing', () {
+      for (final id in Catalog.retiredLandscapeIds) {
+        expect(catalog.landscape(id), isNull, reason: id);
+        expect(catalog.landscapeFor(id)!.id, 'cascade-foret', reason: id);
+      }
+      expect(Catalog.retiredLandscapeIds, hasLength(8));
+      expect(catalog.landscapeFor('ondes')!.id, 'ondes');
+      expect(catalog.landscapeFor('nulle-part'), isNull);
+    });
+
+    test('sanitize: retired landscape → default one with its sounds, music and timer; decor that does not apply dropped', () {
+      final old = Scene(
+        landscapeId: 'cafe-nuit',
+        moment: Moment.nuit,
+        sounds: const [Layer(id: 'pluie-douce', level: 25)],
+        music: const [Layer(id: 'piano-doux', level: 25)],
+        decor: const [Layer(id: 'pluie-ecran', level: 40)],
+        timer: const TimerDuration(90),
+        mutedMusic: true,
+      );
+      final sanitized = catalog.sanitize(old)!;
+      expect(sanitized.landscapeId, 'cascade-foret');
+      expect(sanitized.sounds, old.sounds);
+      expect(sanitized.music, old.music);
+      expect(sanitized.decor, isEmpty);
+      expect(sanitized.timer, const TimerDuration(90));
+      expect(sanitized.moment, Moment.nuit);
+      expect(sanitized.mutedMusic, isTrue);
+      // A 3D scene keeps its own decor only.
+      final scene = Scene(
+        landscapeId: 'lac-lune',
+        decor: const [Layer(id: 'etoiles', level: 60), Layer(id: 'petales', level: 20), Layer(id: 'neige', level: 10)],
+      );
+      expect(catalog.sanitize(scene)!.decor, const [Layer(id: 'etoiles', level: 60), Layer(id: 'neige', level: 10)]);
+      // Nothing to change: the same instance.
+      final clean = Scene.fromLandscape(catalog.landscape('aurore')!);
+      expect(catalog.sanitize(clean), same(clean));
+      expect(catalog.sanitize(Scene(landscapeId: 'nulle-part')), isNull);
+    });
+
+    test('showing: landscapes the phone cannot show are left out, an empty theme is hidden', () {
+      // Production without test material: toits-pluie and ciel-etoile have no media.
+      final shown = catalog.showing((l) => l.is3d || {'cascade-foret', 'pluie-ville'}.contains(l.id));
+      expect(shown.themes.map((t) => t.id), ['nature', 'urbain', 'imaginaire']);
+      expect(shown.landscapesOfTheme('urbain').map((l) => l.id), ['pluie-ville']);
+      expect(shown.landscape('ciel-etoile'), isNull);
+      // A saved scene on a hidden landscape opens on the default one, like a retired one.
+      expect(shown.landscapeFor('ciel-etoile')!.id, 'cascade-foret');
+      expect(shown.landscapeFor('lisiere-verte')!.id, 'cascade-foret');
+      // The default landscape is always kept; everything showable: the same catalog.
+      expect(catalog.showing((l) => false).landscapes.map((l) => l.id), ['cascade-foret']);
+      expect(catalog.showing((l) => true), same(catalog));
+    });
+
+    test('lenient parsing of the new fields', () {
+      final l = Landscape.fromJson({
+        'id': 'x',
+        'theme': 'imaginaire',
+        'nom': 'X',
+        'rendu': '3d',
+        'decors': ['brume', 'inconnu', 'brume', 3],
+        'periode_s': 0,
+        'mix': {
+          'decor': [
+            {'id': 'brume', 'niveau': 30},
+            {'id': 'neige', 'niveau': 20},
+          ],
+        },
+      }, knownDecors: {'brume', 'neige'});
+      expect(l.is3d, isTrue);
+      expect(l.decorIds, ['brume']);
+      expect(l.periodSeconds, isNull);
+      expect(l.defaultMix[LayerKind.decor], const [Layer(id: 'brume', level: 30)]);
+      // A filmed landscape never has decor, whatever the file says.
+      final filmed = Landscape.fromJson({
+        'id': 'y',
+        'theme': 'nature',
+        'nom': 'Y',
+        'decors': ['brume'],
+        'eclairs': 'oui',
+        'mix': {
+          'decor': [
+            {'id': 'brume', 'niveau': 30},
+          ],
+        },
+      });
+      expect(filmed.rendering, LandscapeRendering.video);
+      expect(filmed.decorIds, isEmpty);
+      expect(filmed.defaultMix[LayerKind.decor], isEmpty);
+      expect(filmed.lightning, isFalse);
     });
   });
 

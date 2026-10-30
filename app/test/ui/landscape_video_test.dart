@@ -121,7 +121,6 @@ Widget _host(
 
 const _cascade = LandscapeBackground(
   landscapeId: 'cascade-foret',
-  style: 'cascade',
   kenBurns: true,
 );
 
@@ -197,7 +196,7 @@ void main() {
     factory = FakeVideoFactory();
     LandscapeVideos.debugReset(factory: factory.call);
     LandscapeImages.debugSetVideos(
-      bundled: {'cascade-foret', 'sous-bois', 'berge-mousseuse', 'torrent-montagne'},
+      bundled: {'cascade-foret', 'pluie-ville', 'toits-pluie'},
       remote: {'pluie-ville'},
     );
   });
@@ -253,17 +252,16 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
-    testWidgets('procedural painter, with Ken Burns, for a landscape without video', (
+    testWidgets('a filmed landscape without video: its still picture (placeholder here), with Ken Burns', (
       tester,
     ) async {
       LandscapeImages.debugSetVideos(bundled: {'cascade-foret'});
-      final model = FakeAppModel();
+      final model = FakeAppModel(plan: Plan.annual);
       await tester.pumpWidget(
         _host(
           model,
           const LandscapeBackground(
-            landscapeId: 'sous-bois',
-            style: 'sous-bois',
+            landscapeId: 'ciel-etoile',
             kenBurns: true,
           ),
         ),
@@ -271,7 +269,7 @@ void main() {
       await tester.pump();
       expect(model.videoRequests, isEmpty);
       expect(factory.created, isEmpty);
-      expect(find.byType(ProceduralLandscape), findsOneWidget);
+      expect(find.byType(LandscapePlaceholder), findsOneWidget);
       expect(find.byType(KenBurns), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
     });
@@ -447,7 +445,6 @@ void main() {
           model,
           const LandscapeBackground(
             landscapeId: 'pluie-ville',
-            style: 'ville-pluie',
             kenBurns: true,
           ),
         ),
@@ -480,7 +477,7 @@ void main() {
       final a1 = hub.acquire(_cascadeVideo)!;
       final a2 = hub.acquire(_cascadeVideo)!;
       expect(identical(a1.player, a2.player), isTrue);
-      final b = hub.acquire(const AssetLandscapeVideo('assets/landscapes/sous-bois.mp4'))!;
+      final b = hub.acquire(const AssetLandscapeVideo('assets/landscapes/toits-pluie.mp4'))!;
       expect(hub.liveCount, 2);
       expect(hub.acquire(const AssetLandscapeVideo('assets/landscapes/x.mp4')), isNull);
 
@@ -501,18 +498,19 @@ void main() {
       tester,
     ) async {
       usePhoneView(tester, reduceMotion: false);
-      final model = FakeAppModel(plan: Plan.annual);
-      for (final id in ['cascade-foret', 'sous-bois', 'berge-mousseuse', 'torrent-montagne']) {
-        model.videos[id] = AssetLandscapeVideo('assets/landscapes/$id.mp4');
-      }
+      final model = FakeAppModel(plan: Plan.annual)..selectLandscape('pluie-ville');
+      const ville = AssetLandscapeVideo('assets/landscapes/pluie-ville.mp4');
+      const toits = AssetLandscapeVideo('assets/landscapes/toits-pluie.mp4');
+      model.videos['pluie-ville'] = ville;
+      model.videos['toits-pluie'] = toits;
       await pumpApp(tester, model);
-      expect(factory.alive.map((p) => p.source), [_cascadeVideo]);
+      expect(factory.alive.map((p) => p.source), [ville]);
 
-      Future<void> swipeUp() async {
+      Future<void> swipe(double dy) async {
         final gesture = await tester.startGesture(const Offset(195, 300));
-        await gesture.moveBy(const Offset(0, -40));
+        await gesture.moveBy(Offset(0, dy * 40));
         await tester.pump();
-        await gesture.moveBy(const Offset(0, -160));
+        await gesture.moveBy(Offset(0, dy * 160));
         await tester.pump();
         await tester.pump();
         // During the gesture: the current landscape and the incoming one.
@@ -523,30 +521,28 @@ void main() {
         }
       }
 
-      await swipeUp();
-      expect(model.browsedLandscapeId, 'sous-bois');
+      await swipe(-1); // up: next landscape of « Urbain »
+      expect(model.browsedLandscapeId, 'toits-pluie');
       expect(LandscapeVideos.hub.liveCount, 1);
       final preloaded = factory.created[1];
-      expect(preloaded.source, const AssetLandscapeVideo('assets/landscapes/sous-bois.mp4'));
+      expect(preloaded.source, toits);
       expect(preloaded.disposed, isFalse, reason: 'the preloaded player became the current one');
       expect(preloaded.playing, isTrue);
       expect(factory.created.first.disposed, isTrue);
 
-      await swipeUp();
-      await swipeUp();
-      expect(model.browsedLandscapeId, 'torrent-montagne');
-      expect(factory.alive.map((p) => p.source), [
-        const AssetLandscapeVideo('assets/landscapes/torrent-montagne.mp4'),
-      ]);
-      expect(factory.created, hasLength(4));
+      await swipe(1); // down: back to the previous one
+      expect(model.browsedLandscapeId, 'pluie-ville');
+      expect(factory.alive.map((p) => p.source), [ville]);
+      expect(factory.created, hasLength(3));
       await tearDownApp(tester);
     });
 
     testWidgets('a cancelled swipe releases the preloaded neighbour', (tester) async {
       usePhoneView(tester, reduceMotion: false);
-      final model = FakeAppModel(plan: Plan.annual);
-      model.videos['cascade-foret'] = _cascadeVideo;
-      model.videos['sous-bois'] = const AssetLandscapeVideo('assets/landscapes/sous-bois.mp4');
+      final model = FakeAppModel(plan: Plan.annual)..selectLandscape('pluie-ville');
+      const ville = AssetLandscapeVideo('assets/landscapes/pluie-ville.mp4');
+      model.videos['pluie-ville'] = ville;
+      model.videos['toits-pluie'] = const AssetLandscapeVideo('assets/landscapes/toits-pluie.mp4');
       await pumpApp(tester, model);
       final gesture = await tester.startGesture(const Offset(195, 300));
       await gesture.moveBy(const Offset(0, -30));
@@ -559,9 +555,10 @@ void main() {
       for (var i = 0; i < 6; i++) {
         await tester.pump(const Duration(milliseconds: 150));
       }
-      expect(model.browsedLandscapeId, 'cascade-foret');
-      expect(factory.alive.map((p) => p.source), [_cascadeVideo]);
+      expect(model.browsedLandscapeId, 'pluie-ville');
+      expect(factory.alive.map((p) => p.source), [ville]);
       await tearDownApp(tester);
     });
   });
 }
+
