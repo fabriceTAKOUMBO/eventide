@@ -53,6 +53,16 @@ expect 1 account-setting "Ressource aws_ecr_account_setting interdite"
 case_dir json-form main.tf.json '{"resource": {"aws_db_parameter_group": {"x": {}}}}'
 expect 1 json-form "Ressource aws_db_parameter_group interdite (.tf.json)"
 
+# Exclusive attachment of a policy across the whole account (would detach it elsewhere).
+case_dir exclusive-policy-attachment modules/ecs/main.tf 'resource "aws_iam_policy_attachment" "s3" {}'
+expect 1 exclusive-policy-attachment "Ressource aws_iam_policy_attachment interdite"
+
+# Our dashboard resources (CORS on our bucket, task roles, inline policies) are allowed.
+case_dir dashboard-resources modules/content_cdn/main.tf 'resource "aws_s3_bucket_cors_configuration" "this" {}
+resource "aws_iam_role_policy" "task" {}
+resource "aws_iam_role" "task" {}'
+expect 0 dashboard-resources "Aucune ressource"
+
 expect_repo() {
   local out status=0
   out=$(bash "$guard" "$repo/infra/terraform" 2>&1) || status=$?

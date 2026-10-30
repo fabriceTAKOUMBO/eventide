@@ -22,6 +22,11 @@
 # Sans domaine (domain = "", marque à vérifier), l'entrée publique n'existe pas : ni certificat,
 # ni règles d'écouteur, ni DNS, ni groupe cible, ni service api ; tout le reste est créé
 # (base, contenu, image, tâches), ce qui ne pose QUE les points de contact 3 et 4.
+#
+# Tableau de bord (30 octobre 2026, ADR § 12) : servi par le service api sur les hôtes web
+# EXISTANTS (/tableau/, règle 401) ; envoi direct des fichiers sources du navigateur vers NOTRE
+# bucket de contenu (CORS), traitement par la famille ev-<env>-media lancée par l'API, secret
+# ADMIN_EMAILS. Aucun nouveau point de contact avec une ressource de CINAF.
 
 data "aws_region" "current" {}
 data "aws_caller_identity" "current" {}
@@ -40,11 +45,18 @@ locals {
   api_url         = local.ingress_enabled ? "https://${local.api_hostname}" : ""
 
   # Budget de connexions PostgreSQL : le pool de chaque worker gunicorn borne les connexions
-  # d'une tâche ; un déploiement peut doubler les tâches (deployment_maximum_percent).
+  # d'une tâche ; un déploiement peut doubler les tâches (deployment_maximum_percent). Chaque
+  # tâche media en cours ouvre une connexion du rôle applicatif (sans pool).
   connections_per_api_task = var.api.workers * var.api.db_pool_max
   deployment_surge         = ceil(var.deployment_maximum_percent / 100)
-  app_connections_needed   = var.api.max * local.connections_per_api_task * local.deployment_surge + var.app_connection_reserve
+  media_connections        = var.media_task_concurrency * 1
+  app_connections_needed   = var.api.max * local.connections_per_api_task * local.deployment_surge + var.app_connection_reserve + local.media_connections
   total_connection_limit   = var.db_role_connection_limits.app + var.db_role_connection_limits.migrator + var.db_role_connection_limits.backup
+
+  # Dashboard (contract § 14): the media family is started by the API by NAME (the latest
+  # revision registered by the deploy), in our cluster, our subnets and our security group (the
+  # same as the jobs tasks: the media task reaches the database exactly like them).
+  media_family = "${local.name}-media"
 
   # Keep-alive de gunicorn au-delà du délai d'inactivité de l'ALB partagé (502 sinon).
   keep_alive_seconds = local.ingress_enabled ? max(75, module.alb[0].idle_timeout + 5) : 75
@@ -59,7 +71,7 @@ resource "terraform_data" "connection_budget" {
   lifecycle {
     precondition {
       condition     = local.app_connections_needed <= var.db_role_connection_limits.app
-      error_message = "Connexions possibles du rôle applicatif (${local.app_connections_needed} = ${var.api.max} tâches api x ${var.api.workers} worker(s) x pool ${var.api.db_pool_max} x ${local.deployment_surge} (déploiement) + ${var.app_connection_reserve} (tâches planifiées)) au-delà de sa limite ${var.db_role_connection_limits.app} : réduire api.max, workers ou db_pool_max."
+      error_message = "Connexions possibles du rôle applicatif (${local.app_connections_needed} = ${var.api.max} tâches api x ${var.api.workers} worker(s) x pool ${var.api.db_pool_max} x ${local.deployment_surge} (déploiement) + ${var.app_connection_reserve} (tâches planifiées) + ${local.media_connections} (tâches media)) au-delà de sa limite ${var.db_role_connection_limits.app} : réduire api.max, workers ou db_pool_max."
     }
     precondition {
       condition     = local.total_connection_limit <= var.db_connection_budget
@@ -71,9 +83,10 @@ resource "terraform_data" "connection_budget" {
 # Shared account capacity: the Fargate vCPU quota is account-wide (CINAF, JobMinutes,
 # Candidature Express). The plan fails if this environment could hold more than its vCPU budget
 # at its peak: every api task during a deployment (max x surge) plus three one-off tasks
-# (migration, scheduled job, backup) of 0.25 vCPU.
+# (migration, scheduled job, backup) of 0.25 vCPU, plus the media tasks that may run at once
+# (dashboard processing, media_task_concurrency x media_task.cpu).
 locals {
-  peak_fargate_vcpu = (var.api.max * local.deployment_surge * var.api.cpu + 3 * 256) / 1024
+  peak_fargate_vcpu = (var.api.max * local.deployment_surge * var.api.cpu + 3 * 256 + var.media_task_concurrency * var.media_task.cpu) / 1024
 }
 
 resource "terraform_data" "shared_capacity_budget" {
@@ -82,7 +95,7 @@ resource "terraform_data" "shared_capacity_budget" {
   lifecycle {
     precondition {
       condition     = local.peak_fargate_vcpu <= var.fargate_vcpu_budget
-      error_message = "Pic de vCPU Fargate de l'environnement (${local.peak_fargate_vcpu} = ${var.api.max} tâches api x ${local.deployment_surge} (déploiement) x ${var.api.cpu / 1024} vCPU + 3 tâches ponctuelles x 0,25) au-delà du budget ${var.fargate_vcpu_budget} vCPU : le quota Fargate est commun à tout le compte (CINAF, JobMinutes, Candidature Express). Réduire, ou relever le budget après accord du product owner et lecture du quota."
+      error_message = "Pic de vCPU Fargate de l'environnement (${local.peak_fargate_vcpu} = ${var.api.max} tâches api x ${local.deployment_surge} (déploiement) x ${var.api.cpu / 1024} vCPU + 3 tâches ponctuelles x 0,25 + ${var.media_task_concurrency} tâche(s) media x ${var.media_task.cpu / 1024}) au-delà du budget ${var.fargate_vcpu_budget} vCPU : le quota Fargate est commun à tout le compte (CINAF, JobMinutes, Candidature Express). Réduire, ou relever le budget après accord du product owner et lecture du quota."
     }
   }
 }
@@ -124,6 +137,9 @@ module "secrets" {
   db_roles             = var.db_roles
   manual_secrets = {
     "google-play-service-account" = "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON : cle JSON du compte de service lie a la Play Console (API Play Developer et Play Integrity), deposee par le product owner"
+    # Dashboard administrators (contract § 14). Placeholder A_REMPLACER = nobody is admin until
+    # the product owner fills it (runbook tableau-de-bord.md). Injected into the api task only.
+    "admin-emails" = "ADMIN_EMAILS : adresses Google des administrateurs du tableau de bord (separees par des virgules), deposees par le product owner"
   }
 }
 
@@ -194,12 +210,34 @@ module "content" {
   budget_enabled              = var.content_budget_enabled
   budget_limit_usd            = var.content_budget_usd
   budget_emails               = var.budget_emails
+
+  # Dashboard uploads (presigned POST from the browser): our web origins only, none without a
+  # domain (no dashboard then).
+  cors_allowed_origins = [for h in local.web_hostnames : "https://${h}"]
 }
 
 # --- Application ---------------------------------------------------------------------------------
 
 locals {
-  api_environment = { for k, v in merge(
+  # Dashboard integration (contract with the backend, ADR § 12): same names in the api service,
+  # the scheduled tasks and the media task. Never empty, hence kept out of the filtered map below
+  # (whose "!= ''" filter turns the whole map unknown as soon as one value is unknown at plan
+  # time): each value stays readable in the plan and in the tests.
+  dashboard_environment = merge(
+    {
+      CONTENT_BUCKET             = module.content.bucket_name
+      CONTENT_BUCKET_REGION      = local.region
+      MEDIA_STORAGE              = "s3"
+      MEDIA_TASK_CLUSTER         = module.ecs.cluster_name
+      MEDIA_TASK_DEFINITION      = local.media_family
+      MEDIA_TASK_CONTAINER       = "media"
+      MEDIA_TASK_SUBNETS         = join(",", var.app_subnet_ids)
+      MEDIA_TASK_SECURITY_GROUPS = module.ecs.api_security_group_id
+    },
+    var.google_web_client_id != "" ? { GOOGLE_WEB_CLIENT_ID = var.google_web_client_id } : {},
+  )
+
+  api_environment = merge({ for k, v in merge(
     {
       DJANGO_SETTINGS_MODULE     = "config.settings.prod"
       DJANGO_READ_DOT_ENV        = "false"
@@ -223,13 +261,15 @@ locals {
       GUNICORN_CMD_ARGS = "--worker-class gthread --threads ${var.api.threads} --timeout 30 --graceful-timeout 25 --keep-alive ${local.keep_alive_seconds} --max-requests 2000 --max-requests-jitter 200 --worker-tmp-dir /tmp --no-control-socket --access-logfile - --access-logformat '%(h)s %(t)s \"%(m)s %(U)s %(H)s\" %(s)s %(b)s %(L)s' --error-logfile - --log-level info"
     },
     var.api_extra_environment,
-  ) : k => v if v != "" }
+  ) : k => v if v != "" }, local.dashboard_environment)
 
   api_secrets = {
     DJANGO_SECRET_KEY                = module.secrets.django_secret_key_arn
     DATABASE_URL                     = "${module.secrets.db_secret_arns["app"]}:url::"
     GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = module.secrets.manual_secret_arns["google-play-service-account"]
     CLOUDFRONT_PRIVATE_KEY           = module.content.private_key_secret_arn
+    # Dashboard administrators: the api service only (never migrate, jobs or media).
+    ADMIN_EMAILS = module.secrets.manual_secret_arns["admin-emails"]
   }
 
   # Migrations : rôle propriétaire, sans aucun secret Google ni CloudFront ; pas de pool.
@@ -245,6 +285,15 @@ locals {
     DJANGO_SECRET_KEY                = module.secrets.django_secret_key_arn
     DATABASE_URL                     = "${module.secrets.db_secret_arns["app"]}:url::"
     GOOGLE_PLAY_SERVICE_ACCOUNT_JSON = module.secrets.manual_secret_arns["google-play-service-account"]
+  }
+
+  # Media processing (dashboard): application role, no pool (one short connection per task).
+  # It runs ffmpeg on files uploaded from a browser: only the database and the Django key, never
+  # ADMIN_EMAILS, the Google Play key (the task calls no Google API) nor the CloudFront key.
+  media_environment = merge(local.api_environment, { DB_POOL_MAX_SIZE = "0" })
+  media_secrets = {
+    DJANGO_SECRET_KEY = module.secrets.django_secret_key_arn
+    DATABASE_URL      = "${module.secrets.db_secret_arns["app"]}:url::"
   }
 }
 
@@ -282,6 +331,15 @@ module "ecs" {
   migrate_secrets     = local.migrate_secrets
   jobs_environment    = local.jobs_environment
   jobs_secrets        = local.jobs_secrets
+  media_environment   = local.media_environment
+  media_secrets       = local.media_secrets
+
+  # Media task (dashboard): its size is counted in the vCPU budget above; its role only reads
+  # uploads/ and writes the processed files of OUR content bucket.
+  media                  = { cpu = var.media_task.cpu, memory = var.media_task.memory }
+  content_bucket_arn     = module.content.bucket_arn
+  content_upload_prefix  = module.content.upload_prefix
+  content_media_prefixes = module.content.media_prefixes
 
   log_retention_days = var.log_retention_days
   kms_key_arn        = module.kms.key_arn
@@ -417,9 +475,10 @@ module "task_registrar" {
   name                 = local.name
   register_inputs      = module.ecs.register_inputs
   image_repository_url = module.ecr.repository_urls["api"]
-  pass_role_arns       = values(module.ecs.execution_role_arns)
-  kms_key_arn          = module.kms.key_arn
-  log_retention_days   = var.log_retention_days
+  # Roles named by the templates: execution roles, and the task roles of api and media.
+  pass_role_arns     = concat(values(module.ecs.execution_role_arns), values(module.ecs.task_role_arns))
+  kms_key_arn        = module.kms.key_arn
+  log_retention_days = var.log_retention_days
   revision_tags = {
     Project     = "eventide"
     Environment = var.environment
@@ -473,7 +532,12 @@ module "github_oidc" {
   ecs_service_arns            = module.ecs.service_arns
   task_registrar_function_arn = module.task_registrar.function_arn
   migrate_task_family         = module.ecs.task_families["migrate"]
-  pass_role_arns              = values(module.ecs.execution_role_arns)
+  # Roles of the revisions the deploy runs (migrate) or puts in the api service (api execution
+  # and task roles); never the media roles (the deploy does not start media tasks).
+  pass_role_arns = concat(
+    [for k, arn in module.ecs.execution_role_arns : arn if k != "media"],
+    [module.ecs.task_role_arns["api"]],
+  )
   deploy_config_parameter_arn = aws_ssm_parameter.deploy_config.arn
   image_tag_parameter_arn     = aws_ssm_parameter.image_tag.arn
   jobs_log_group_arn          = module.ecs.log_group_arns["jobs"]

@@ -23,25 +23,32 @@ SHA = "0123456789abcdef0123456789abcdef01234567"
 TASK_DEFINITION_ARN_PREFIX = "arn:aws:ecs:us-east-1:466494951409:task-definition/"
 
 
+FAMILIES = ("api", "migrate", "jobs", "media")
+
+
 def template(key: str) -> dict:
-    return {
+    request = {
         "family": f"ev-prod-{key}",
         "executionRoleArn": f"arn:aws:iam::466494951409:role/ev-prod-{key}-execution",
         "networkMode": "awsvpc",
         "requiresCompatibilities": ["FARGATE"],
-        "cpu": "256",
-        "memory": "512",
+        "cpu": "1024" if key == "media" else "256",
+        "memory": "2048" if key == "media" else "512",
         "runtimePlatform": {"operatingSystemFamily": "LINUX", "cpuArchitecture": "ARM64"},
         "volumes": [{"name": "tmp"}],
         "containerDefinitions": [{"name": key, "image": f"{REPO}:bootstrap", "essential": True}],
     }
+    # Same shape as modules/ecs: only api and media have a task role.
+    if key in ("api", "media"):
+        request["taskRoleArn"] = f"arn:aws:iam::466494951409:role/ev-prod-{key}-task"
+    return request
 
 
 def config() -> dict:
     return {
         "family_prefix": "ev-prod-",
         "image_repository": REPO,
-        "templates": {k: template(k) for k in ("api", "migrate", "jobs")},
+        "templates": {k: template(k) for k in FAMILIES},
         "tags": {"Project": "eventide", "Environment": "prod"},
     }
 
@@ -78,6 +85,52 @@ class RegistrarTest(unittest.TestCase):
         for field in ("executionRoleArn", "cpu", "memory", "volumes", "runtimePlatform"):
             self.assertEqual(sent[field], expected[field])
 
+    def test_registers_the_media_family_with_its_own_roles(self):
+        ecs = FakeEcs()
+        result = registrar.register({"family": "media", "image_tag": SHA}, ecs, config())
+        self.assertEqual(result["family"], "ev-prod-media")
+        sent = ecs.calls[0]
+        self.assertEqual(sent["containerDefinitions"][0]["image"], f"{REPO}:{SHA}")
+        self.assertEqual(sent["taskRoleArn"], "arn:aws:iam::466494951409:role/ev-prod-media-task")
+        self.assertEqual(
+            sent["executionRoleArn"], "arn:aws:iam::466494951409:role/ev-prod-media-execution"
+        )
+        self.assertEqual((sent["cpu"], sent["memory"]), ("1024", "2048"))
+
+    def test_families_without_a_task_role_get_none(self):
+        ecs = FakeEcs()
+        registrar.register({"family": "jobs", "image_tag": SHA}, ecs, config())
+        self.assertNotIn("taskRoleArn", ecs.calls[0])
+
+    def test_refuses_a_key_outside_the_closed_list_even_if_configured(self):
+        cfg = config()
+        cfg["templates"]["worker"] = {**template("jobs"), "family": "ev-prod-worker"}
+        ecs = FakeEcs()
+        with self.assertRaises(registrar.RegistrationRefused):
+            registrar.register({"family": "worker", "image_tag": SHA}, ecs, cfg)
+        self.assertEqual(ecs.calls, [])
+
+    def test_refuses_a_template_naming_a_role_outside_eventide(self):
+        for field, role in (
+            ("taskRoleArn", "arn:aws:iam::466494951409:role/cinaf-streaming-task"),
+            ("taskRoleArn", "arn:aws:iam::466494951409:role/ce-prod-api-task"),
+            ("taskRoleArn", "arn:aws:iam::466494951409:role/ev-preprod-media-task"),
+            ("executionRoleArn", "arn:aws:iam::466494951409:role/jobminutes-execution"),
+            ("executionRoleArn", "arn:aws:iam::466494951409:role/aws-reserved/x/ev-prod-a"),
+        ):
+            cfg = config()
+            cfg["templates"]["media"][field] = role
+            ecs = FakeEcs()
+            with self.assertRaises(registrar.RegistrationRefused, msg=role):
+                registrar.register({"family": "media", "image_tag": SHA}, ecs, cfg)
+            self.assertEqual(ecs.calls, [], role)
+
+    def test_refuses_a_template_without_execution_role(self):
+        cfg = config()
+        del cfg["templates"]["jobs"]["executionRoleArn"]
+        with self.assertRaises(registrar.RegistrationRefused):
+            registrar.register({"family": "jobs", "image_tag": SHA}, FakeEcs(), cfg)
+
     def test_templates_are_not_mutated(self):
         cfg = config()
         registrar.register({"family": "jobs", "image_tag": SHA}, FakeEcs(), cfg)
@@ -86,7 +139,7 @@ class RegistrarTest(unittest.TestCase):
         )
 
     def test_refuses_a_family_outside_its_configuration(self):
-        for family in ("cinaf-api", "ce-prod-api", "ev-prod-api", "", None, 3):
+        for family in ("cinaf-api", "ce-prod-api", "ev-prod-api", "ev-prod-media", "", None, 3):
             ecs = FakeEcs()
             with self.assertRaises(registrar.RegistrationRefused):
                 registrar.register({"family": family, "image_tag": SHA}, ecs, config())

@@ -131,6 +131,71 @@ variable "jobs_secrets" {
   type        = map(string)
 }
 
+variable "media_environment" {
+  description = "Variables de la tâche de traitement des médias (famille media)."
+  type        = map(string)
+}
+
+variable "media_secrets" {
+  description = "Secrets de la tâche media (base et clé Django seulement : jamais ADMIN_EMAILS, ni la clé Google Play, ni la clé CloudFront)."
+  type        = map(string)
+
+  validation {
+    condition     = length(setintersection(keys(var.media_secrets), ["ADMIN_EMAILS", "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON", "CLOUDFRONT_PRIVATE_KEY"])) == 0
+    error_message = "media_secrets : la tâche media traite des fichiers envoyés (ffmpeg) et ne reçoit ni ADMIN_EMAILS, ni la clé Google Play, ni la clé CloudFront."
+  }
+}
+
+# Shared account: the Fargate vCPU quota is common to CINAF, JobMinutes and Candidature Express.
+# At most 1 vCPU / 2 GB (valid Fargate pairs), counted in the vCPU budget of shared_platform.
+variable "media" {
+  description = "Taille de la tâche media (unités CPU, Mo) : 1 vCPU / 2 Go au plus."
+  type = object({
+    cpu    = number
+    memory = number
+  })
+  default = { cpu = 1024, memory = 2048 }
+
+  validation {
+    condition = contains([
+      "256/512", "256/1024", "256/2048", "512/1024", "512/2048", "1024/2048",
+    ], "${var.media.cpu}/${var.media.memory}")
+    error_message = "media : 1 vCPU / 2 Go au plus, en couple valide pour Fargate (256/512 à 1024/2048)."
+  }
+}
+
+variable "content_bucket_arn" {
+  description = "ARN de NOTRE bucket de contenu (rôles de tâche api et media)."
+  type        = string
+
+  validation {
+    condition     = can(regex("^arn:aws:s3:::ev-[a-z0-9]+-content-[0-9]{12}$", var.content_bucket_arn))
+    error_message = "content_bucket_arn : notre seul bucket de contenu (ev-<env>-content-<compte>)."
+  }
+}
+
+variable "content_upload_prefix" {
+  description = "Préfixe des sources envoyées par le tableau de bord (uploads/)."
+  type        = string
+  default     = "uploads/"
+
+  validation {
+    condition     = can(regex("^[a-z0-9-]+/$", var.content_upload_prefix))
+    error_message = "content_upload_prefix : un préfixe simple terminé par « / »."
+  }
+}
+
+variable "content_media_prefixes" {
+  description = "Préfixes où la tâche media écrit les fichiers traités."
+  type        = list(string)
+  default     = ["videos/paysages/", "images/paysages/", "audio/sons/", "audio/musiques/"]
+
+  validation {
+    condition     = length(var.content_media_prefixes) > 0 && alltrue([for p in var.content_media_prefixes : can(regex("^[a-z0-9-]+/[a-z0-9-]+/$", p))])
+    error_message = "content_media_prefixes : préfixes <dossier>/<dossier>/ (jamais tout le bucket)."
+  }
+}
+
 variable "log_retention_days" {
   description = "Rétention des journaux CloudWatch (jours)."
   type        = number

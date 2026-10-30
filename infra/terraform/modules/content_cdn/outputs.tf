@@ -14,8 +14,32 @@ output "private_key_secret_arn" {
 }
 
 output "bucket_name" {
-  description = "Bucket privé du contenu (dépôt des fichiers par le product owner)."
-  value       = aws_s3_bucket.this.id
+  description = "Bucket privé du contenu (dépôt des fichiers par le product owner ; CONTENT_BUCKET de l'API et de la tâche media). Connu dès le plan."
+  value       = aws_s3_bucket.this.bucket
+}
+
+output "bucket_arn" {
+  description = "ARN du bucket du contenu (politiques des rôles de tâche api et media)."
+  value       = local.bucket_arn
+}
+
+output "upload_prefix" {
+  description = "Préfixe des fichiers sources envoyés par le tableau de bord (effacés après upload_expiration_days)."
+  value       = local.upload_prefix
+}
+
+output "media_prefixes" {
+  description = "Préfixes où la tâche media écrit les fichiers traités (contrat § 8 et § 13)."
+  value       = local.media_prefixes
+}
+
+output "uploads" {
+  description = "Envoi direct depuis le navigateur : origines CORS (POST seulement) et effacement des sources."
+  value = {
+    cors_allowed_origins = var.cors_allowed_origins
+    prefix               = local.upload_prefix
+    expiration_days      = var.upload_expiration_days
+  }
 }
 
 output "distribution_id" {

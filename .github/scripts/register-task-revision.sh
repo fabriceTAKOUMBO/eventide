@@ -4,12 +4,14 @@
 #
 # Shared AWS account (CINAF, JobMinutes, Candidature Express): the deploy role never reads nor
 # writes a task definition itself (no ecs:DescribeTaskDefinition, no ecs:RegisterTaskDefinition).
-# It only invokes the registrar with a family KEY of Eventide (api, migrate, jobs) and the
-# commit SHA; the registrar builds the revision from Terraform's template and refuses anything
-# else. This script checks that the revision returned belongs to the expected family.
+# It only invokes the registrar with a family KEY of Eventide (api, migrate, jobs, media: closed
+# list, the same as the registrar's) and the commit SHA; the registrar builds the revision from
+# Terraform's template and refuses anything else. This script checks that the revision returned
+# belongs to the expected family (ev-<env>-<key>).
 #
 # Usage: register-task-revision.sh <key> <ENV_VAR> [<key> <ENV_VAR> ...]
 #   e.g. register-task-revision.sh api API_TASKDEF migrate MIGRATE_TASKDEF
+#        register-task-revision.sh media MEDIA_TASKDEF
 # Environment: TASK_REGISTRAR (function name), IMAGE_TAG (40 hex characters), <KEY>_FAMILY
 # (expected family, e.g. API_FAMILY=ev-prod-api), GITHUB_ENV (file receiving ENV_VAR=<arn>),
 # RUNNER_TEMP (work directory).
@@ -40,6 +42,13 @@ while [ "$#" -gt 0 ]; do
     echo "::error::Arguments invalides : $key $var"
     exit 2
   fi
+  case "$key" in
+    api | migrate | jobs | media) ;;
+    *)
+      echo "::error::Famille inconnue : $key (api, migrate, jobs ou media)."
+      exit 2
+      ;;
+  esac
   family_var="$(tr '[:lower:]' '[:upper:]' <<< "$key")_FAMILY"
   expected="${!family_var:-}"
   if ! [[ "$expected" =~ ^ev-[a-z0-9]+-$key$ ]]; then

@@ -301,6 +301,249 @@
         },
         "after_unknown": {}
       }
+    },
+    {
+      "address": "module.prod.module.ecs.aws_ecs_task_definition.media",
+      "mode": "managed",
+      "type": "aws_ecs_task_definition",
+      "name": "media",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "family": "ev-prod-media",
+          "cpu": "1024",
+          "memory": "2048",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {
+          "execution_role_arn": true,
+          "task_role_arn": true
+        }
+      }
+    },
+    {
+      "address": "module.prod.module.ecs.aws_iam_role.task[\"api\"]",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "task",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "ev-prod-api-task",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.ecs.aws_iam_role.task[\"media\"]",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "task",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "ev-prod-media-task",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.ecs.aws_iam_role.execution[\"media\"]",
+      "mode": "managed",
+      "type": "aws_iam_role",
+      "name": "execution",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "ev-prod-media-execution",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.ecs.aws_iam_role_policy.task[\"api\"]",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "task",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "dashboard-uploads-and-media-tasks",
+          "policy": "{\"Statement\":[{\"Action\":[\"s3:PutObject\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::ev-prod-content-466494951409/uploads/*\"],\"Sid\":\"SignDashboardUploads\"},{\"Action\":[\"ecs:RunTask\"],\"Condition\":{\"ArnEquals\":{\"ecs:cluster\":\"arn:aws:ecs:us-east-1:466494951409:cluster/ev-prod\"},\"NumericLessThanEqualsIfExists\":{\"ecs:task-cpu\":\"1024\",\"ecs:task-memory\":\"2048\"}},\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:ecs:us-east-1:466494951409:task-definition/ev-prod-media\",\"arn:aws:ecs:us-east-1:466494951409:task-definition/ev-prod-media:*\"],\"Sid\":\"StartMediaTasks\"},{\"Action\":[\"ecs:TagResource\"],\"Condition\":{\"StringEquals\":{\"ecs:CreateAction\":\"RunTask\"}},\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:ecs:us-east-1:466494951409:task/ev-prod/*\"],\"Sid\":\"TagMediaTasksAtLaunch\"},{\"Action\":[\"iam:PassRole\"],\"Condition\":{\"StringEquals\":{\"iam:PassedToService\":\"ecs-tasks.amazonaws.com\"}},\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:iam::466494951409:role/ev-prod-media-execution\",\"arn:aws:iam::466494951409:role/ev-prod-media-task\"],\"Sid\":\"PassMediaRolesToEcsOnly\"}],\"Version\":\"2012-10-17\"}"
+        },
+        "after_unknown": {
+          "role": true,
+          "id": true
+        }
+      }
+    },
+    {
+      "address": "module.prod.module.ecs.aws_iam_role_policy.task[\"media\"]",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "task",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "process-media",
+          "role": "ev-prod-media-task",
+          "policy": "{\"Statement\":[{\"Action\":[\"s3:GetObject\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::ev-prod-content-466494951409/uploads/*\"],\"Sid\":\"ReadUploadedSources\"},{\"Action\":[\"s3:PutObject\"],\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:s3:::ev-prod-content-466494951409/videos/paysages/*\",\"arn:aws:s3:::ev-prod-content-466494951409/images/paysages/*\",\"arn:aws:s3:::ev-prod-content-466494951409/audio/sons/*\",\"arn:aws:s3:::ev-prod-content-466494951409/audio/musiques/*\"],\"Sid\":\"WriteProcessedMedia\"}],\"Version\":\"2012-10-17\"}"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.task_registrar.aws_iam_role_policy.this",
+      "mode": "managed",
+      "type": "aws_iam_role_policy",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "name": "register-own-task-definitions",
+          "role": "ev-prod-task-registrar",
+          "policy": "{}"
+        },
+        "after": {
+          "name": "register-own-task-definitions",
+          "role": "ev-prod-task-registrar",
+          "policy": "{\"Statement\":[{\"Action\":[\"ecs:RegisterTaskDefinition\"],\"Effect\":\"Allow\",\"Resource\":\"*\",\"Sid\":\"RegisterOwnFamiliesOnly\"},{\"Action\":[\"iam:PassRole\"],\"Condition\":{\"StringEquals\":{\"iam:PassedToService\":\"ecs-tasks.amazonaws.com\"}},\"Effect\":\"Allow\",\"Resource\":[\"arn:aws:iam::466494951409:role/ev-prod-media-execution\",\"arn:aws:iam::466494951409:role/ev-prod-media-task\"],\"Sid\":\"PassOurExecutionRoles\"},{\"Action\":[\"logs:CreateLogStream\",\"logs:PutLogEvents\"],\"Effect\":\"Allow\",\"Resource\":\"arn:aws:logs:us-east-1:466494951409:log-group:/aws/lambda/ev-prod-task-registrar:log-stream:*\",\"Sid\":\"OwnLogs\"}],\"Version\":\"2012-10-17\"}"
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.secrets.aws_secretsmanager_secret.manual[\"admin-emails\"]",
+      "mode": "managed",
+      "type": "aws_secretsmanager_secret",
+      "name": "manual",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "name": "eventide/prod/admin-emails",
+          "tags_all": {
+            "Project": "eventide",
+            "Environment": "prod",
+            "ManagedBy": "terraform",
+            "Repository": "fabriceTAKOUMBO/eventide",
+            "Hosting": "shared"
+          }
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.content.aws_s3_bucket_cors_configuration.this[0]",
+      "mode": "managed",
+      "type": "aws_s3_bucket_cors_configuration",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "create"
+        ],
+        "before": null,
+        "after": {
+          "bucket": "ev-prod-content-466494951409",
+          "cors_rule": [
+            {
+              "allowed_headers": [
+                "content-type"
+              ],
+              "allowed_methods": [
+                "POST"
+              ],
+              "allowed_origins": [
+                "https://eventide.app",
+                "https://www.eventide.app"
+              ],
+              "expose_headers": [
+                "ETag"
+              ],
+              "id": "dashboard-uploads",
+              "max_age_seconds": 600
+            }
+          ]
+        },
+        "after_unknown": {}
+      }
+    },
+    {
+      "address": "module.prod.module.content.aws_s3_bucket_lifecycle_configuration.this",
+      "mode": "managed",
+      "type": "aws_s3_bucket_lifecycle_configuration",
+      "name": "this",
+      "provider_name": "registry.terraform.io/hashicorp/aws",
+      "change": {
+        "actions": [
+          "update"
+        ],
+        "before": {
+          "bucket": "ev-prod-content-466494951409"
+        },
+        "after": {
+          "bucket": "ev-prod-content-466494951409"
+        },
+        "after_unknown": {}
+      }
     }
   ],
   "prior_state": {

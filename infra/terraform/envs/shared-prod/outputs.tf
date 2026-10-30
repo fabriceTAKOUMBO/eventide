@@ -22,6 +22,7 @@ output "prod" {
     alerts_topic_arn                = module.prod.alerts_topic_arn
     secrets_to_fill                 = module.prod.secret_names
     shared_alb                      = module.prod.shared_alb
+    dashboard                       = module.prod.dashboard
   }
 }
 
@@ -38,6 +39,9 @@ output "preprod" {
     db_bootstrap_master_secret_name = module.preprod[0].db_bootstrap_master_secret_name
     db_connection_limits            = module.preprod[0].db_connection_limits
     content                         = module.preprod[0].content
+    shared_capacity                 = module.preprod[0].shared_capacity
+    secrets_to_fill                 = module.preprod[0].secret_names
+    dashboard                       = module.preprod[0].dashboard
   } : null
 }
 

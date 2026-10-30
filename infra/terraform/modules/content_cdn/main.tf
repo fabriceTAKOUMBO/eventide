@@ -3,8 +3,14 @@
 # SIGNÉES (groupe de clés de confiance) que l'API délivre après vérification des droits.
 # Modèle : modules/map_tiles de Candidature Express (bucket privé + OAC), plus les adresses signées.
 #
-# Disposition des objets : audio/sons/<id>.ogg, audio/musiques/<id>.ogg, images/paysages/<id>.jpg
-# (déposés par le product owner avec sa session d'administration).
+# Disposition des objets : audio/sons/<id>.ogg, audio/musiques/<id>.ogg, images/paysages/<id>.jpg,
+# videos/paysages/<id>.mp4 (déposés par le product owner avec sa session d'administration, ou
+# écrits par la tâche ev-<env>-media du tableau de bord, contrat § 13 et § 14).
+#
+# Tableau de bord (30 octobre 2026, ADR § 12) : le navigateur de l'administrateur envoie le
+# fichier source DIRECTEMENT dans ce bucket (formulaire POST signé par l'API, clé
+# uploads/<uuid>/source) : CORS limité à POST depuis nos seules origines web, sources effacées
+# après 7 jours. Le fichier ne traverse ni l'API ni l'ALB partagé.
 #
 # Clé de signature : paire RSA 2048 générée par Terraform (tls_private_key) ; la clé publique entre
 # dans le groupe de clés de la distribution, la clé privée dans Secrets Manager
@@ -19,9 +25,15 @@ data "aws_region" "current" {}
 
 locals {
   bucket_name   = "${var.name}-content-${var.account_id}"
+  bucket_arn    = "arn:aws:s3:::${local.bucket_name}"
   origin_id     = "s3-${local.bucket_name}"
   custom_domain = var.domain_name != ""
   tags          = { Component = "content" }
+
+  # Dashboard (contract § 14): sources uploaded by the browser, and the prefixes the media
+  # task writes its outputs to (contract § 8 and § 13 layout).
+  upload_prefix  = "uploads/"
+  media_prefixes = ["videos/paysages/", "images/paysages/", "audio/sons/", "audio/musiques/"]
 }
 
 # --- Bucket privé ----------------------------------------------------------------------------------
@@ -80,7 +92,60 @@ resource "aws_s3_bucket_lifecycle_configuration" "this" {
     }
   }
 
+  # Dashboard sources (uploads/<uuid>/source, up to 300 MB): current version expired after
+  # upload_expiration_days, the bytes (noncurrent version, the bucket is versioned) one day
+  # later; incomplete multipart uploads aborted after one day. Where rules overlap, S3 applies
+  # the shorter delay.
+  rule {
+    id     = "expire-dashboard-uploads"
+    status = "Enabled"
+    filter {
+      prefix = local.upload_prefix
+    }
+    expiration {
+      days = var.upload_expiration_days
+    }
+    noncurrent_version_expiration {
+      noncurrent_days = 1
+    }
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+
+  # Delete markers left by the rule above, once their noncurrent version is gone.
+  rule {
+    id     = "remove-upload-delete-markers"
+    status = "Enabled"
+    filter {
+      prefix = local.upload_prefix
+    }
+    expiration {
+      expired_object_delete_marker = true
+    }
+  }
+
   depends_on = [aws_s3_bucket_versioning.this]
+}
+
+# Browser uploads from the dashboard (presigned POST): POST only, from OUR web origins only
+# (https://<domain>, https://www.<domain> in production; https://preprod.<domain> in
+# preproduction). No GET: content is read through CloudFront with signed URLs. No rule without a
+# domain (no dashboard then).
+resource "aws_s3_bucket_cors_configuration" "this" {
+  count  = length(var.cors_allowed_origins) > 0 ? 1 : 0
+  bucket = aws_s3_bucket.this.id
+
+  cors_rule {
+    id              = "dashboard-uploads"
+    allowed_methods = ["POST"]
+    allowed_origins = var.cors_allowed_origins
+    # A presigned POST carries its fields in the multipart body: only Content-Type (preflight
+    # sent when the page watches the upload progress).
+    allowed_headers = ["content-type"]
+    expose_headers  = ["ETag"]
+    max_age_seconds = var.cors_max_age_seconds
+  }
 }
 
 data "aws_iam_policy_document" "bucket" {

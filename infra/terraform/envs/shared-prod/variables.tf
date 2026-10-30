@@ -134,9 +134,24 @@ variable "android_cert_fingerprints" {
 }
 
 variable "google_oauth_client_ids" {
-  description = "Identifiants clients OAuth Google (publics) acceptés pour la liaison du compte."
+  description = "Identifiants clients OAuth Google (publics) acceptés pour la liaison du compte et la connexion au tableau de bord (audience des jetons d'identité)."
   type        = list(string)
   default     = []
+}
+
+variable "google_web_client_id" {
+  description = "Client OAuth Google « Application Web » du bouton de connexion du tableau de bord /tableau/ (public, GOOGLE_WEB_CLIENT_ID), origines JavaScript autorisées : https://<domaine> et https://www.<domaine> (runbook tableau-de-bord.md). Vide = non configuré. À ajouter aussi à google_oauth_client_ids."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.google_web_client_id == "" || can(regex("^[0-9]+-[a-z0-9]+\\.apps\\.googleusercontent\\.com$", var.google_web_client_id))
+    error_message = "google_web_client_id : identifiant de client OAuth Google (<numéro>-<code>.apps.googleusercontent.com)."
+  }
+  validation {
+    condition     = var.google_web_client_id == "" || contains(var.google_oauth_client_ids, var.google_web_client_id)
+    error_message = "google_web_client_id doit aussi figurer dans google_oauth_client_ids : l'API vérifie l'audience du jeton de connexion du tableau de bord avec cette liste."
+  }
 }
 
 variable "rtdn_service_account_email" {

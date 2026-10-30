@@ -47,6 +47,10 @@ forbidden+='|aws_backup_global_settings|aws_backup_region_settings|aws_accessana
 forbidden+='|aws_emr_block_public_access_configuration|aws_glue_data_catalog_encryption_settings|aws_glue_resource_policy'
 forbidden+='|aws_lakeformation_data_lake_settings|aws_cloudwatch_event_bus_policy|aws_cloudwatch_event_permission'
 forbidden+='|aws_cloudwatch_event_archive|aws_cloudtrail|aws_iam_saml_provider|aws_s3control_[a-z0-9_]+|aws_default_[a-z0-9_]+'
+# Dashboard review (30 October 2026): aws_iam_policy_attachment manages EVERY attachment of a
+# policy across the account (exclusive): it would detach that policy from the roles of the other
+# platforms. Use aws_iam_role_policy (inline, on our roles) instead.
+forbidden+='|aws_iam_policy_attachment'
 # Shared infrastructure of CINAF (and of the other guests): never managed by Eventide, only read
 # by data sources. Includes what would change the shared VPC's routing or DNS for everyone (VPC
 # endpoints, private DNS namespaces and zones, resolver rules, DHCP options), legacy security

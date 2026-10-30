@@ -1,7 +1,7 @@
 # Task registrar of Eventide: a Lambda function, owned by Eventide, that registers a new
-# revision of one of OUR task definition families (ev-<env>-api, -migrate, -jobs) with a new
-# image, from the exact RegisterTaskDefinition input written by Terraform (packaged with the
-# code, never supplied by the caller).
+# revision of one of OUR task definition families (ev-<env>-api, -migrate, -jobs, -media) with a
+# new image, from the exact RegisterTaskDefinition input written by Terraform (packaged with the
+# code, never supplied by the caller). Closed list of family keys (variables.tf and the code).
 #
 # Why (shared account with CINAF, JobMinutes and Candidature Express, AGENTS.md rule 2): the
 # GitHub deploy role only gets lambda:InvokeFunction on this function. It no longer calls
@@ -54,6 +54,7 @@ locals {
         }
       },
       {
+        # Execution roles, and the task roles of api and media (named by their templates).
         Sid      = "PassOurExecutionRoles"
         Effect   = "Allow"
         Action   = ["iam:PassRole"]

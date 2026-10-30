@@ -15,10 +15,13 @@ name: Deploy
 #
 # Étapes : image linux/arm64 construite et poussée dans ECR (tag = SHA du commit, immuable) ->
 # scan ECR (bloquant en production sur toute CRITICAL absente de .github/accepted-cves.txt) ->
-# nouvelles révisions des familles api, migrate et jobs, enregistrées par NOTRE registraire
-# (fonction Lambda ev-<env>-task-registrar : modèle écrit par Terraform, seule l'image change) ->
-# migrations (tâche ponctuelle, rôle ev_migrator ; arrêt si échec) -> service api (s'il existe :
-# il n'existe qu'avec un domaine) -> tag enregistré dans SSM -> tests de fumée -> résumé.
+# nouvelles révisions des familles api, migrate, media et jobs, enregistrées par NOTRE
+# registraire (fonction Lambda ev-<env>-task-registrar : modèle écrit par Terraform, seule
+# l'image change) -> migrations (tâche ponctuelle, rôle ev_migrator ; arrêt si échec) -> famille
+# media (traitement des fichiers du tableau de bord, lancée par l'API : enregistrée après les
+# migrations et avant le service, pour que la nouvelle API lance toujours le nouveau code) ->
+# service api (s'il existe : il n'existe qu'avec un domaine) -> famille jobs -> tag enregistré
+# dans SSM -> tests de fumée -> résumé.
 #
 # Compte AWS partagé (CINAF, JobMinutes, Candidature Express) : ce workflow ne lit ni n'écrit
 # aucune définition de tâche lui-même (ni ecs:DescribeTaskDefinition, qui n'accepte que « * »
@@ -143,6 +146,8 @@ jobs:
             echo "API_FAMILY=$(jq -r '.task_families.api' "$cfg")"
             echo "MIGRATE_FAMILY=$(jq -r '.task_families.migrate' "$cfg")"
             echo "JOBS_FAMILY=$(jq -r '.task_families.jobs' "$cfg")"
+            # Absent before the Terraform apply that creates it (dashboard, ADR § 12): skipped.
+            echo "MEDIA_FAMILY=$(jq -r '.task_families.media // ""' "$cfg")"
             echo "TASK_REGISTRAR=$(jq -r '.task_registrar' "$cfg")"
             echo "API_CONTAINER=$(jq -r '.containers.api' "$cfg")"
             echo "MIGRATE_CONTAINER=$(jq -r '.containers.migrate' "$cfg")"
@@ -288,6 +293,17 @@ jobs:
             exit 1
           fi
 
+      - name: Register media-processing revision (media) through our registrar
+        # Famille lancée par l'API (tableau de bord) par son NOM : ECS prend la dernière révision.
+        # Après les migrations (jamais de nouveau code sur un ancien schéma), avant le service.
+        run: |
+          set -euo pipefail
+          if [ -z "$MEDIA_FAMILY" ]; then
+            echo "::notice title=Famille media absente::La configuration SSM ne décrit pas encore la famille media (Terraform pas encore appliqué) : rien à enregistrer."
+            exit 0
+          fi
+          bash .github/scripts/register-task-revision.sh media MEDIA_TASKDEF
+
       - name: Deploy API service
         run: |
           set -euo pipefail
@@ -341,6 +357,7 @@ jobs:
             echo "| Migrations | ${RUN_MIGRATIONS} (code de sortie : ${MIGRATION_EXIT:-non lancées}) |"
             echo "| Service api | ${SERVICE_DEPLOYED:-?} (\`${API_TASKDEF:-?}\`) |"
             echo "| Tâches planifiées | \`${JOBS_TASKDEF:-non enregistrée}\` |"
+            echo "| Traitement des médias | \`${MEDIA_TASKDEF:-non enregistrée}\` |"
             echo "| API | ${API_URL:-pas de domaine} |"
             echo ""
             [ -f "$RUNNER_TEMP/scan.md" ] && cat "$RUNNER_TEMP/scan.md"
