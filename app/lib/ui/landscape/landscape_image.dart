@@ -75,8 +75,20 @@ abstract final class LandscapeImages {
     revision.value++;
   }
 
+  /// Set by tests: wins over what [discoverAssets] reads in the manifest, so the flag never
+  /// flips back and forth (each flip would open or close a scene).
+  static bool? _sceneRuntimeOverride;
+
+  /// The value a test forced, or null.
   @visibleForTesting
-  static void debugSetSceneRuntime(bool available) {
+  static bool? get debugSceneRuntimeOverride => _sceneRuntimeOverride;
+
+  /// Forces the flag for tests (null: back to the manifest). Setting the same value again does
+  /// nothing: a flip would close a live scene and open it again.
+  @visibleForTesting
+  static void debugSetSceneRuntime(bool? available) {
+    _sceneRuntimeOverride = available;
+    if (available == null || available == _sceneRuntime) return;
     _sceneRuntime = available;
     revision.value++;
   }
@@ -94,7 +106,7 @@ abstract final class LandscapeImages {
         if (m == null) continue;
         (m.group(2) == 'jpg' ? _bundled : _bundledVideos).add(m.group(1)!);
       }
-      _sceneRuntime = assets.contains(sceneRuntimeIndex);
+      _sceneRuntime = _sceneRuntimeOverride ?? assets.contains(sceneRuntimeIndex);
       if (assets.contains(LandscapeMediaKeys.remoteManifest)) {
         try {
           // Not cached by the bundle: read once here, and a cached future would outlive

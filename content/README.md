@@ -18,8 +18,8 @@ Le chemin d'un fichier sous `content/` est sa clé S3 :
 |---|---|
 | `audio/sons/<id>.ogg` | boucle de son de nature Premium, ambiance d'un paysage Premium (`ambiance-<paysage>`), ou variante d'un son à événements (`tonnerre-coup-01`…, contrat § 11) |
 | `audio/musiques/<id>.ogg` | boucle musicale Premium |
-| `images/paysages/<id>.jpg` | image fixe d'un paysage Premium : exactement la première image de sa vidéo (veille, vignettes, « réduire les animations », chargement) |
-| `videos/paysages/<id>.mp4` | vidéo d'un paysage Premium : boucle sans raccord, H.264, sans son, 2,5 Mo au plus |
+| `images/paysages/<id>.jpg` | image fixe d'un paysage filmé Premium : exactement la première image de sa vidéo (veille, vignettes, « réduire les animations », chargement). Les images fixes des paysages imaginaires (3D) sont embarquées dans l'application (`app/assets/landscapes/<id>.jpg`), jamais ici |
+| `videos/paysages/<id>.mp4` | vidéo d'un paysage Premium : boucle sans raccord, H.264, sans son, 2,5 Mo au plus ; pour un paysage imaginaire, la boucle de fond d'écran tirée de la scène 3D (`tools/imaginaire/render.js`), 4 Mo au plus pour `aurore` et `ondes` (écart au contrat, `docs/app/architecture.md` § 20.5) |
 
 Les `<id>` sont ceux de `app/assets/catalog.json`. Seuls les éléments
 `"gratuit": false` vont sur S3 ; les éléments gratuits sont embarqués dans
@@ -91,4 +91,5 @@ acceptées par `POST /content/urls`, contrat § 8.)
 python3 tools/media/generate_audio.py     # sons, musiques et variantes du tonnerre (substituts)
 python3 tools/media/process_video.py      # vidéos et images de paysages (depuis medias-bruts/)
 python3 tools/media/make_ambiance.py      # ambiances des paysages (bande son des vidéos)
+node tools/imaginaire/render.js video     # boucles et images fixes des paysages imaginaires (3D)
 ```

@@ -111,6 +111,7 @@ void main() {
     Imaginaire.debugReset();
     Imaginaire.surfaceFactory = WebViewSceneSurface.new;
     LandscapeImages.debugSetSceneRuntime(false);
+    LandscapeImages.debugSetSceneRuntime(null);
     CrashGuard.current = CrashGuard();
   });
 

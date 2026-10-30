@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<!-- Offline only: no network request of any kind (scripts are local files). -->
+<meta http-equiv="Content-Security-Policy" content="connect-src 'none'; img-src 'none'; media-src 'none'; font-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; form-action 'none'; base-uri 'none'">
+<title>Eventide · Imaginaire</title>
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
+  canvas#scene { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; touch-action: none; }
+</style>
+</head>
+<body>
+<script src="vendor/three.min.js"></script>
+<script src="runtime.js"></script>
+<script src="decors.js"></script>
+<script src="scenery.js"></script>
+<script src="post.js"></script>
+</body>
+</html>
