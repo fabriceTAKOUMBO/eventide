@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Makes tools/imaginaire/preview/ self-contained: copies next to preview/index.html the runtime,
-// the shared decor and scenery code, the six scenes and the vendored three.js exactly as the app
-// bundles them (app/assets/imaginaire/), plus the UI font (Manrope, OFL). The folder can then be
+// the shared decor, scenery and HDR finish (post.js) code, the six scenes and the vendored
+// three.js exactly as the app bundles them (app/assets/imaginaire/), plus the UI font (Manrope,
+// OFL). The folder can then be
 // opened locally (node tools/imaginaire/serve.js) or published as a multi-file page: it loads only
 // relative files, no network.
 //
@@ -23,6 +24,7 @@ function files() {
     ['runtime.js', path.join(SRC, 'runtime.js')],
     ['decors.js', path.join(SRC, 'decors.js')],
     ['scenery.js', path.join(SRC, 'scenery.js')],
+    ['post.js', path.join(SRC, 'post.js')],
     ['vendor/three.min.js', path.join(SRC, 'vendor', 'three.min.js')],
     ['vendor/LICENSE-three.txt', path.join(SRC, 'vendor', 'LICENSE-three.txt')],
     ['fonts/Manrope-Variable.ttf', path.join(REPO, 'app', 'assets', 'fonts', 'Manrope-Variable.ttf')],

@@ -108,7 +108,7 @@ shopt -s nullglob
 iprefix="assets/flutter_assets/assets/imaginaire"
 scenes=("$repo"/app/assets/imaginaire/scenes/*.js)
 [[ ${#scenes[@]} -gt 0 ]] || fail "no Imaginaire scene under app/assets/imaginaire/scenes"
-for file in index.html runtime.js decors.js scenery.js vendor/three.min.js vendor/LICENSE-three.txt; do
+for file in index.html runtime.js decors.js scenery.js post.js vendor/three.min.js vendor/LICENSE-three.txt; do
   grep -qx "$iprefix/$file" <<<"$listing" || fail "Imaginaire runtime file $file missing from the APK"
 done
 for scene in "${scenes[@]}"; do

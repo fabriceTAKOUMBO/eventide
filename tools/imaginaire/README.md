@@ -26,7 +26,7 @@ three.js n'est plus publié en script classique (seulement en modules ES). Or la
 refuse les imports de modules depuis `file:///android_asset/` (origine opaque, CORS) et
 `webview_flutter` n'expose pas « file access from file URLs ». `build-three.mjs` regroupe donc,
 avec esbuild, la version module du paquet npm épinglé en **un seul script classique**, réduit aux
-classes utilisées (`three-entry.mjs`, 555 Ko, 139 Ko compressé par gzip). La licence MIT est recopiée à côté
+classes utilisées (`three-entry.mjs`, 567 Ko, 142 Ko compressé par gzip). La licence MIT est recopiée à côté
 (`vendor/LICENSE-three.txt`), la version dans `vendor/VERSION`. Pour utiliser une autre classe de
 three.js : l'ajouter à `three-entry.mjs`, puis relancer le script.
 
@@ -44,7 +44,7 @@ plein écran ; une case superpose le texte blanc de l'app pour juger de sa lisib
 `build-preview.js` après toute modification de `app/assets/imaginaire/` (les copies doivent rester
 identiques aux fichiers de l'app).
 
-Fichiers publiés de `preview/` : `index.html`, `runtime.js`, `decors.js`, `scenery.js`,
+Fichiers publiés de `preview/` : `index.html`, `runtime.js`, `decors.js`, `scenery.js`, `post.js`,
 `vendor/three.min.js`, `vendor/LICENSE-three.txt`, `fonts/Manrope-Variable.ttf`,
 `fonts/OFL-Manrope.txt`, `scenes/{aurore,foret-lucioles,jardin-zen,lac-lune,mer-nuages,ondes}.js`.
 
@@ -67,7 +67,7 @@ images en file, puis se fige plusieurs secondes le temps de les dessiner.
 ```sh
 node tools/imaginaire/render.js sheet [--scene id,...]   # planches de contrôle (out/<id>-sheet.jpg)
 node tools/imaginaire/render.js shot --scene lac-lune --t 0,12 --decor max
-node tools/imaginaire/render.js stats                    # appels de dessin, triangles, images/s
+node tools/imaginaire/render.js stats                    # appels de dessin, triangles, cibles HDR, images/s
 node tools/imaginaire/render.js video [--scene id,...]   # image fixe + boucle de 30 s, remote.json
 node tools/imaginaire/render.js seam                     # raccord de la boucle publiée
 node tools/imaginaire/render.js all                      # tout, et out/report.json

@@ -259,6 +259,7 @@ async function cmdStats(browser, port, args) {
     for (const name of ['zero', 'default', 'max']) {
       const { info } = await frameAt(page, 10, sets[name]);
       counters[name] = { calls: info.calls, triangles: info.triangles, points: info.points, programs: info.programs };
+      if (info.post) counters.post = info.post;
     }
     await page.close();
     // GPU cost proxy: software-GL time of one frame (default decor) at a phone's buffer size
@@ -269,7 +270,8 @@ async function cmdStats(browser, port, args) {
       const d = window.eventide.debug();
       const gl = d.renderer.getContext();
       const px = new Uint8Array(4);
-      const once = () => { d.renderer.render(d.scene, d.camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); };
+      // d.render() draws the whole frame, the scene's own finish (post.js) included
+      const once = () => { if (d.render) d.render(); else d.renderer.render(d.scene, d.camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); };
       once();
       const t0 = performance.now();
       for (let i = 0; i < 4; i++) once();

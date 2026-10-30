@@ -13,6 +13,9 @@
  * frame, {"type":"error","detail":...}, {"type":"stats","fps":n,"ms":n} every 10 s); console
  * when the channel is absent (desktop browser).
  *
+ * A scene that declares `post: true` draws its own frames (instance.render, usually through the
+ * HDR finish of post.js, ctx.post()): the canvas then gets neither MSAA nor a depth buffer.
+ *
  * Time: the image is a pure function of t modulo PERIOD (30 s), so one period loops without
  * a seam. Recording mode (offline renders, tools/imaginaire/render.js):
  *   index.html?record=1&scene=<id>&t=<s>&w=<px>&h=<px>&decor=<json>
@@ -385,7 +388,9 @@
       if (decor.update && decor.object && decor.object.visible) decor.update(tm);
     }
     state.renderer.info.reset();
-    state.renderer.render(state.scene, state.camera);
+    // a scene with its own finish (post.js) draws itself; the others draw straight to the screen
+    if (state.instance.render) state.instance.render(tm);
+    else state.renderer.render(state.scene, state.camera);
   }
 
   function loop(now) {
@@ -466,11 +471,13 @@
     var container = options.container && options.container.appendChild ? options.container : null;
     (container || document.body).appendChild(canvas);
     var quality = options.quality === 'low' ? 'low' : 'high';
+    // a scene with the HDR finish (def.post) draws into its own targets (with their own MSAA and
+    // depth) and only one full-screen pass reaches the canvas: no MSAA nor depth on the canvas
     var renderer = new THREE.WebGLRenderer({
       canvas: canvas,
-      antialias: quality === 'high',
+      antialias: quality === 'high' && !def.post,
       alpha: false,
-      depth: true,
+      depth: !def.post,
       stencil: false,
       powerPreference: 'default',
       preserveDrawingBuffer: !!options.record,
@@ -543,6 +550,7 @@
       color: color,
       material: function (params) { return material(ctx, params); },
       decors: window.EventideDecors || {},
+      post: function (opts) { return window.EventidePost.create(ctx, opts); },
       onResize: function (fn) { state.resizeHooks.push(fn); },
       mirror: function (opts) { return createMirror(ctx, opts); },
     };
@@ -647,7 +655,12 @@
 
     // Tools only (debugging in a desktop browser): the three.js objects of the running scene.
     debug: function () {
-      return state ? { scene: state.scene, camera: state.camera, renderer: state.renderer, THREE: THREE } : null;
+      if (!state) return null;
+      return {
+        scene: state.scene, camera: state.camera, renderer: state.renderer, THREE: THREE,
+        // one full frame at the current time (the scene's own finish included)
+        render: function () { renderAt(state.time); },
+      };
     },
 
     // Tools only (render pipeline, preview): renderer counters of the last frame.
@@ -672,6 +685,7 @@
           acc[id] = Math.round(state.decorLevels[id].current * 100);
           return acc;
         }, {}),
+        post: state.instance && state.instance.describe ? state.instance.describe() : null,
       };
     },
   };
