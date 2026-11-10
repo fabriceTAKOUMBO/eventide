@@ -56,9 +56,6 @@ abstract final class LandscapeMediaKeys {
   /// for an item of the bundled base.
   static String revisionSuffix(int? rev) => rev == null ? '' : '.v$rev';
 
-  /// Entry page of the 3D scenes' runtime (`assets/imaginaire/`, contract § 12).
-  static const String sceneRuntime = 'assets/imaginaire/index.html';
-
   static String bundledVideo(String id) => 'assets/landscapes/$id.mp4';
   static String bundledImage(String id) => 'assets/landscapes/$id.jpg';
 

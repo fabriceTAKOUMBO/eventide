@@ -150,7 +150,6 @@ abstract class AppModel extends ChangeNotifier {
 
   /// Explicit choice from the Landscapes grid (loads its default mix). Locked → OpenPremiumEvent.
   void selectLandscape(String landscapeId);
-  void setMoment(Moment moment);
 
   /// Adds, changes or removes (level 0) a layer. Locked item → OpenPremiumEvent;
   /// too many audio layers → ToastEvent. A level above 0 in a muted category unmutes it

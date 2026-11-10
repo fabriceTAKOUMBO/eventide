@@ -1,13 +1,17 @@
 # Paysages imaginaires (3D) : outils
 
-Les six scènes 3D de la catégorie « Imaginaire » (contrat d'API § 12) sont dessinées en direct par
-l'application dans une WebView, avec three.js, depuis `app/assets/imaginaire/` (hors ligne). Ce
-dossier contient les outils autour de ces scènes :
+Les six scènes 3D de la catégorie « Imaginaire » (contrat d'API § 12) vivent dans `runtime/`
+(three.js, hors ligne). Depuis le 10 novembre 2026 (décision du product owner : les scènes en direct
+faisaient chauffer le téléphone), l'application ne les dessine plus : elle lit leurs **vidéos**,
+tirées hors ligne par `render.js` (image fixe et boucle de 30 s), comme les paysages filmés. Le
+moteur n'est donc plus embarqué dans l'application (plus de WebView). Ce dossier contient les
+scènes et les outils autour d'elles :
 
 | Fichier | Rôle |
 |---|---|
+| `runtime/` | le moteur des scènes (`index.html`, `runtime.js`, `decors.js`, `scenery.js`, `post.js`, `scenes/<id>.js`, `vendor/three.min.js`), autrefois `app/assets/imaginaire/` |
 | `package.json`, `package-lock.json` | versions exactes : `three` 0.186.1 (npm), `esbuild` 0.28.2 |
-| `three-entry.mjs`, `build-three.mjs` | fabrique `app/assets/imaginaire/vendor/three.min.js` (script classique, global `THREE`) |
+| `three-entry.mjs`, `build-three.mjs` | fabrique `runtime/vendor/three.min.js` (script classique, global `THREE`) |
 | `render.js` | rendus hors ligne : planches de contrôle, mesures, image fixe et boucle de fond d'écran de chaque scène |
 | `check.js` | vérifications du runtime (API, décors permis, transitions, pause, boucle exacte) |
 | `serve.js` | petit serveur local (127.0.0.1) pour les rendus et l'aperçu |
@@ -22,9 +26,9 @@ installer de navigateur), ffmpeg avec libx264, Python 3 (pour `remote.json`).
 cd tools/imaginaire && npm ci && node build-three.mjs
 ```
 
-three.js n'est plus publié en script classique (seulement en modules ES). Or la WebView Android
-refuse les imports de modules depuis `file:///android_asset/` (origine opaque, CORS) et
-`webview_flutter` n'expose pas « file access from file URLs ». `build-three.mjs` regroupe donc,
+three.js n'est plus publié en script classique (seulement en modules ES). Or la WebView Android, qui
+dessinait les scènes dans l'application jusqu'au 10 novembre 2026, refusait les imports de modules
+depuis `file:///android_asset/` (origine opaque, CORS). `build-three.mjs` regroupe donc,
 avec esbuild, la version module du paquet npm épinglé en **un seul script classique**, réduit aux
 classes utilisées (`three-entry.mjs`, 567 Ko, 142 Ko compressé par gzip). La licence MIT est recopiée à côté
 (`vendor/LICENSE-three.txt`), la version dans `vendor/VERSION`. Pour utiliser une autre classe de
@@ -41,8 +45,8 @@ node tools/imaginaire/serve.js           # puis ouvrir http://127.0.0.1:8765/pre
 on règle chaque élément du décor (0 à 100, transition d'environ 1 s), on met en pause, on passe en
 plein écran ; une case superpose le texte blanc de l'app pour juger de sa lisibilité. Au téléphone
 (390 px), la scène occupe l'écran et les réglages forment un panneau en bas, repliable. Relancer
-`build-preview.js` après toute modification de `app/assets/imaginaire/` (les copies doivent rester
-identiques aux fichiers de l'app).
+`build-preview.js` après toute modification de `runtime/` (les copies doivent rester identiques
+aux fichiers du moteur).
 
 Fichiers publiés de `preview/` : `index.html`, `runtime.js`, `decors.js`, `scenery.js`, `post.js`,
 `vendor/three.min.js`, `vendor/LICENSE-three.txt`, `fonts/Manrope-Variable.ttf`,

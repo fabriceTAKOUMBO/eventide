@@ -55,8 +55,6 @@ class _OfflineScreenState extends State<OfflineScreen> {
               brightness: 0.5,
               saturation: 0.35,
               blurSigma: 2,
-              // A 3D scene stays its poster here (dimmed and blurred behind a message).
-              live: false,
             ),
           ),
           const Positioned.fill(

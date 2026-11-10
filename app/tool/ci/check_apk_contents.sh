@@ -5,14 +5,19 @@
 #               ambiances and the thunder variants tonnerre-<part>-NN included), no Premium landscape
 #               video or poster (content/videos, content/images: served by the API), and none of
 #               the third-party test-only media (medias-test/, non-distributable);
-#   both:       the Imaginaire 3D runtime and scenes (assets/imaginaire/) and the poster of every
-#               scene (assets/landscapes/<id>.jpg), with the free scene's loop (foret-lucioles.mp4);
+#   both:       SCHEDULE_EXACT_ALARM declared and never USE_EXACT_ALARM (Play policy);
+#               the poster of every « Imaginaire » landscape (assets/landscapes/<id>.jpg) and the
+#               loop of the free one (foret-lucioles.mp4), and no live 3D runtime any more
+#               (assets/imaginaire/ absent: the « Imaginaire » landscapes are videos since
+#               10 November 2026, contract § 12);
 #   demo:       package be.cinaf.eventide.demo, label « Full Relax Démo », every Premium sound and
-#               music of content/audio, every landscape video and poster of content/ and of
-#               medias-test/, and the test-only ambiances of medias-test/audio bundled.
+#               music of content/audio, every landscape video and poster of content/ (the loops of
+#               the Premium « Imaginaire » landscapes included) and of medias-test/, and the
+#               test-only ambiances of medias-test/audio bundled.
 #
 # Usage: check_apk_contents.sh production|demo <apk> [content-audio-dir]
-# Needs unzip and aapt2 (newest Android build-tools under ANDROID_HOME, or AAPT2=...).
+# Needs unzip, python3 (reads app/assets/catalog.json) and aapt2 (newest Android build-tools
+# under ANDROID_HOME, or AAPT2=...).
 set -euo pipefail
 
 kind="${1:?usage: $0 production|demo <apk> [content-audio-dir]}"
@@ -64,6 +69,12 @@ echo "  label:   $label"
 grep -E "^(sdkVersion|minSdkVersion|targetSdkVersion):" <<<"$badging" | sed 's/^/  /' || true
 [[ "$package" == "$want_package" ]] || fail "package is '$package', expected '$want_package'"
 [[ "$label" == "$want_label" ]] || fail "launcher label is '$label', expected '$want_label'"
+# Scheduled starts: SCHEDULE_EXACT_ALARM (asked from « Alarmes et rappels » when a schedule is
+# saved), never USE_EXACT_ALARM (Google Play keeps it for alarm clock and calendar apps).
+grep -q "^uses-permission: name='android.permission.SCHEDULE_EXACT_ALARM'" <<<"$badging" \
+  || fail "the APK does not declare SCHEDULE_EXACT_ALARM (scheduled starts)"
+! grep -q "^uses-permission: name='android.permission.USE_EXACT_ALARM'" <<<"$badging" \
+  || fail "the APK declares USE_EXACT_ALARM (Play policy: alarm clock and calendar apps only)"
 
 manifest="$("$aapt2_bin" dump xmltree --file AndroidManifest.xml "$apk" 2>/dev/null || true)"
 demo_flag="$(grep -A 2 'be.cinaf.eventide.DEMO_BUILD' <<<"$manifest" | grep 'android:value' | head -n 1 | sed 's/^ *//' || true)"
@@ -100,26 +111,45 @@ lprefix="assets/flutter_assets/assets/landscapes"
 for free in cascade-foret.mp4 cascade-foret.jpg foret-lucioles.mp4 foret-lucioles.jpg remote.json; do
   grep -qx "$lprefix/$free" <<<"$listing" || fail "free landscape media $free missing from the APK"
 done
-# « Imaginaire »: the offline runtime of the 3D scenes (every APK).
-grep -qx "assets/flutter_assets/assets/imaginaire/index.html" <<<"$listing" \
-  || fail "the 3D scenes runtime (assets/imaginaire/index.html) is missing from the APK"
 shopt -s nullglob
 
-# Imaginaire 3D scenes (contract § 12): the offline runtime and every scene, in every APK, and
-# the poster of every scene (free users see the Premium tiles too). Their Premium wallpaper loops
-# stay on the content server (content/videos, checked below).
-iprefix="assets/flutter_assets/assets/imaginaire"
-scenes=("$repo"/app/assets/imaginaire/scenes/*.js)
-[[ ${#scenes[@]} -gt 0 ]] || fail "no Imaginaire scene under app/assets/imaginaire/scenes"
-for file in index.html runtime.js decors.js scenery.js post.js vendor/three.min.js vendor/LICENSE-three.txt; do
-  grep -qx "$iprefix/$file" <<<"$listing" || fail "Imaginaire runtime file $file missing from the APK"
-done
-for scene in "${scenes[@]}"; do
-  id="$(basename "$scene" .js)"
-  grep -qx "$iprefix/scenes/$id.js" <<<"$listing" || fail "Imaginaire scene $id.js missing from the APK"
-  grep -qx "$lprefix/$id.jpg" <<<"$listing" || fail "poster of the Imaginaire scene $id ($id.jpg) missing from the APK"
-done
-echo "  Imaginaire scenes and posters bundled: ${#scenes[@]}"
+# « Imaginaire » (contract § 12, 10 November 2026): its landscapes are videos rendered offline from
+# our 3D scenes (tools/imaginaire/). The live 3D runtime (assets/imaginaire/: WebView page,
+# three.js, scenes) must be absent from every APK. Every APK bundles the poster of each of them
+# (free users see the Premium tiles too) and the loop of the free ones; the demo bundles the loops
+# of the Premium ones too (content/videos, bundle_demo_media.sh), production never.
+imaginaire_runtime="$(grep -E '^assets/flutter_assets/assets/imaginaire/' <<<"$listing" || true)"
+[[ -z "$imaginaire_runtime" ]] \
+  || fail "the APK still contains the live 3D runtime (assets/imaginaire/): $(head -n 3 <<<"$imaginaire_runtime" | tr '\n' ' ')"
+command -v python3 >/dev/null || fail "python3 is needed to read app/assets/catalog.json"
+# "<id> free|premium" for each landscape of the « Imaginaire » theme, in catalog order.
+imaginaire="$(python3 - "$repo/app/assets/catalog.json" <<'PY'
+import json, sys
+catalog = json.load(open(sys.argv[1], encoding="utf-8"))
+for landscape in catalog["paysages"]:
+    if landscape.get("theme") == "imaginaire":
+        print(landscape["id"], "free" if landscape.get("gratuit") is True else "premium")
+PY
+)"
+[[ -n "$imaginaire" ]] || fail "no « Imaginaire » landscape in app/assets/catalog.json"
+imaginaire_count=0
+imaginaire_premium_loops=0
+while read -r id plan; do
+  imaginaire_count=$((imaginaire_count + 1))
+  grep -qx "$lprefix/$id.jpg" <<<"$listing" || fail "poster of the « Imaginaire » landscape $id ($id.jpg) missing from the APK"
+  if [[ "$plan" == "free" ]]; then
+    grep -qx "$lprefix/$id.mp4" <<<"$listing" || fail "loop of the free « Imaginaire » landscape $id ($id.mp4) missing from the APK"
+  elif [[ "$kind" == "production" ]]; then
+    ! grep -qx "$lprefix/$id.mp4" <<<"$listing" \
+      || fail "the production APK contains the Premium « Imaginaire » loop $id.mp4 (served by the API)"
+  else
+    [[ -f "$repo/content/videos/paysages/$id.mp4" ]] \
+      || fail "no loop for the Premium « Imaginaire » landscape $id under content/videos/paysages"
+    grep -qx "$lprefix/$id.mp4" <<<"$listing" || fail "the demo APK lacks the Premium « Imaginaire » loop $id.mp4"
+    imaginaire_premium_loops=$((imaginaire_premium_loops + 1))
+  fi
+done <<<"$imaginaire"
+echo "  « Imaginaire »: $imaginaire_count posters bundled, Premium loops bundled: $imaginaire_premium_loops, live 3D runtime: none"
 check_media() {
   local label="$1"
   shift

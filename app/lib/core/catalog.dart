@@ -271,16 +271,19 @@ class ThemeInfo {
 
 /// How a landscape is shown (`rendu`, contract § 12).
 enum LandscapeRendering {
-  /// `video` (default): a real filmed landscape with its own sound. Its decor cannot be changed.
+  /// `video` (default): a looping video, filmed or rendered offline from a 3D scene (the six
+  /// « Imaginaire » landscapes since 10 November 2026). Its picture is never changed: no decor.
   video,
 
-  /// `3d`: an imaginary scene drawn live (`assets/imaginaire/`), whose decor the user edits.
-  scene3d;
+  /// Any other value, e.g. `3d` (a scene drawn live, which this app no longer runs): the
+  /// landscape cannot be shown and is left out of the lists (showableCatalog); never a crash.
+  unsupported;
 
-  static LandscapeRendering fromJson(Object? value) => value == '3d' ? scene3d : video;
+  static LandscapeRendering fromJson(Object? value) =>
+      value == null || value == 'video' ? video : unsupported;
 }
 
-/// A landscape: a filmed video or a 3D scene, a theme and a default mix.
+/// A landscape: a looping video (filmed, or rendered from a 3D scene), a theme and a default mix.
 class Landscape {
   Landscape({
     required this.id,
@@ -290,20 +293,16 @@ class Landscape {
     required List<String> aliases,
     required Map<LayerKind, List<Layer>> defaultMix,
     this.rendering = LandscapeRendering.video,
-    List<String> decorIds = const [],
     this.lightning = false,
-    this.periodSeconds,
     this.mediaRev,
   }) : aliases = List.unmodifiable(aliases),
-       decorIds = List.unmodifiable(rendering == LandscapeRendering.scene3d ? decorIds : const <String>[]),
        defaultMix = Map.unmodifiable({
          for (final kind in LayerKind.values)
-           kind: List<Layer>.unmodifiable([
-             for (final layer in defaultMix[kind] ?? const <Layer>[])
-               // The decor of the default mix follows the rule of the scene's decor.
-               if (kind != LayerKind.decor || (rendering == LandscapeRendering.scene3d && decorIds.contains(layer.id)))
-                 layer,
-           ]),
+           // No landscape has an editable decor any more (contract § 12): a `decor` in the
+           // catalog's `mix` is dropped.
+           kind: List<Layer>.unmodifiable(
+             kind.isAudio ? defaultMix[kind] ?? const <Layer>[] : const <Layer>[],
+           ),
        });
 
   final String id;
@@ -312,18 +311,11 @@ class Landscape {
   final bool free;
   final List<String> aliases;
 
-  /// `rendu`: a filmed video, or a live 3D scene.
+  /// `rendu`: a video, or a rendering this app cannot show.
   final LandscapeRendering rendering;
-
-  /// `decors` (3D scenes only): the decor ids the scene can show, in the catalog's order of the
-  /// scene. Empty for a filmed landscape: its decor is never editable.
-  final List<String> decorIds;
 
   /// `eclairs`: a filmed storm; a lightning flash is drawn with each thunder (contract § 11).
   final bool lightning;
-
-  /// `periode_s` (3D scenes): the scene repeats exactly after this many seconds.
-  final int? periodSeconds;
 
   /// `media_rev` (contract § 13): revision of the video and poster of a landscape published from
   /// the dashboard (part of their content keys). Null for a landscape of the bundled base.
@@ -332,16 +324,15 @@ class Landscape {
   /// Published from the dashboard (contract § 13), not part of the bundled base.
   bool get isPublished => mediaRev != null;
 
-  /// Default layers loaded with the landscape (`mix`), one list per kind.
+  /// Default layers loaded with the landscape (`mix`), one list per kind (never a decor).
   final Map<LayerKind, List<Layer>> defaultMix;
 
-  bool get is3d => rendering == LandscapeRendering.scene3d;
+  /// Shown as a looping video and its poster (`rendu` absent or `video`).
+  bool get isVideo => rendering == LandscapeRendering.video;
 
-  /// The decor element [decorId] applies here (contract § 12): a 3D scene that can show it.
-  bool allowsDecor(String decorId) => decorIds.contains(decorId);
-
-  /// [knownDecors]: the decor ids of the catalog; a `decors` entry outside it is ignored.
-  factory Landscape.fromJson(Map<String, dynamic> json, {Set<String>? knownDecors}) {
+  /// The landscape-level `decors` and `periode_s` of a catalog written for the live 3D scenes
+  /// (until 10 November 2026) are ignored.
+  factory Landscape.fromJson(Map<String, dynamic> json) {
     final mix = json['mix'];
     final parsed = <LayerKind, List<Layer>>{};
     if (mix is Map) {
@@ -355,7 +346,6 @@ class Landscape {
         ];
       }
     }
-    final period = json['periode_s'];
     return Landscape(
       id: _string(json, 'id'),
       themeId: _string(json, 'theme'),
@@ -364,12 +354,7 @@ class Landscape {
       aliases: _stringList(json['alias']),
       defaultMix: parsed,
       rendering: LandscapeRendering.fromJson(json['rendu']),
-      decorIds: <String>{
-        for (final id in _stringList(json['decors']))
-          if (knownDecors == null || knownDecors.contains(id)) id,
-      }.toList(),
       lightning: json['eclairs'] == true,
-      periodSeconds: period is num && period > 0 ? period.round() : null,
       mediaRev: _mediaRev(json['media_rev']),
     );
   }
@@ -504,16 +489,11 @@ class Catalog {
     }
 
     final limits = json['limites'];
-    final decors = [
-      for (final e in list(LayerKind.decor.catalogKey))
-        CatalogItem.fromJson(e, LayerKind.decor),
-    ];
-    final decorIds = {for (final d in decors) d.id};
     return Catalog._(
       version: json['version'] is num ? (json['version'] as num).toInt() : 1,
       themes: list('themes').map(ThemeInfo.fromJson).toList(),
       landscapes: [
-        for (final e in list('paysages')) Landscape.fromJson(e, knownDecors: decorIds),
+        for (final e in list('paysages')) Landscape.fromJson(e),
       ],
       sounds: [
         for (final e in list(LayerKind.son.catalogKey))
@@ -523,7 +503,11 @@ class Catalog {
         for (final e in list(LayerKind.musique.catalogKey))
           CatalogItem.fromJson(e, LayerKind.musique),
       ],
-      decors: decors,
+      // Kept for compatibility (contract § 12): no landscape shows a decor any more.
+      decors: [
+        for (final e in list(LayerKind.decor.catalogKey))
+          CatalogItem.fromJson(e, LayerKind.decor),
+      ],
       limits: limits is Map
           ? Limits.fromJson(Map<String, dynamic>.from(limits))
           : const Limits(),
@@ -557,7 +541,7 @@ class Catalog {
     lingeringItems: lingeringItems ?? _lingeringItems,
   );
 
-  /// The 2D landscapes drawn by the app until 29 October 2026, replaced by the 3D scenes of
+  /// The 2D landscapes drawn by the app until 29 October 2026, replaced by the landscapes of
   /// « Imaginaire » (contract § 12). A favourite, a schedule, a link or the saved scene that
   /// names one opens on [defaultLandscape], sounds, music and timer kept.
   static const Set<String> retiredLandscapeIds = {
@@ -577,15 +561,19 @@ class Catalog {
 
   static bool _validPublishedId(String id) => id.length <= 64 && _publishedId.hasMatch(id);
 
+  /// Themes a landscape published from the dashboard may belong to (contract § 13, § 14).
+  static const Set<String> publishableThemeIds = {'nature', 'urbain'};
+
   /// This catalog (the bundled base) with the items of [received] that were published from the
   /// dashboard (contract § 13), each appended after the base items of its list.
   ///
-  /// The base is fixed: themes, decors, limits, 3D scenes and every base item keep their
-  /// bundled definition, whatever [received] says of them. A published item is an item of
-  /// [received] that is not in the base; it is left out (and named in `dropped`) when its id is
+  /// The base is fixed: themes, decors, limits, the « Imaginaire » landscapes and every base item
+  /// keep their bundled definition, whatever [received] says of them. A published item is an item
+  /// of [received] that is not in the base; it is left out (and named in `dropped`) when its id is
   /// not a dashboard id, repeats an earlier one, or it has no valid `media_rev`; a published
-  /// landscape also when it is not filmed (`rendu: video`) or its theme is not a base theme of
-  /// filmed landscapes (`nature`, `urbain`: never the 3D scenes' `imaginaire`); a
+  /// landscape also when it is not filmed (`rendu: video`) or its theme is not one of
+  /// [publishableThemeIds] in the base (never `imaginaire`, whose videos are rendered from our
+  /// own 3D scenes); a
   /// published sound also when it is played by events (its variant files have no published key).
   /// The default mix of a published landscape keeps only sounds and music of the result (never a
   /// decor). Checking that [received] holds the whole base is the caller's job ([missingFrom]).
@@ -618,11 +606,11 @@ class Catalog {
           for (final i in published[kind]!) i.id,
         },
     };
-    // Themes of filmed landscapes in the base (`nature`, `urbain`; never `imaginaire`, the 3D
-    // scenes' theme): a published landscape goes in one of them.
+    // Themes of filmed landscapes in the base (`nature`, `urbain`; never `imaginaire`, whose
+    // videos are rendered from our own 3D scenes): a published landscape goes in one of them.
     final themeIds = {
       for (final l in landscapes)
-        if (!l.is3d && theme(l.themeId) != null) l.themeId,
+        if (publishableThemeIds.contains(l.themeId) && theme(l.themeId) != null) l.themeId,
     };
     final publishedLandscapes = <Landscape>[];
     final seen = <String>{};
@@ -823,30 +811,15 @@ class Catalog {
     return null;
   }
 
-  /// The decor element [decorId] applies to [landscapeId] (contract § 12): a 3D scene that
-  /// lists it in its `decors`. Never on a filmed landscape.
-  bool decorApplies(String landscapeId, String decorId) =>
-      _landscapeById[landscapeId]?.allowsDecor(decorId) ?? false;
-
-  /// The decor items « Mon mix » offers with [landscapeId], in the scene's order (none for a
-  /// filmed landscape).
-  List<CatalogItem> decorsOf(String landscapeId) => [
-    for (final id in _landscapeById[landscapeId]?.decorIds ?? const <String>[])
-      if (item(LayerKind.decor, id) case final CatalogItem decor) decor,
-  ];
-
   /// [scene] in line with the catalog (contract § 12, § 13), or null when its landscape is
   /// unknown: a retired or withdrawn landscape is replaced by [defaultLandscape] (sounds, music,
   /// timer, moment and mutes kept), a withdrawn published sound or music is removed, and the
-  /// decor keeps only the elements that apply to the landscape. Returns the same instance when
-  /// nothing changes.
+  /// decor is dropped (no landscape shows one since 10 November 2026: a favourite, the saved
+  /// scene or a link made for a live 3D scene still opens, without it). Returns the same
+  /// instance when nothing changes.
   Scene? sanitize(Scene scene) {
     final landscape = landscapeFor(scene.landscapeId);
     if (landscape == null) return null;
-    final decor = [
-      for (final layer in scene.decor)
-        if (landscape.allowsDecor(layer.id)) layer,
-    ];
     List<Layer> audio(LayerKind kind) {
       final gone = _withdrawnItemIds[kind];
       final layers = scene.layers(kind);
@@ -860,12 +833,12 @@ class Catalog {
     final sounds = audio(LayerKind.son);
     final music = audio(LayerKind.musique);
     if (landscape.id == scene.landscapeId &&
-        decor.length == scene.decor.length &&
+        scene.decor.isEmpty &&
         sounds.length == scene.sounds.length &&
         music.length == scene.music.length) {
       return scene;
     }
-    return scene.copyWith(landscapeId: landscape.id, decor: decor, sounds: sounds, music: music);
+    return scene.copyWith(landscapeId: landscape.id, decor: const [], sounds: sounds, music: music);
   }
 
   /// Number of landscapes of the free plan (« 2 en gratuit »).

@@ -3,8 +3,9 @@
 # so that the demo works without the API:
 #   - the Premium sounds and music (content/audio/{sons,musiques}/*.ogg -> assets/audio/...);
 #   - the Premium landscape videos and posters (content/videos/paysages/*.mp4 and
-#     content/images/paysages/*.jpg -> assets/landscapes/), the wallpaper loops of the Premium
-#     Imaginaire 3D scenes included (their posters are already bundled in every build);
+#     content/images/paysages/*.jpg -> assets/landscapes/), the loops of the five Premium
+#     « Imaginaire » landscapes included (videos rendered from our 3D scenes; their posters are
+#     already bundled in every build);
 #   - the third-party TEST-ONLY landscape videos and posters (medias-test/videos/paysages/*.mp4
 #     and medias-test/images/paysages/*.jpg -> assets/landscapes/) and their ambiances
 #     (medias-test/audio/sons/*.ogg -> assets/audio/sons/): non-distributable, for the product

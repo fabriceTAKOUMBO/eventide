@@ -146,10 +146,8 @@ void main() {
       expect(scene.sounds.map((l) => l.id), ['ambiance-cascade-foret', 'oiseaux', 'vent']);
       expect(scene.music, const [Layer(id: 'piano-doux', level: 20)]);
       expect(scene.decor, isEmpty, reason: 'a filmed landscape has no decor');
-      expect(Scene.fromLandscape(catalog.landscape('foret-lucioles')!).decor, const [
-        Layer(id: 'lucioles', level: 60),
-        Layer(id: 'brume', level: 30),
-      ]);
+      // Nor has an « Imaginaire » landscape since its scene became a video (contract § 12).
+      expect(Scene.fromLandscape(catalog.landscape('foret-lucioles')!).decor, isEmpty);
       expect(scene.timer, const TimerDuration(60));
       expect(scene.sleepTracking, isFalse);
       expect(scene.audioLayerCount, 4);
@@ -326,6 +324,6 @@ void main() {
   test('Moment', () {
     expect(Moment.fromName('nuit'), Moment.nuit);
     expect(Moment.fromName('midi'), isNull);
-    expect(Moment.values.map((m) => m.label), ['Aube', 'Jour', 'Soir', 'Nuit']);
+    expect(Moment.values.map((m) => m.name), ['aube', 'jour', 'soir', 'nuit']);
   });
 }

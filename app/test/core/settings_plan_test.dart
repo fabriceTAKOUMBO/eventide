@@ -146,12 +146,10 @@ void main() {
         (kind: LayerKind.son, id: 'tonnerre'),
         (kind: LayerKind.musique, id: 'cordes-lentes'),
       ]);
-      // A 3D scene: its Premium decor is locked too.
+      // An « Imaginaire » landscape: no decor any more (contract § 12), its Premium music locked.
       expect(rules.lockedElements(Plan.free, Scene.fromLandscape(catalog.landscape('jardin-zen')!)), [
         (kind: null, id: 'jardin-zen'),
         (kind: LayerKind.musique, id: 'bols-tibetains'),
-        (kind: LayerKind.decor, id: 'petales'),
-        (kind: LayerKind.decor, id: 'rayons-soleil'),
       ]);
       expect(rules.lockedElements(Plan.free, Scene.fromLandscape(catalog.landscape('foret-lucioles')!)), isEmpty);
     });

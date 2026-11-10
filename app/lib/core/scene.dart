@@ -3,20 +3,14 @@
 
 import 'catalog.dart';
 
-/// Time of day of the landscape light.
+/// Time of day of the landscape light (`moment` of the scene document). Kept, stored and shared
+/// as received; no landscape changes with it since the live 3D scenes became videos (contract
+/// § 12), so the app offers no way to change it.
 enum Moment {
   aube,
   jour,
   soir,
   nuit;
-
-  /// French label (« Aube », « Jour », « Soir », « Nuit »).
-  String get label => switch (this) {
-    Moment.aube => 'Aube',
-    Moment.jour => 'Jour',
-    Moment.soir => 'Soir',
-    Moment.nuit => 'Nuit',
-  };
 
   static Moment? fromName(Object? value) {
     for (final m in Moment.values) {
@@ -193,6 +187,9 @@ class Scene {
   final Moment moment;
   final List<Layer> sounds;
   final List<Layer> music;
+
+  /// `decor` of the document: still read and written (contract § 1), but no landscape shows a
+  /// decor any more (contract § 12): the app always drops it (Catalog.sanitize, share links).
   final List<Layer> decor;
   final TimerSetting timer;
 
@@ -206,7 +203,7 @@ class Scene {
   /// `sourdine.musique`: the music is muted, its layers and levels kept.
   final bool mutedMusic;
 
-  /// A scene showing [landscape] with its default mix.
+  /// A scene showing [landscape] with its default mix (sounds and music: no decor).
   factory Scene.fromLandscape(
     Landscape landscape, {
     Moment moment = Moment.jour,
@@ -220,7 +217,6 @@ class Scene {
       moment: moment,
       sounds: landscape.defaultMix[LayerKind.son] ?? const [],
       music: landscape.defaultMix[LayerKind.musique] ?? const [],
-      decor: landscape.defaultMix[LayerKind.decor] ?? const [],
       timer: timer,
       sleepTracking: sleepTracking,
       mutedSounds: mutedSounds,

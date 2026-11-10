@@ -2,7 +2,8 @@
 // self-contained offline fallback `https://<domain>/s#<base64url(scene)>`.
 // A shared scene carries the landscape, the layers and the moment; never the
 // timer, the sleep tracking, the mute state (`sourdine`: the recipient gets
-// the mix as heard unmuted), schedules or personal data.
+// the mix as heard unmuted), schedules or personal data. Its `decor` layer is
+// accepted and dropped: no landscape shows a decor any more (contract § 12).
 
 import 'dart:convert';
 
@@ -30,9 +31,9 @@ String encodeSceneForLink(Scene scene) {
 
 /// Decodes a link payload. Returns null when the payload is not a scene or
 /// its landscape is unknown; a retired landscape opens on the default one
-/// (contract § 12); unknown or duplicate items and decor that does not apply to
-/// the landscape are dropped, levels clamped, and audio layers capped at
-/// `couches_max`. Never throws.
+/// (contract § 12); unknown or duplicate items and the whole decor layer are
+/// dropped, levels clamped, and audio layers capped at `couches_max`. Never
+/// throws.
 ///
 /// The recipient gets the default timer, no sleep tracking and nothing muted.
 Scene? decodeSceneFromLink(String data, Catalog catalog) {
@@ -67,6 +68,7 @@ Scene? _sceneFromShared(Map<dynamic, dynamic> json, Catalog catalog) {
   final landscape = landscapeId is String ? catalog.landscapeFor(landscapeId) : null;
   if (landscape == null) return null;
   var audio = 0;
+  // Sounds and music only: the decor layer is dropped (contract § 12).
   List<Layer> layers(LayerKind kind) {
     final list = json[kind.sceneKey];
     if (list is! List) return const [];
@@ -78,15 +80,11 @@ Scene? _sceneFromShared(Map<dynamic, dynamic> json, Catalog catalog) {
       final level = entry['niveau'];
       // Unknown, or withdrawn from the published catalog (contract § 13): dropped.
       if (id is! String || !catalog.listsItem(kind, id)) continue;
-      // Decor only where it applies: a 3D scene that can show it (contract § 12).
-      if (kind == LayerKind.decor && !landscape.allowsDecor(id)) continue;
       if (level is! num || !level.isFinite) continue;
       final clamped = level.round().clamp(0, 100);
       if (clamped == 0 || !seen.add(id)) continue;
-      if (kind.isAudio) {
-        if (audio >= catalog.limits.layersMax) continue;
-        audio++;
-      }
+      if (audio >= catalog.limits.layersMax) continue;
+      audio++;
       out.add(Layer(id: id, level: clamped));
     }
     return out;
@@ -97,7 +95,6 @@ Scene? _sceneFromShared(Map<dynamic, dynamic> json, Catalog catalog) {
     moment: Moment.fromName(json['moment']) ?? Moment.jour,
     sounds: layers(LayerKind.son),
     music: layers(LayerKind.musique),
-    decor: layers(LayerKind.decor),
   );
 }
 

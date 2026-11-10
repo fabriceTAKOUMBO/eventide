@@ -1,9 +1,10 @@
 // Landscape picture used everywhere (sheets backgrounds, thumbnails): the landscape's poster.
-// Every landscape has one (contract § 12): the first frame of a filmed landscape's video, or the
-// frame at t = 0 of a 3D scene. Bundled (free landscapes, demo build) or downloaded (Premium);
-// until it is on the phone, a plain dark picture. Nothing is drawn by the app any more (the 2D
-// procedural landscapes are gone). The full-screen landscape (home, welcome, offline) is
-// LandscapeBackground, which adds the looping video or the live 3D scene.
+// Every landscape has one (contract § 12): the first frame of its looping video (filmed, or
+// rendered offline from a 3D scene for « Imaginaire »). Bundled (free landscapes, the six
+// « Imaginaire » posters, demo build) or downloaded (Premium); until it is on the phone, a plain
+// dark picture. Nothing is drawn by the app (the 2D procedural landscapes and the live 3D scenes
+// are gone). The full-screen landscape (home, welcome, offline) is LandscapeBackground, which
+// adds the looping video.
 import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' as ui;
@@ -28,14 +29,10 @@ abstract final class LandscapeImages {
   static final Set<String> _bundled = {};
   static final Set<String> _bundledVideos = {};
   static final Set<String> _remoteVideos = {};
-  static bool _sceneRuntime = false;
   static final ValueNotifier<String?> brandLogo = ValueNotifier<String?>(null);
 
   /// Bumped when [discoverAssets] has found the bundled media (pictures may change).
   static final ValueNotifier<int> revision = ValueNotifier<int>(0);
-
-  /// Entry page of the 3D scenes' runtime (`assets/imaginaire/`, contract § 12).
-  static const String sceneRuntimeIndex = 'assets/imaginaire/index.html';
 
   static ImageProvider? providerFor(String landscapeId) {
     if (_bundled.contains(landscapeId)) {
@@ -64,10 +61,6 @@ abstract final class LandscapeImages {
       _bundledVideos.contains(landscapeId) ||
       (remoteVideos?.call() ?? _remoteVideos).contains(landscapeId);
 
-  /// The runtime of the 3D scenes is bundled (`assets/imaginaire/index.html`). Without it a 3D
-  /// scene shows its poster only.
-  static bool get hasSceneRuntime => _sceneRuntime;
-
   @visibleForTesting
   static void debugSetVideos({Set<String> bundled = const {}, Set<String> remote = const {}}) {
     _bundledVideos
@@ -79,26 +72,7 @@ abstract final class LandscapeImages {
     revision.value++;
   }
 
-  /// Set by tests: wins over what [discoverAssets] reads in the manifest, so the flag never
-  /// flips back and forth (each flip would open or close a scene).
-  static bool? _sceneRuntimeOverride;
-
-  /// The value a test forced, or null.
-  @visibleForTesting
-  static bool? get debugSceneRuntimeOverride => _sceneRuntimeOverride;
-
-  /// Forces the flag for tests (null: back to the manifest). Setting the same value again does
-  /// nothing: a flip would close a live scene and open it again.
-  @visibleForTesting
-  static void debugSetSceneRuntime(bool? available) {
-    _sceneRuntimeOverride = available;
-    if (available == null || available == _sceneRuntime) return;
-    _sceneRuntime = available;
-    revision.value++;
-  }
-
-  /// Reads the asset manifest once to find bundled photos, videos, the 3D runtime and the brand
-  /// logo.
+  /// Reads the asset manifest once to find bundled photos, videos and the brand logo.
   static Future<void> discoverAssets([AssetBundle? bundle]) async {
     try {
       final assetBundle = bundle ?? rootBundle;
@@ -110,7 +84,6 @@ abstract final class LandscapeImages {
         if (m == null) continue;
         (m.group(2) == 'jpg' ? _bundled : _bundledVideos).add(m.group(1)!);
       }
-      _sceneRuntime = _sceneRuntimeOverride ?? assets.contains(sceneRuntimeIndex);
       if (assets.contains(LandscapeMediaKeys.remoteManifest)) {
         try {
           // Not cached by the bundle: read once here, and a cached future would outlive
@@ -189,9 +162,8 @@ List<double> _compose(List<double> a, List<double> b) {
   return out;
 }
 
-/// Brightness and saturation adjustments of a background (sheets, offline screen). A filmed
-/// landscape is never recoloured by the moment of the day (contract § 12: a real video is shown
-/// as it is); the moment only reaches the 3D scenes.
+/// Brightness and saturation adjustments of a background (sheets, offline screen). A landscape
+/// is never recoloured by the moment of the day (contract § 12: its video is shown as it is).
 List<double> landscapeMatrix({double brightness = 1, double saturation = 1}) {
   var m = _identity;
   if (saturation != 1) m = _compose(_saturation(saturation), m);

@@ -7,7 +7,9 @@
     <!-- Android 13+: reminder and fallback notifications (asked after the explanation). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Scheduled starts (setAlarmClock). Denied by default on Android 14+ for new installs:
-         the Programmations screen shows the "Autoriser" card. -->
+         saving or switching on a schedule opens the system "Alarmes et rappels" screen at once,
+         and the Programmations screen shows the "Autoriser" card until it is granted. Never
+         USE_EXACT_ALARM: Google Play keeps it for alarm clock and calendar apps. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <!-- Re-arm the next scheduled start after a reboot. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />

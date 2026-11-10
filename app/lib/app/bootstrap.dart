@@ -34,7 +34,6 @@ import '../services/permissions_service.dart';
 import '../services/storage.dart';
 import '../services/wallpaper_service.dart';
 
-import '../ui/landscape/imaginaire_view.dart' show Imaginaire, kImaginaireRuntimeVersion;
 import '../ui/landscape/landscape_video.dart' show LandscapeVideos;
 import 'app_controller.dart';
 import 'demo_mode.dart';
@@ -88,10 +87,7 @@ Future<Set<String>> _bundledAssets() async {
     final manifest = await AssetManifest.loadFromAssetBundle(rootBundle);
     return manifest
         .listAssets()
-        .where((k) =>
-            k.startsWith('assets/audio/') ||
-            k.startsWith('assets/landscapes/') ||
-            k == LandscapeMediaKeys.sceneRuntime)
+        .where((k) => k.startsWith('assets/audio/') || k.startsWith('assets/landscapes/'))
         .toSet();
   } catch (_) {
     return const {};
@@ -139,7 +135,6 @@ Future<({PlaybackHandler handler, RealAppModel model})> startEventide() async {
 /// Breadcrumbs of the problem report: sound state, landscape, memory every 5 minutes.
 SessionBreadcrumbs _watchSession(PlaybackHandler handler, RealAppModel model) {
   LandscapeVideos.log = Breadcrumbs.add;
-  Imaginaire.log = Breadcrumbs.add;
   final crumbs = SessionBreadcrumbs(log: Breadcrumbs.log, liveVideos: () => LandscapeVideos.hub.liveCount)
     ..start();
   void onStatus() {
@@ -167,12 +162,12 @@ Future<RealAppModel> createAppModel({required PlaybackHandler handler, required 
   // Problem report: the log file survives a crash; the exits recorded by Android are read once.
   unawaited(Breadcrumbs.log.attach(Directory('${support.path}/diagnostics')));
   Breadcrumbs.add('démarrage : Full Relax ${Env.appVersion}${demo ? ' (version démo)' : ''}');
-  // Crash guard (docs/app/architecture.md § 19): what the previous run left decides a safe start
-  // and which 3D scenes are shown as their poster. Its breadcrumbs are written before returning:
-  // they must be on the phone if a native crash follows.
+  // Crash guard (docs/app/architecture.md § 19): what the previous run left decides a safe
+  // start. Its breadcrumbs are written before returning: they must be on the phone if a native
+  // crash follows.
   final guard = CrashGuard(
     store: FileGuardStore(File('${support.path}/diagnostics/guard.json')),
-    build: '${Env.appVersion}+s$kImaginaireRuntimeVersion',
+    build: Env.appVersion,
     log: Breadcrumbs.log.addDurable,
   )..load();
   CrashGuard.current = guard;

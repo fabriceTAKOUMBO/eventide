@@ -1,5 +1,5 @@
 // The parts of three.js that the Imaginaire scenes use. esbuild bundles them (tree-shaken, from
-// the pinned npm package) into one classic script, app/assets/imaginaire/vendor/three.min.js,
+// the pinned npm package) into one classic script, tools/imaginaire/runtime/vendor/three.min.js,
 // which defines the global `THREE`. Add a name here, then run `node build-three.mjs`.
 export {
   AdditiveBlending,

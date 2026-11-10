@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Local static server for the Imaginaire scenes (offline, 127.0.0.1 only):
-//   /imaginaire/...  -> app/assets/imaginaire/ (the runtime exactly as bundled in the app)
+//   /imaginaire/...  -> tools/imaginaire/runtime/ (the scenes' runtime, rendered offline into the
+//                       landscapes' posters and loops; the app no longer bundles it)
 //   /preview/...     -> tools/imaginaire/preview/ (all scenes, decor sliders; run
 //                       node tools/imaginaire/build-preview.js first)
 //
@@ -14,7 +15,7 @@ const path = require('path');
 
 const REPO = path.resolve(__dirname, '..', '..');
 const ROOTS = {
-  '/imaginaire/': path.join(REPO, 'app', 'assets', 'imaginaire'),
+  '/imaginaire/': path.join(__dirname, 'runtime'),
   '/preview/': path.join(__dirname, 'preview'),
 };
 const TYPES = {

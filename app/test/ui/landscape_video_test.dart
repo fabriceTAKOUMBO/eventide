@@ -274,6 +274,36 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     });
 
+    testWidgets('an « Imaginaire » landscape plays its loop like a filmed one (no live scene)', (
+      tester,
+    ) async {
+      LandscapeImages.debugSetVideos(bundled: {'foret-lucioles'}, remote: {'ondes'});
+      const forest = AssetLandscapeVideo('assets/landscapes/foret-lucioles.mp4');
+      final model = FakeAppModel()..videos['foret-lucioles'] = forest;
+      await tester.pumpWidget(
+        _host(model, const LandscapeBackground(landscapeId: 'foret-lucioles', kenBurns: true)),
+      );
+      await tester.pump();
+      expect(model.videoRequests, ['foret-lucioles']);
+      final player = factory.created.single;
+      expect(player.source, forest);
+      expect(player.playing, isTrue);
+      expect(find.byType(KenBurns), findsNothing, reason: 'the poster stays where the video appears');
+      // A Premium one, for a Premium user: its downloaded loop.
+      model
+        ..plan = Plan.annual
+        ..videos['ondes'] = const FileLandscapeVideo('/data/ondes.mp4');
+      await tester.pumpWidget(
+        _host(model, const LandscapeBackground(landscapeId: 'ondes', kenBurns: true)),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(model.videoRequests, ['foret-lucioles', 'ondes']);
+      expect(factory.alive.single.source, const FileLandscapeVideo('/data/ondes.mp4'));
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+    });
+
     testWidgets('a failing video leaves the still picture, without retrying', (tester) async {
       final model = FakeAppModel()..videos['cascade-foret'] = _cascadeVideo;
       await tester.pumpWidget(_host(model, _cascade));

@@ -1,18 +1,17 @@
 // Crash-loop guard (docs/app/architecture.md § 19).
 //
 // A native crash (GPU driver, plugin) kills the process: no Dart error handler runs, so the only
-// trace it can leave is what was written *before* the risky work. Two sentinels, written
+// trace it can leave is what was written *before* the risky work. One sentinel, written
 // synchronously to a small file:
 //
 // - start: set just before the first landscape is shown, cleared once the app has run stably
 //   ([CrashGuard.stableAfter] in the foreground) or went to the background normally. Still set at
 //   the next start: the previous start died, so this one is a safe start (the controller goes
 //   back to the default free landscape and forgets the landscapes being browsed).
-// - live work ([beginLive]): set while a 3D scene renders live in its WebView (Android
-//   WebView runs its GPU work, WebGL included, in the app's own process: a GPU driver crash
-//   there kills the app), cleared when it pauses or goes. Still set at the next start: that
-//   scene is shown as its still picture from then on (until the app or the scene runtime
-//   changes). The 2D procedural landscapes that used it before are gone (contract § 12).
+//
+// The sentinel of the live 3D scenes (a WebView rendering WebGL in the app's process) is gone
+// with them (contract § 12, 10 November 2026: the « Imaginaire » landscapes are videos); what an
+// older version wrote for it is ignored.
 //
 // Pure Dart: the storage is given ([GuardStore]); tests use [MemoryGuardStore].
 import 'dart:async';
@@ -41,10 +40,6 @@ class MemoryGuardStore implements GuardStore {
   }
 }
 
-/// Risky native work in progress (a live 3D scene): what it is, its subject (the scene id) and
-/// a detail for the log (quality).
-typedef GuardedWork = ({String what, String subject, String detail});
-
 class CrashGuard {
   CrashGuard({
     this.store,
@@ -59,7 +54,7 @@ class CrashGuard {
 
   final GuardStore? store;
 
-  /// App version and scene runtime version: a new build tries every scene live again.
+  /// App version: a new build starts with a clean state.
   final String build;
 
   /// Breadcrumbs of the problem report (written durably by the app: they must survive the crash).
@@ -71,25 +66,12 @@ class CrashGuard {
 
   int _unfinishedStarts = 0;
   bool _safeStart = false;
-  final Set<String> _dead = {};
-  final List<GuardedWork> _interrupted = [];
-  final Map<int, GuardedWork> _live = {};
-  int _nextToken = 1;
   bool _uiStarted = false;
   bool _stable = false;
   Timer? _stableTimer;
 
   /// The previous start died before running stably: start on the default landscape.
   bool get safeStart => _safeStart;
-
-  /// Subjects (3D scene ids) whose live work was interrupted by a crash: shown as their still
-  /// picture.
-  Set<String> get deadSubjects => Set.unmodifiable(_dead);
-
-  bool isDead(String subject) => _dead.contains(subject);
-
-  /// Live work in progress when the previous run died (oldest first).
-  List<GuardedWork> get interrupted => List.unmodifiable(_interrupted);
 
   /// Starts that showed a landscape and were not yet confirmed stable (this one included).
   int get unfinishedStarts => _unfinishedStarts;
@@ -108,29 +90,12 @@ class CrashGuard {
     if (state is Map && state['build'] == build) {
       final starts = state['starts'];
       _unfinishedStarts = starts is int && starts > 0 ? starts : 0;
-      final dead = state['dead'];
-      if (dead is List) _dead.addAll(dead.whereType<String>());
-      final live = state['live'];
-      if (live is List) {
-        for (final d in live) {
-          if (d is! Map || d['subject'] is! String) continue;
-          final entry = (what: '${d['what'] ?? ''}', subject: d['subject'] as String, detail: '${d['detail'] ?? ''}');
-          _interrupted.add(entry);
-          _dead.add(entry.subject);
-        }
-      }
     }
     _safeStart = _unfinishedStarts > 0;
     if (_safeStart) {
       log?.call(
         'démarrage protégé : le lancement précédent s’est arrêté avant 20 s '
         '($_unfinishedStarts fois de suite) ; retour au paysage par défaut',
-      );
-    }
-    for (final d in _interrupted) {
-      log?.call(
-        'lancement précédent arrêté pendant : ${d.what} ${d.subject} ${d.detail} ; '
-        'ce paysage sera montré en image fixe',
       );
     }
     _save();
@@ -156,21 +121,6 @@ class CrashGuard {
     _save();
   }
 
-  /// Marks risky live work as in progress (and notes it in the log). Returns the token for
-  /// [endLive].
-  int beginLive(String what, String subject, String detail) {
-    log?.call('en direct : $what $subject $detail');
-    if (!enabled) return 0;
-    final token = _nextToken++;
-    _live[token] = (what: what, subject: subject, detail: detail);
-    _save();
-    return token;
-  }
-
-  void endLive(int token) {
-    if (_live.remove(token) != null) _save();
-  }
-
   /// Stops the timer (tests).
   void dispose() {
     _stableTimer?.cancel();
@@ -182,13 +132,9 @@ class CrashGuard {
     if (store == null) return;
     try {
       store.write(jsonEncode({
-        'version': 2,
+        'version': 3,
         'build': build,
         'starts': _unfinishedStarts,
-        'dead': [..._dead],
-        'live': [
-          for (final d in _live.values) {'what': d.what, 'subject': d.subject, 'detail': d.detail},
-        ],
       }));
     } catch (_) {
       // A full storage never breaks the app; the guard is best effort.

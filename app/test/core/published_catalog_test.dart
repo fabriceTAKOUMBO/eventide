@@ -77,7 +77,6 @@ void main() {
       expect(lac.defaultMix[LayerKind.son]!.map((l) => l.id), ['ambiance-lac-brume', 'vent']);
       expect(lac.defaultMix[LayerKind.musique]!.map((l) => l.id), ['harpe-celeste']);
       expect(lac.defaultMix[LayerKind.decor], isEmpty);
-      expect(lac.decorIds, isEmpty);
     });
 
     test('« Mon mix » offers the ambiance of a published landscape with that landscape only', () {
@@ -270,6 +269,44 @@ void main() {
       final shown = showableCatalog(withMedia.catalog, bundledAssets: const {}, remote: withMedia.distant);
       expect(shown.landscape('lac-brume'), isNotNull);
       expect(shown.theme('nature'), isNotNull);
+    });
+
+    test('« Imaginaire »: shown from its bundled posters and videos, like any video landscape', () {
+      // Production: the six posters and the free loop are bundled, the Premium loops on the
+      // content server (remote.json); no 3D runtime needed any more.
+      final bundled = {
+        'assets/landscapes/cascade-foret.mp4',
+        'assets/landscapes/cascade-foret.jpg',
+        'assets/landscapes/foret-lucioles.mp4',
+        for (final id in ['foret-lucioles', 'lac-lune', 'aurore', 'jardin-zen', 'mer-nuages', 'ondes'])
+          'assets/landscapes/$id.jpg',
+      };
+      const remote = RemoteLandscapeMedia(videos: {'lac-lune', 'aurore', 'jardin-zen', 'mer-nuages', 'ondes', 'pluie-ville'});
+      final shown = showableCatalog(base, bundledAssets: bundled, remote: remote);
+      expect(shown.landscapesOfTheme('imaginaire').map((l) => l.id),
+          ['foret-lucioles', 'lac-lune', 'aurore', 'jardin-zen', 'mer-nuages', 'ondes']);
+      // Without any media for them, the theme is hidden (no live scene to fall back on).
+      final none = showableCatalog(base, bundledAssets: const {'assets/landscapes/cascade-foret.mp4'}, remote: RemoteLandscapeMedia.none);
+      expect(none.theme('imaginaire'), isNull);
+      expect(none.landscapeFor('ondes')!.id, 'cascade-foret');
+    });
+
+    test('a landscape still drawn live (rendu 3d) is never shown, even with its poster', () {
+      final json = loadCatalogJson();
+      final paysages = [
+        for (final p in json['paysages'] as List)
+          (p as Map)['id'] == 'ondes' ? {...p, 'rendu': '3d', 'decors': ['etoiles']} : p,
+      ];
+      final catalog = Catalog.fromJson({...json, 'paysages': paysages});
+      final shown = showableCatalog(
+        catalog,
+        bundledAssets: const {'assets/landscapes/ondes.jpg', 'assets/landscapes/lac-lune.jpg'},
+        remote: const RemoteLandscapeMedia(videos: {'ondes'}),
+      );
+      expect(shown.landscape('ondes'), isNull);
+      expect(shown.landscape('lac-lune'), isNotNull);
+      // A favourite or a link naming it opens on the default landscape.
+      expect(shown.landscapeFor('ondes')!.id, 'cascade-foret');
     });
   });
 

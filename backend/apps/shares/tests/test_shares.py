@@ -8,7 +8,8 @@ from conftest import client_for, make_installation
 
 SCENE = {
     "version": 1,
-    # A 3D scene (contract § 12): its decor applies.
+    # An « Imaginaire » landscape: a video since 10 November 2026 (contract § 12), so its decor
+    # no longer applies and is dropped.
     "paysage": "foret-lucioles",
     "moment": "jour",
     "sons": [{"id": "eau-vive", "niveau": 60}, {"id": "oiseaux", "niveau": 0}],
@@ -35,8 +36,8 @@ def test_create_and_read_a_share(api):
         "moment": "jour",
         "sons": [{"id": "eau-vive", "niveau": 60}],
         "musique": [{"id": "harpe", "niveau": 25}],
-        "decor": [{"id": "brume", "niveau": 30}],
-    }  # no minuteur, no sommeil, no unknown field (no personal data)
+        "decor": [],
+    }  # no minuteur, no sommeil, no unknown field (no personal data), no decor
     # Any installation can read it.
     _, other = make_installation()
     assert client_for(other).get(f"/v1/shares/{code}").status_code == 200
@@ -64,8 +65,9 @@ def test_the_mute_is_accepted_but_never_shared(api, sourdine):
         # A filmed landscape: its decor is not editable, every element is dropped.
         ("cascade-foret", [{"id": "brume", "niveau": 30}], []),
         ("pluie-ville", [{"id": "neige", "niveau": 40}, {"id": "eclairs", "niveau": 50}], []),
-        # A 3D scene keeps the ids of its own ``decors`` only; ids removed from the catalog
-        # (``eclairs``, ``pluie-ecran``) are dropped like any other that does not apply.
+        # The « Imaginaire » landscapes are videos since 10 November 2026: what their live 3D
+        # scene could show is dropped too, like the ids removed from the catalog (``eclairs``,
+        # ``pluie-ecran``).
         (
             "foret-lucioles",
             [
@@ -75,17 +77,13 @@ def test_the_mute_is_accepted_but_never_shared(api, sourdine):
                 {"id": "pluie-ecran", "niveau": 20},
                 {"id": "brume", "niveau": 0},
             ],
-            [{"id": "lucioles", "niveau": 60}],
+            [],
         ),
-        (
-            "aurore",
-            [{"id": "neige", "niveau": 30}, {"id": "petales", "niveau": 40}],
-            [{"id": "neige", "niveau": 30}],
-        ),
+        ("aurore", [{"id": "neige", "niveau": 30}, {"id": "petales", "niveau": 40}], []),
     ],
 )
 def test_decor_that_does_not_apply_is_dropped_without_error(api, paysage, decor, kept):
-    """Contract § 12: decor only on a 3D scene, only for its ``decors``."""
+    """Contract § 12: decor only on a 3D scene, only for its ``decors``; none is left."""
     response = api.post(
         "/v1/shares", {"scene": {**SCENE, "paysage": paysage, "decor": decor}}, format="json"
     )

@@ -26,6 +26,7 @@ import 'package:eventide/services/audio/media_card_controls.dart';
 import 'package:eventide/services/audio/playback_handler.dart';
 import 'package:eventide/services/billing_service.dart';
 import 'package:eventide/services/content_repository.dart';
+import 'package:eventide/services/native_bridge.dart';
 import 'package:eventide/services/storage.dart';
 import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_test/flutter_test.dart';
@@ -255,33 +256,25 @@ void main() {
       model.setLayerLevel(LayerKind.son, 'ambiance-cascade-foret', 0);
       await settle();
       expect(h.engine.activeKeys.contains('son:ambiance-cascade-foret'), isFalse);
-      // Decor never applies to a filmed landscape (contract § 12).
+      // Decor never applies (contract § 12), nor does it reach the sound.
       model.setLayerLevel(LayerKind.decor, 'lucioles', 50);
       expect(model.scene.decor, isEmpty);
-      // On a 3D scene: its own decor only, and it is visual only.
-      model.selectLandscape('foret-lucioles');
-      model.setLayerLevel(LayerKind.decor, 'lucioles', 50);
-      model.setLayerLevel(LayerKind.decor, 'neige', 50);
-      expect(model.scene.decor, [const Layer(id: 'lucioles', level: 50), const Layer(id: 'brume', level: 30)]);
       await settle();
       expect(h.engine.activeKeys.any((k) => k.startsWith('decor:')), isFalse);
     });
 
-    test('decor applies to a 3D scene only, for its own elements (contract § 12)', () async {
+    test('no decor anywhere since the « Imaginaire » landscapes became videos (contract § 12)', () async {
       final model = await h.start(plan: Plan.annual);
+      for (final id in ['foret-lucioles', 'lac-lune', 'aurore', 'jardin-zen', 'mer-nuages', 'ondes', 'pluie-ville']) {
+        model.selectLandscape(id);
+        expect(model.scene.landscapeId, id);
+        expect(model.scene.decor, isEmpty, reason: '$id: no default decor');
+        model.setLayerLevel(LayerKind.decor, 'brume', 40);
+        expect(model.scene.decor, isEmpty, reason: '$id: none can be added');
+      }
+      // The sounds of an « Imaginaire » landscape are kept as before.
       model.selectLandscape('jardin-zen');
-      expect(model.scene.decor.map((l) => l.id), ['petales', 'rayons-soleil']);
-      model.setLayerLevel(LayerKind.decor, 'pluie', 40);
-      model.setLayerLevel(LayerKind.decor, 'etoiles', 40); // not in this scene
-      expect(model.scene.decor.map((l) => l.id), ['petales', 'rayons-soleil', 'pluie']);
-      // A filmed landscape loads no decor; the mix keeps its sounds.
-      model.selectLandscape('pluie-ville');
-      expect(model.scene.decor, isEmpty);
-      model.setLayerLevel(LayerKind.decor, 'brume', 40);
-      expect(model.scene.decor, isEmpty);
-      // Back to a 3D scene: its default decor.
-      model.selectLandscape('aurore');
-      expect(model.scene.decor.map((l) => l.id), ['etoiles', 'neige']);
+      expect(model.scene.sounds, isNotEmpty);
     });
   });
 
@@ -458,13 +451,23 @@ void main() {
   });
 
   group('favorites', () {
+    test('a favourite is the mix: the light (moment) of the scene does not count', () async {
+      final saved = Scene.fromLandscape(loadTestCatalog().defaultLandscape, moment: Moment.nuit);
+      h.store.files[StoreKeys.favorites] = jsonEncode({
+        'version': 1,
+        'data': [Favorite(id: 'f1', scene: saved.copyWith(moment: Moment.aube), createdAt: h.now).toJson()],
+      });
+      h.store.files[StoreKeys.scene] = jsonEncode({'version': 1, 'data': saved.toJson()});
+      final model = await h.start();
+      expect(model.scene.moment, Moment.nuit);
+      expect(model.isCurrentSceneFavorite, isTrue);
+    });
+
     test('toggle, then the free limit of 3 opens Premium', () async {
       final model = await h.start();
       await model.toggleFavorite();
       expect(model.isCurrentSceneFavorite, isTrue);
       expect((await h.got<ToastEvent>()).last.message, AppMessages.addedToFavorites);
-      model.setMoment(Moment.nuit);
-      expect(model.isCurrentSceneFavorite, isTrue, reason: 'the light is not part of the mix');
       await model.toggleFavorite();
       expect(model.favorites, isEmpty);
       for (final id in ['pluie-douce', 'ruisseau', 'piano-doux']) {
@@ -573,6 +576,106 @@ void main() {
     });
   });
 
+  group('exact alarms when scheduling (Android 12+, product owner 10 Nov 2026)', () {
+    /// Exact alarms not allowed (Android 12+, « Alarmes et rappels » off), app in the foreground.
+    Future<RealAppModel> startWithoutExactAlarms({Plan? plan}) async {
+      h.native.exactAllowed = false;
+      h.permissions.granted[PermissionKind.exactAlarm] = false;
+      final model = await h.start(plan: plan);
+      model.handleLifecycle(AppLifecycleState.resumed);
+      await settle();
+      expect(model.exactAlarmAllowed, isFalse);
+      expect(h.permissions.requested, isEmpty, reason: 'never asked at app start');
+      return model;
+    }
+
+    test('saving an active schedule opens « Alarmes et rappels » once; the schedule is saved anyway', () async {
+      final model = await startWithoutExactAlarms();
+      expect(await model.saveSchedule(model.newScheduleDraft()), isTrue);
+      expect(h.permissions.requested, [PermissionKind.exactAlarm]);
+      expect(model.schedules, hasLength(1));
+      expect(h.native.lastPayload['schedules'], hasLength(1), reason: 'saved and armed before asking');
+      expect(model.alarmMode, AlarmMode.inexact, reason: 'armed inexactly until allowed');
+      expect(model.exactAlarmAllowed, isFalse, reason: 'the banner stays');
+    });
+
+    test('saving an inactive schedule never asks', () async {
+      final model = await startWithoutExactAlarms();
+      expect(await model.saveSchedule(model.newScheduleDraft().copyWith(active: false)), isTrue);
+      expect(model.schedules, hasLength(1));
+      expect(h.permissions.requested, isEmpty);
+    });
+
+    test('switching a schedule on asks, switching it off does not', () async {
+      final model = await startWithoutExactAlarms();
+      final draft = model.newScheduleDraft().copyWith(active: false);
+      await model.saveSchedule(draft);
+      await model.setScheduleActive(draft.id, true);
+      expect(h.permissions.requested, [PermissionKind.exactAlarm]);
+      expect(model.schedules.single.active, isTrue);
+      await model.setScheduleActive(draft.id, false);
+      expect(h.permissions.requested, [PermissionKind.exactAlarm]);
+    });
+
+    test('asked again at each save or activation while still not granted', () async {
+      final model = await startWithoutExactAlarms(plan: Plan.annual);
+      final first = model.newScheduleDraft();
+      await model.saveSchedule(first);
+      await model.saveSchedule(first.copyWith(hour: 23));
+      await model.saveSchedule(model.newScheduleDraft().copyWith(hour: 6));
+      expect(h.permissions.requested, List.filled(3, PermissionKind.exactAlarm));
+    });
+
+    test('already allowed (always the case below Android 12): never asked', () async {
+      final model = await h.start();
+      model.handleLifecycle(AppLifecycleState.resumed);
+      await settle();
+      expect(model.exactAlarmAllowed, isTrue);
+      final draft = model.newScheduleDraft();
+      await model.saveSchedule(draft);
+      await model.setScheduleActive(draft.id, false);
+      await model.setScheduleActive(draft.id, true);
+      expect(h.permissions.requested, isEmpty);
+      expect(h.native.exactSettingsOpened, 0);
+      expect(model.alarmMode, AlarmMode.exact);
+    });
+
+    test('granted in the system screen: back in the app, the schedules are re-armed exactly, once', () async {
+      final model = await startWithoutExactAlarms();
+      await model.saveSchedule(model.newScheduleDraft());
+      expect(model.alarmMode, AlarmMode.inexact);
+      // The system screen covers the app; the user allows « Alarmes et rappels » and comes back.
+      model.handleLifecycle(AppLifecycleState.paused);
+      await settle();
+      h.native.exactAllowed = true;
+      h.permissions.granted[PermissionKind.exactAlarm] = true;
+      final syncs = h.native.syncedPayloads.length;
+      model.handleLifecycle(AppLifecycleState.resumed);
+      await settle();
+      expect(model.exactAlarmAllowed, isTrue, reason: 'the banner goes');
+      expect(h.native.syncedPayloads.length, syncs + 1, reason: 're-armed once');
+      expect(h.native.lastPayload['schedules'], hasLength(1));
+      expect(model.alarmMode, AlarmMode.exact);
+      // Nothing changed since: no new sync at the next return.
+      model.handleLifecycle(AppLifecycleState.paused);
+      model.handleLifecycle(AppLifecycleState.resumed);
+      await settle();
+      expect(h.native.syncedPayloads.length, syncs + 1);
+      expect(h.permissions.requested, [PermissionKind.exactAlarm], reason: 'never asked on a return');
+    });
+
+    test('back without granting: still inexact, the banner stays, nothing asked on the return', () async {
+      final model = await startWithoutExactAlarms();
+      await model.saveSchedule(model.newScheduleDraft());
+      model.handleLifecycle(AppLifecycleState.paused);
+      model.handleLifecycle(AppLifecycleState.resumed);
+      await settle();
+      expect(model.exactAlarmAllowed, isFalse);
+      expect(model.alarmMode, AlarmMode.inexact);
+      expect(h.permissions.requested, [PermissionKind.exactAlarm]);
+    });
+  });
+
   group('sharing', () {
     test('without backend: self-contained link, share sheet and clipboard', () async {
       final model = await h.start();
@@ -630,7 +733,7 @@ void main() {
       expect(model.scene.timer, const TimerDuration(30), reason: 'the recipient keeps their timer');
     });
 
-    test('a shared 3D scene keeps only the decor it can show', () async {
+    test('a link made for a live 3D scene opens its video landscape, without the decor', () async {
       final model = await h.start(plan: Plan.annual);
       final shared = Scene(
         landscapeId: 'ondes',
@@ -640,7 +743,8 @@ void main() {
       h.links.open(shareLinkFor(shared, 'eventide.app'));
       await settle();
       expect(model.scene.landscapeId, 'ondes');
-      expect(model.scene.decor, const [Layer(id: 'etoiles', level: 40)]);
+      expect(model.scene.sounds, const [Layer(id: 'vagues', level: 30)]);
+      expect(model.scene.decor, isEmpty);
     });
   });
 
@@ -783,7 +887,7 @@ void main() {
   });
 
   group('crash guard (docs/app/architecture.md § 19)', () {
-    /// A session that ends on a 3D scene (ondes, Imaginaire) after visiting pluie-ville
+    /// A session that ends on an « Imaginaire » landscape (ondes) after visiting pluie-ville
     /// (Urbain), with a favourite, a schedule and a setting, all saved; then the app is started
     /// again.
     Future<RealAppModel> restartAfterOndes({required bool safeStart}) async {
@@ -820,7 +924,7 @@ void main() {
       expect(again.schedules.single.landscapeId, 'foret-lucioles');
       expect(again.settings.wifiOnly, isTrue);
       expect(again.settings.textSize, 2);
-      // Written at once: a new crash right away does not bring the 3D scene back.
+      // Written at once: a new crash right away does not bring that landscape back.
       expect(jsonDecode(h.store.files[StoreKeys.scene]!)['data']['paysage'], 'cascade-foret');
       expect(jsonDecode(h.store.files[StoreKeys.appState]!)['data']['last_landscape_by_theme'], isEmpty);
     });
@@ -1267,7 +1371,6 @@ void main() {
         downloadedPoster: (id) => '/content/images/paysages/$id.jpg',
       );
       final model = await h.start(plan: Plan.annual, artwork: artwork);
-      model.setMoment(Moment.soir);
       await settle();
       expect(files.writes, isEmpty, reason: 'nothing plays: no card, no picture');
       final items = <MediaItem>[];
@@ -1302,7 +1405,6 @@ void main() {
     test('pause and play from the card change the sound only', () async {
       final model = await h.start();
       await model.play();
-      model.setMoment(Moment.nuit);
       final before = (model.browsedLandscapeId, model.scene);
       await h.handler.click(); // card play/pause
       expect(model.playing, isFalse);
@@ -1369,6 +1471,35 @@ void main() {
       asked.clear();
       expect(await model.landscapeVideo('pluie-ville'), video);
       expect(asked, isEmpty);
+    });
+
+    test('« Imaginaire » plays like a filmed landscape: the free loop bundled, the Premium loops downloaded', () async {
+      final dir = await Directory.systemTemp.createTemp('eventide_media_');
+      addTearDown(() => dir.delete(recursive: true));
+      final asked = <String>[];
+      const imaginaire = {
+        'assets/landscapes/foret-lucioles.mp4',
+        'assets/landscapes/foret-lucioles.jpg',
+        'assets/landscapes/lac-lune.jpg',
+      };
+      const remote = RemoteLandscapeMedia(videos: {'lac-lune'});
+      final free = await h.start(backend: contentBackend(asked), bundledMedia: imaginaire, remoteMedia: remote);
+      expect(await free.landscapeVideo('foret-lucioles'),
+          const AssetLandscapeVideo('assets/landscapes/foret-lucioles.mp4'));
+      expect(await free.landscapeVideo('lac-lune'), isNull, reason: 'Premium');
+      free.dispose();
+      h = Harness();
+      final premium = await h.start(
+        plan: Plan.annual,
+        backend: contentBackend(asked),
+        bundledMedia: imaginaire,
+        remoteMedia: remote,
+        contentDirectory: dir,
+      );
+      final video = await premium.landscapeVideo('lac-lune');
+      expect(video, isA<FileLandscapeVideo>());
+      expect(asked.where((u) => u.startsWith('https://cdn.test/')), ['https://cdn.test/videos/paysages/lac-lune.mp4?sig=1'],
+          reason: 'its poster is bundled: only the loop is downloaded');
     });
 
     test('« Wi-Fi seulement » on mobile data: no download, the still picture stays', () async {

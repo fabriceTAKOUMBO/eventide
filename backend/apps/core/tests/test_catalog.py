@@ -1,5 +1,6 @@
 """The catalog embedded by the API must be the app's catalog (single source of truth)."""
 
+import copy
 import json
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from apps.core.catalog import (
     RENDER_3D,
     RENDER_VIDEO,
     RETIRED_LANDSCAPES,
+    build_catalog,
     get_catalog,
 )
 
@@ -97,34 +99,29 @@ def test_storm_sequences_follow_contract_section_11(catalog):
         assert catalog.sound_of_file(variant) == "tonnerre"
 
 
-def test_filmed_and_3d_landscapes_follow_contract_section_12(catalog):
+IMAGINAIRE = ["foret-lucioles", "lac-lune", "aurore", "jardin-zen", "mer-nuages", "ondes"]
+
+
+def test_every_landscape_is_a_video_without_decor_contract_section_12(catalog):
+    """Since 10 November 2026 the six « Imaginaire » landscapes are videos rendered from their
+    3D scenes (``rendu: video``, no ``decors``, no ``periode_s``, no default decor): no landscape
+    has a decor any more. The ``decors`` list stays for compatibility."""
     assert [t["id"] for t in catalog.raw["themes"]] == ["nature", "urbain", "imaginaire"]
     decor_ids = set(catalog.sections["decors"])
     assert "eclairs" not in decor_ids and "pluie-ecran" not in decor_ids
     assert {"petales", "pluie", "etoiles-filantes"} <= decor_ids
-    scenes = []
     for landscape in catalog.raw["paysages"]:
         lid = landscape["id"]
-        assert catalog.rendering(lid) in (RENDER_VIDEO, RENDER_3D), lid
-        default_decor = [layer["id"] for layer in landscape["mix"]["decor"]]
-        if catalog.rendering(lid) == RENDER_VIDEO:
-            # A filmed landscape: its decor is not editable, so none by default.
-            assert default_decor == [], lid
-            assert "decors" not in landscape and "periode_s" not in landscape, lid
-            assert isinstance(landscape.get("eclairs", False), bool), lid
-            assert catalog.decors_of(lid) == frozenset(), lid
-        else:
-            scenes.append(lid)
-            assert landscape["theme"] == "imaginaire", lid
-            assert "eclairs" not in landscape, lid
-            assert isinstance(landscape["periode_s"], int) and landscape["periode_s"] > 0, lid
-            allowed = landscape["decors"]
-            assert allowed and len(set(allowed)) == len(allowed), lid
-            assert set(allowed) <= decor_ids, lid
-            assert set(default_decor) <= set(allowed), lid
-            assert catalog.decors_of(lid) == frozenset(allowed), lid
-    assert scenes == ["foret-lucioles", "lac-lune", "aurore", "jardin-zen", "mer-nuages", "ondes"]
-    assert catalog.is_free("paysages", "foret-lucioles")
+        assert landscape.get("rendu", RENDER_VIDEO) == RENDER_VIDEO, lid
+        assert catalog.rendering(lid) == RENDER_VIDEO, lid
+        assert "decors" not in landscape and "periode_s" not in landscape, lid
+        assert landscape["mix"]["decor"] == [], lid
+        assert catalog.decors_of(lid) == frozenset(), lid
+        assert isinstance(landscape.get("eclairs", False), bool), lid
+    imaginaire = [p for p in catalog.raw["paysages"] if p["theme"] == "imaginaire"]
+    assert [p["id"] for p in imaginaire] == IMAGINAIRE
+    assert all("eclairs" not in p for p in imaginaire)
+    assert [p["id"] for p in imaginaire if p["gratuit"]] == ["foret-lucioles"]
     assert [p["id"] for p in catalog.raw["paysages"] if p.get("eclairs")] == [
         "pluie-ville",
         "toits-pluie",
@@ -136,3 +133,15 @@ def test_filmed_and_3d_landscapes_follow_contract_section_12(catalog):
     assert catalog.landscape_or_default("aurore") == "aurore"
     assert catalog.landscape_or_default("nulle-part") is None
     assert catalog.landscape_or_default(None) is None
+
+
+def test_a_catalog_still_holding_a_live_3d_scene_keeps_its_decor_rule(catalog):
+    """The code still reads a ``rendu: 3d`` landscape (an older catalog): its ``decors`` apply, a
+    video landscape has none."""
+    raw = copy.deepcopy(catalog.raw)
+    ondes = next(p for p in raw["paysages"] if p["id"] == "ondes")
+    ondes.update({"rendu": RENDER_3D, "decors": ["etoiles", "brume"], "periode_s": 30})
+    older = build_catalog(raw)
+    assert older.rendering("ondes") == RENDER_3D
+    assert older.decors_of("ondes") == frozenset({"etoiles", "brume"})
+    assert older.decors_of("lac-lune") == frozenset()

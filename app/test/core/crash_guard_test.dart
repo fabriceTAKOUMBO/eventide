@@ -1,5 +1,5 @@
 // Crash-loop guard (lib/core/crash_guard.dart, docs/app/architecture.md § 19): a process killed
-// natively leaves its sentinels; the next start reads them.
+// natively leaves its start sentinel; the next start reads it.
 import 'dart:convert';
 
 import 'package:eventide/core/crash_guard.dart';
@@ -19,11 +19,10 @@ void main() {
     log = [];
   });
 
-  test('first start: nothing to report, no scene marked', () {
+  test('first start: nothing to report', () {
     final guard = start();
     expect(guard.safeStart, isFalse);
-    expect(guard.deadSubjects, isEmpty);
-    expect(guard.interrupted, isEmpty);
+    expect(guard.unfinishedStarts, 0);
     expect(log, isEmpty);
   });
 
@@ -74,44 +73,32 @@ void main() {
     expect(start().safeStart, isFalse);
   });
 
-  test('a live 3D scene interrupted by a crash: shown as its poster from then on, and said in the log', () {
-    final first = start()..uiStarting();
-    final done = first.beginLive('scène 3D', 'jardin-zen', 'high');
-    first.endLive(done); // paused or released normally
-    first.beginLive('scène 3D', 'ondes', 'high');
-    expect(log, ['en direct : scène 3D jardin-zen high', 'en direct : scène 3D ondes high']);
-    expect(jsonDecode(store.content!)['live'], [
-      {'what': 'scène 3D', 'subject': 'ondes', 'detail': 'high'},
-    ]);
-    first.dispose(); // killed natively while the scene ran
-
-    log.clear();
-    final second = start();
-    expect(second.isDead('ondes'), isTrue);
-    expect(second.isDead('jardin-zen'), isFalse);
-    expect(second.interrupted.single.subject, 'ondes');
-    expect(log, contains(contains('lancement précédent arrêté pendant : scène 3D ondes high ; ce paysage sera montré en image fixe')));
-    second.markStable();
-
-    // Still a poster at the following starts, until the build (app or runtime) changes.
-    expect(start().isDead('ondes'), isTrue);
-    expect(start(build: '1.0.1+s1').isDead('ondes'), isFalse);
-  });
-
-  test('live work that ends normally leaves nothing', () {
+  test('what an older version wrote for the live 3D scenes is ignored: only the start counts', () {
+    // Same build, a file of the WebView era (version 2): a start that died while a scene ran live.
+    store.content = jsonEncode({
+      'version': 2,
+      'build': '1.0.0+s1',
+      'starts': 1,
+      'dead': ['jardin-zen'],
+      'live': [
+        {'what': 'scène 3D', 'subject': 'ondes', 'detail': 'high'},
+      ],
+    });
     final guard = start();
-    final token = guard.beginLive('scène 3D', 'aurore', 'low');
-    guard.endLive(token);
-    guard.endLive(token);
-    expect(start().deadSubjects, isEmpty);
+    expect(guard.safeStart, isTrue);
+    expect(log.single, contains('démarrage protégé'));
+    final saved = jsonDecode(store.content!) as Map<String, dynamic>;
+    expect(saved.keys, unorderedEquals(['version', 'build', 'starts']));
+    expect(saved['starts'], 1);
   });
+
   test('an unreadable or foreign file is ignored', () {
     store.content = '{not json';
     expect(start().safeStart, isFalse);
-    store.content = jsonEncode({'build': 'other', 'starts': 3, 'dead': ['ondes'], 'live': []});
+    store.content = jsonEncode({'build': 'other', 'starts': 3});
     final guard = start();
     expect(guard.safeStart, isFalse);
-    expect(guard.deadSubjects, isEmpty);
+    expect(guard.unfinishedStarts, 0);
   });
 
   test('the default guard (tests, previews) stores nothing and never marks anything', () {
@@ -120,8 +107,7 @@ void main() {
     guard
       ..load()
       ..uiStarting();
-    expect(guard.beginLive('scène 3D', 'ondes', 'high'), 0);
-    expect(guard.isDead('ondes'), isFalse);
+    expect(guard.unfinishedStarts, 0);
     expect(guard.safeStart, isFalse);
   });
 }

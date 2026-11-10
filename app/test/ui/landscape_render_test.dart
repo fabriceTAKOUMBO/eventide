@@ -1,6 +1,6 @@
-// Landscape pictures (contract § 12): every landscape is a poster now (filmed video's frame 0,
-// or a 3D scene's frame at t = 0); nothing is drawn by the app. Without its poster on the
-// phone, a plain dark placeholder.
+// Landscape pictures (contract § 12): every landscape is a poster now (the first frame of its
+// loop, filmed or rendered from a 3D scene for « Imaginaire »); nothing is drawn by the app.
+// Without its poster on the phone, a plain dark placeholder.
 import 'package:eventide/ui/landscape/landscape_image.dart';
 import 'package:eventide/ui/screens/home/home_menu.dart' show LandscapeThumbnail;
 import 'package:flutter/material.dart';

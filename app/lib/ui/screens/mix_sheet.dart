@@ -1,14 +1,12 @@
-// Screen 4 · Mon mix: Sons / Musique / Décor, levels by 10 % steps or slider,
-// 0 % removes, « Moment de la journée » in Décor. No microphone here (intended).
-// Décor exists for a 3D scene of « Imaginaire » only, with the elements that scene can show
-// (contract § 12): a filmed landscape's picture is never changed.
+// Screen 4 · Mon mix: Sons / Musique, levels by 10 % steps or slider, 0 % removes. No
+// microphone here (intended). No Décor tab: a landscape's picture is never changed (contract
+// § 12; the live 3D scenes whose decor could be edited became videos on 10 November 2026).
 // Sons and Musique have a mute switch (`sourdine`): every element and its level is
 // kept, shown dimmed and still adjustable; touching a level makes the category heard.
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../core/catalog.dart';
-import '../../core/scene.dart';
 import '../model_scope.dart';
 import '../navigation.dart';
 import '../theme/vitre.dart';
@@ -28,8 +26,10 @@ class MixSheet extends StatefulWidget {
 const Map<LayerKind, (String, String)> _texts = {
   LayerKind.son: ('Dans mon mix', 'Ajouter un son'),
   LayerKind.musique: ('Musique de fond', 'Ajouter une musique'),
-  LayerKind.decor: ('Sur l’image', 'Ajouter à l’image'),
 };
+
+/// The tabs of « Mon mix »: the audio layers only.
+const List<LayerKind> _kinds = [LayerKind.son, LayerKind.musique];
 
 class _MixSheetState extends State<MixSheet> {
   late LayerKind _kind = widget.initialKind;
@@ -40,21 +40,14 @@ class _MixSheetState extends State<MixSheet> {
     final p = Vitre.of(context);
     final catalog = model.catalog;
     final scene = model.scene;
-    // Décor only for a 3D scene, with the elements it can show (contract § 12): a filmed
-    // landscape is shown as it is.
-    final kinds = [
-      LayerKind.son,
-      LayerKind.musique,
-      if (catalog.landscape(scene.landscapeId)?.is3d ?? false) LayerKind.decor,
-    ];
-    final kind = kinds.contains(_kind) ? _kind : LayerKind.son;
+    final kind = _kinds.contains(_kind) ? _kind : LayerKind.son;
     final texts = _texts[kind]!;
     final active = scene.layers(kind);
     final muted = model.categoryMuted(kind);
     final activeIds = {for (final l in active) l.id};
     // A landscape's ambiance (the sound of its video) is offered with that landscape only.
     final available = [
-      for (final item in kind == LayerKind.decor ? catalog.decorsOf(scene.landscapeId) : catalog.items(kind))
+      for (final item in catalog.items(kind))
         if (!activeIds.contains(item.id) && item.offeredWith(scene.landscapeId)) item,
     ];
 
@@ -78,9 +71,9 @@ class _MixSheetState extends State<MixSheet> {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
             child: SegmentedTabs(
-              labels: [for (final k in kinds) k.label],
-              selected: kinds.indexOf(kind),
-              onSelected: (i) => setState(() => _kind = kinds[i]),
+              labels: [for (final k in _kinds) k.label],
+              selected: _kinds.indexOf(kind),
+              onSelected: (i) => setState(() => _kind = _kinds[i]),
               semanticGroupLabel: 'Type de réglage',
             ),
           ),
@@ -95,39 +88,12 @@ class _MixSheetState extends State<MixSheet> {
                 40 + MediaQuery.paddingOf(context).bottom,
               ),
               children: [
-                if (kind.isAudio && (active.isNotEmpty || muted))
+                if (active.isNotEmpty || muted)
                   _MuteSwitch(
                     kind: kind,
                     muted: muted,
                     onChanged: (m) => model.setCategoryMuted(kind, m),
                   ),
-                if (kind == LayerKind.decor) ...[
-                  const SectionLabel(
-                    'Moment',
-                    padding: EdgeInsets.fromLTRB(4, 4, 4, 10),
-                  ),
-                  Semantics(
-                    label: 'Moment de la journée',
-                    container: true,
-                    explicitChildNodes: true,
-                    child: Row(
-                      children: [
-                        for (final m in Moment.values) ...[
-                          if (m.index > 0) const SizedBox(width: 8),
-                          Expanded(
-                            child: ChoiceChipButton(
-                              label: m.label,
-                              selected: scene.moment == m,
-                              height: 52,
-                              onTap: () => model.setMoment(m),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 22),
-                ],
                 if (active.isNotEmpty)
                   SectionLabel(
                     texts.$1,

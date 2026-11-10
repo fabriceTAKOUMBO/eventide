@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // Makes tools/imaginaire/preview/ self-contained: copies next to preview/index.html the runtime,
 // the shared decor, scenery and HDR finish (post.js) code, the six scenes and the vendored
-// three.js exactly as the app bundles them (app/assets/imaginaire/), plus the UI font (Manrope,
+// three.js exactly as the renders use them (tools/imaginaire/runtime/), plus the UI font (Manrope,
 // OFL). The folder can then be
 // opened locally (node tools/imaginaire/serve.js) or published as a multi-file page: it loads only
 // relative files, no network.
 //
 // Usage (from the repository root): node tools/imaginaire/build-preview.js
-// Run it after any change in app/assets/imaginaire/ (`render.js all` runs it; the other commands of
+// Run it after any change in tools/imaginaire/runtime/ (`render.js all` runs it; the other commands of
 // render.js warn when the copies differ from the app's files).
 
 'use strict';
@@ -16,7 +16,7 @@ const fs = require('fs');
 const path = require('path');
 
 const REPO = path.resolve(__dirname, '..', '..');
-const SRC = path.join(REPO, 'app', 'assets', 'imaginaire');
+const SRC = path.join(__dirname, 'runtime');
 const OUT = path.join(__dirname, 'preview');
 
 function files() {

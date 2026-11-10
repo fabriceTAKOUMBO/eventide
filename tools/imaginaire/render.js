@@ -24,6 +24,10 @@ const { start } = require('./serve');
 
 const REPO = path.resolve(__dirname, '..', '..');
 const OUT = path.join(__dirname, 'out');
+// The scenes' runtime (index.html, runtime.js, scenes/<id>.js, vendor/three.min.js). The app no
+// longer bundles it (contract § 12, 10 November 2026): the scenes only live here, to render their
+// posters and loops offline.
+const RUNTIME = path.join(__dirname, 'runtime');
 const PERIOD = 30;
 // Wallpaper loops: 24 images per second (as the filmed landscapes), rendered at 720x1280 in
 // software WebGL (about 2.3 times faster than 1080x1920) and scaled to 1080x1920 (Lanczos) in
@@ -64,7 +68,7 @@ function parseArgs(argv) {
 function sceneList(args) {
   const ids = args.scene ? String(args.scene).split(',') : Object.keys(SCENES);
   ids.forEach((id) => { if (!SCENES[id]) throw new Error(`unknown scene ${id}`); });
-  return ids.filter((id) => fs.existsSync(path.join(REPO, 'app', 'assets', 'imaginaire', 'scenes', `${id}.js`)));
+  return ids.filter((id) => fs.existsSync(path.join(RUNTIME, 'scenes', `${id}.js`)));
 }
 
 // Every poster is bundled in the app (free users see real tiles for the Premium scenes); the
@@ -435,7 +439,7 @@ async function main() {
   const command = args._[0] || 'sheet';
   const preview = require('./build-preview');
   if (command === 'all') preview.build();
-  else if (!preview.upToDate()) console.warn('tools/imaginaire/preview/ differs from app/assets/imaginaire/: run node tools/imaginaire/build-preview.js');
+  else if (!preview.upToDate()) console.warn('tools/imaginaire/preview/ differs from tools/imaginaire/runtime/: run node tools/imaginaire/build-preview.js');
   ensureDir(OUT);
   if (command === 'seam') {
     cmdSeam(args);

@@ -26,10 +26,6 @@ Future<void> pumpApp(
   // Asset images decode outside the fake-async zone.
   final context = tester.element(find.byType(Navigator).first);
   await tester.runAsync(() async {
-    // No WebView in widget tests: the 3D scenes show their poster (imaginaire_view_test.dart
-    // drives them with a fake surface, and forces the runtime itself). Set before reading the
-    // manifest, which bundles the runtime.
-    if (LandscapeImages.debugSceneRuntimeOverride == null) LandscapeImages.debugSetSceneRuntime(false);
     await LandscapeImages.discoverAssets();
     final logo = LandscapeImages.brandLogo.value;
     if (logo != null && context.mounted) {

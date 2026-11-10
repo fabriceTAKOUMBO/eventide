@@ -151,20 +151,22 @@ class WithdrawnItems {
   }
 }
 
-/// What this phone can show of [catalog] (contract § 12): a filmed landscape needs its video or
-/// its poster, bundled ([bundledAssets]) or on the content server ([remote]); a 3D scene needs
-/// the bundled runtime or its poster. A theme left empty is hidden ([Catalog.showing]).
+/// What this phone can show of [catalog] (contract § 12): a landscape shown as a video (filmed,
+/// or rendered from a 3D scene for « Imaginaire ») needs its video or its poster, bundled
+/// ([bundledAssets]) or on the content server ([remote]); a landscape of any other rendering
+/// (`rendu: 3d`, a live scene this app no longer runs) is never shown. A theme left empty is
+/// hidden ([Catalog.showing]).
 Catalog showableCatalog(
   Catalog catalog, {
   required Set<String> bundledAssets,
   required RemoteLandscapeMedia remote,
 }) {
-  final runtime = bundledAssets.contains(LandscapeMediaKeys.sceneRuntime);
-  return catalog.showing((l) {
-    final media = bundledAssets.contains(LandscapeMediaKeys.bundledVideo(l.id)) ||
-        bundledAssets.contains(LandscapeMediaKeys.bundledImage(l.id)) ||
-        remote.videos.contains(l.id) ||
-        remote.images.contains(l.id);
-    return media || (l.is3d && runtime);
-  });
+  return catalog.showing(
+    (l) =>
+        l.isVideo &&
+        (bundledAssets.contains(LandscapeMediaKeys.bundledVideo(l.id)) ||
+            bundledAssets.contains(LandscapeMediaKeys.bundledImage(l.id)) ||
+            remote.videos.contains(l.id) ||
+            remote.images.contains(l.id)),
+  );
 }

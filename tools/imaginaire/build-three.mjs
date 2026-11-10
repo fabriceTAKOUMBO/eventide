@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Builds app/assets/imaginaire/vendor/three.min.js from the pinned npm package `three`
+// Builds tools/imaginaire/runtime/vendor/three.min.js from the pinned npm package `three`
 // (package.json: exact version), tree-shaken to the names of three-entry.mjs, as ONE classic
 // script defining the global `THREE`.
 //
-// Why a classic script and not the ES module files: the Android WebView loads the scenes from
-// file:///android_asset/, where module scripts are refused (opaque origin, CORS) unless
-// "file access from file URLs" is enabled, which webview_flutter does not expose. A classic
-// script loads everywhere: WebView, desktop browser, Playwright.
+// Why a classic script and not the ES module files: until 10 November 2026 the app drew the scenes
+// in an Android WebView from file:///android_asset/, where module scripts are refused (opaque
+// origin, CORS). A classic script loads everywhere: WebView, desktop browser, Playwright (the
+// offline renders of render.js, which is all the scenes are used for now).
 //
 // Usage (from tools/imaginaire/):  npm ci && node build-three.mjs
 // The output is deterministic for the same versions of three and esbuild.
@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, '..', '..');
-const vendor = join(repo, 'app', 'assets', 'imaginaire', 'vendor');
+const vendor = join(repo, 'tools', 'imaginaire', 'runtime', 'vendor');
 const threePkg = JSON.parse(readFileSync(join(here, 'node_modules', 'three', 'package.json'), 'utf8'));
 const esbuildPkg = JSON.parse(readFileSync(join(here, 'node_modules', 'esbuild', 'package.json'), 'utf8'));
 const pinned = JSON.parse(readFileSync(join(here, 'package.json'), 'utf8')).devDependencies;

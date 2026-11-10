@@ -1,6 +1,8 @@
+import 'package:eventide/app/app_model.dart' show PermissionKind;
 import 'package:eventide/services/ads_service.dart';
 import 'package:eventide/services/connectivity.dart';
 import 'package:eventide/services/native_bridge.dart';
+import 'package:eventide/services/permissions_service.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -112,6 +114,25 @@ void main() {
       final bridge = MethodChannelNativeBridge();
       expect(await bridge.canScheduleExactAlarms(), isFalse);
       expect(await bridge.androidId(), '');
+    });
+  });
+
+  group('exact alarms (Android 12+)', () {
+    test('not allowed: the request opens « Alarmes et rappels » and answers « not yet »', () async {
+      final native = FakeNativeBridge()..exactAllowed = false;
+      final permissions = PlatformPermissions(native);
+      expect(await permissions.isGranted(PermissionKind.exactAlarm), isFalse);
+      expect(await permissions.request(PermissionKind.exactAlarm), isFalse);
+      expect(native.exactSettingsOpened, 1);
+      expect(await permissions.isPermanentlyDenied(PermissionKind.exactAlarm), isFalse);
+    });
+
+    test('allowed (always below Android 12): nothing opens', () async {
+      final native = FakeNativeBridge();
+      final permissions = PlatformPermissions(native);
+      expect(await permissions.isGranted(PermissionKind.exactAlarm), isTrue);
+      expect(await permissions.request(PermissionKind.exactAlarm), isTrue);
+      expect(native.exactSettingsOpened, 0);
     });
   });
 }

@@ -449,28 +449,21 @@ void main() {
       await tearDownApp(tester);
     });
 
-    testWidgets(
-      'locked item asks the model (Premium opens), moment changes light',
-      (tester) async {
-        usePhoneView(tester);
-        final model = FakeAppModel()..selectLandscape('foret-lucioles');
-        await pumpApp(tester, model);
-        await openRoute(tester, Routes.mix, (_) => const MixSheet());
-        await tapLabel(tester, 'Ajouter tonnerre, avec Premium');
-        expect(find.byType(PremiumScreen), findsOneWidget);
-        navigatorOf(tester).pop();
-        await settle(tester);
-        await tapText(tester, 'Décor');
-        expect(findCaps('Moment'), findsOneWidget);
-        await tapText(tester, 'Nuit');
-        expect(model.scene.moment, Moment.nuit);
-        await tapText(tester, 'Musique');
-        expect(findCaps('Ajouter une musique'), findsOneWidget);
-        await tearDownApp(tester);
-      },
-    );
+    testWidgets('locked item asks the model (Premium opens)', (tester) async {
+      usePhoneView(tester);
+      final model = FakeAppModel()..selectLandscape('foret-lucioles');
+      await pumpApp(tester, model);
+      await openRoute(tester, Routes.mix, (_) => const MixSheet());
+      await tapLabel(tester, 'Ajouter tonnerre, avec Premium');
+      expect(find.byType(PremiumScreen), findsOneWidget);
+      navigatorOf(tester).pop();
+      await settle(tester);
+      await tapText(tester, 'Musique');
+      expect(findCaps('Ajouter une musique'), findsOneWidget);
+      await tearDownApp(tester);
+    });
 
-    testWidgets('Décor only for a 3D scene, with the elements it can show (contract § 12)', (tester) async {
+    testWidgets('no Décor tab anywhere, « Imaginaire » landscapes included (contract § 12)', (tester) async {
       // A very tall screen: every row of the list is built.
       tester.view.physicalSize = const Size(390 * 3, 3200 * 3);
       tester.view.devicePixelRatio = 3;
@@ -483,27 +476,17 @@ void main() {
       expect(find.text('Sons'), findsOneWidget);
       expect(findCaps('Ajouter un son'), findsOneWidget);
 
-      // Mer de nuages: its own five elements, the two of its default mix in the list.
+      // Mer de nuages (a video rendered from its 3D scene since 10 November 2026): the same.
       model.selectLandscape('mer-nuages');
       await settle(tester);
-      await tapText(tester, 'Décor');
-      expect(label('Moment de la journée'), findsOneWidget);
-      expect(find.text('Oiseaux en vol'), findsOneWidget);
-      expect(find.text('Rayons de soleil'), findsOneWidget);
-      for (final offered in ['étoiles', 'étoiles filantes', 'brume']) {
-        expect(label('Ajouter $offered'), findsOneWidget, reason: offered);
-      }
-      for (final other in ['lucioles', 'neige', 'pétales', 'pluie', 'feuilles qui tombent']) {
-        expect(label(RegExp('^Ajouter $other')), findsNothing, reason: other);
-      }
-      await tapLabel(tester, 'Ajouter brume');
-      expect(model.scene.levelOf(LayerKind.decor, 'brume'), 30);
-
-      // Back on a filmed landscape: the Décor tab goes, the sheet shows the sounds.
-      model.selectLandscape('pluie-ville');
-      await settle(tester);
       expect(find.text('Décor'), findsNothing);
-      expect(find.text('Ambiance de la ville'), findsOneWidget);
+      expect(label('Moment de la journée'), findsNothing);
+      expect(find.text('Sons'), findsOneWidget);
+      expect(find.text('Musique'), findsOneWidget);
+      for (final decor in ['Oiseaux en vol', 'Rayons de soleil', 'Brume', 'Étoiles']) {
+        expect(find.text(decor), findsNothing, reason: decor);
+        expect(label(RegExp('^Ajouter ${decor.toLowerCase()}')), findsNothing, reason: decor);
+      }
       await tearDownApp(tester);
     });
 

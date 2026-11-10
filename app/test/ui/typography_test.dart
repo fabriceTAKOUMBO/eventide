@@ -89,7 +89,6 @@ final List<_Screen> _sheets = [
   (Routes.landscapes, (_) => const LandscapesSheet()),
   (Routes.mix, (_) => const MixSheet()),
   ('mon-mix-musique', (_) => const MixSheet(initialKind: LayerKind.musique)),
-  ('mon-mix-decor', (_) => const MixSheet(initialKind: LayerKind.decor)),
   (Routes.share, (_) => const ShareScreen()),
   (Routes.sleep, (_) => const SleepScreen()),
   (Routes.standby, (_) => const StandbyScreen()),

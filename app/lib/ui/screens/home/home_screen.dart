@@ -2,8 +2,6 @@
 // the theme (no wrap), horizontal swipe = theme, vertical swipe on the menu =
 // collapse/expand. Thresholds: 50 px and a clearly dominant axis (1.3×). The photo
 // follows the finger during the gesture; arrows and theme buttons double the swipes.
-// A 3D scene (« Imaginaire ») runs live only once a swipe has settled: the landscape sliding
-// in shows its poster (one live WebView at most).
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -324,15 +322,10 @@ class _HomeScreenState extends State<HomeScreen>
 
   // ---- Build
 
-  Widget _picture(
-    AppModel model,
-    String id,
-    Offset offset, {
-    required bool current,
-  }) {
+  Widget _picture(AppModel model, String id, Offset offset) {
     final l = _landscape(model, id);
     // Keyed by landscape: the incoming picture of a swipe keeps its state (and its video
-    // player) when it becomes the current one; a 3D scene starts live then.
+    // player) when it becomes the current one.
     return Positioned.fill(
       key: ValueKey('picture-$id'),
       child: Transform.translate(
@@ -340,7 +333,6 @@ class _HomeScreenState extends State<HomeScreen>
         child: LandscapeBackground(
           landscapeId: l.id,
           kenBurns: true,
-          live: current,
         ),
       ),
     );
@@ -447,14 +439,9 @@ class _HomeScreenState extends State<HomeScreen>
               return Stack(
                 children: [
                   // Landscapes: the current one and, during a gesture, the incoming one.
-                  _picture(model, shown.id, _offset, current: true),
+                  _picture(model, shown.id, _offset),
                   if (_incomingId != null && dragging)
-                    _picture(
-                      model,
-                      _incomingId!,
-                      _incomingOffset(),
-                      current: false,
-                    ),
+                    _picture(model, _incomingId!, _incomingOffset()),
                   Positioned.fill(
                     child: LightningLayer(
                       enabled: storm,
@@ -634,7 +621,7 @@ class _HomeScreenState extends State<HomeScreen>
   String? _prewarmedFor;
 
   /// Decodes the posters of the neighbouring landscapes after the frame, so that a swipe never
-  /// waits for the first paint of the incoming picture (videos and 3D scenes start on it).
+  /// waits for the first paint of the incoming picture (videos start on it).
   void _prewarmNeighbors(AppModel model, String id) {
     if (_prewarmedFor == id || _size.isEmpty) return;
     _prewarmedFor = id;

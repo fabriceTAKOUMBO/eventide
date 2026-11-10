@@ -2,7 +2,7 @@
 // as a local file that audio_service can load (it accepts `file://` and `content://` URIs; a
 // bundled asset has none, so it is copied to a file first).
 //
-// Order: bundled poster (`assets/landscapes/<id>.jpg`: free landscapes and the free 3D scene,
+// Order: bundled poster (`assets/landscapes/<id>.jpg`: free landscapes and the six « Imaginaire »
 // and every landscape of the demo build) → poster downloaded for Premium
 // (`images/paysages/<id>.jpg` in the content folder) → no picture (the card shows its title and
 // buttons only). Nothing is drawn by the app any more (the 2D procedural pictures are gone,

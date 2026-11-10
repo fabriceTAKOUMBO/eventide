@@ -24,7 +24,10 @@ def test_share_landing_page(client):
     assert response.status_code == 200
     html = response.content.decode()
     assert "Aurore boréale" in html and "Premium" in html
-    assert "Nappes apaisantes" in html and "40 %" in html
+    assert "Nappes apaisantes" in html and "30 %" in html
+    # Stored when « Aurore » was a live 3D scene: its decor no longer applies (a video since
+    # 10 November 2026, contract § 12), so the page lists none, as the app opens it.
+    assert "Étoiles" not in html and "Décor" not in html and "40 %" not in html
     assert "https://play.google.com/store/apps/details?id=app.eventide.test" in html
     assert "intent://eventide.test/m/Ab12Cd34#Intent;scheme=https;package=app.eventide.test" in html
     # The product is « Full Relax » for users; « Eventide » stays an internal name.

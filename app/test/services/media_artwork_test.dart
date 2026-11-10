@@ -53,7 +53,7 @@ void main() {
     expect(expected.scheme, 'file');
   });
 
-  test('the free 3D scene uses its bundled poster too', () async {
+  test('the free « Imaginaire » landscape uses its bundled poster too', () async {
     final uri = await build().resolve(lucioles);
     expect(uri!.toFilePath(), startsWith('/cache/media_art/foret-lucioles-'));
   });

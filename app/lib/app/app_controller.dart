@@ -279,8 +279,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
     final sceneJson = await _store.readMap(StoreKeys.scene);
     if (sceneJson != null) {
       // An unreadable or unknown scene keeps the default one; a retired landscape opens on the
-      // default one with its sounds, music and timer, and decor that does not apply is dropped
-      // (contract § 12).
+      // default one with its sounds, music and timer, and the decor is dropped (contract § 12).
       final scene = _tryParse(() => Scene.fromJson(sceneJson));
       final sanitized = scene == null ? null : _catalog.sanitize(scene);
       if (sanitized != null) _scene = sanitized;
@@ -325,8 +324,8 @@ class RealAppModel extends AppModel implements PlaybackHost {
   }
 
   /// The previous start died before running stably (crash guard, docs/app/architecture.md
-  /// § 19): back to the default free landscape (a filmed one: bundled video and poster, no live
-  /// 3D scene), with no landscape remembered per theme, so that nothing shown at the previous
+  /// § 19): back to the default free landscape (a filmed one: bundled video and poster), with
+  /// no landscape remembered per theme, so that nothing shown at the previous
   /// start is shown again. Favourites, schedules, settings, and the scene's moment, timer and
   /// mutes are kept. Written at once: a new crash before the usual save delay must not bring
   /// the old landscape back.
@@ -392,12 +391,14 @@ class RealAppModel extends AppModel implements PlaybackHost {
     } else {
       // Published catalog (contract § 13): asked again once the last answer is an hour old.
       if (_catalogUpdatesStarted && (_catalogUpdates?.due ?? false)) unawaited(checkPublishedCatalog());
+      // Read before _refreshPermissions, which already updates it: back from « Alarmes et
+      // rappels » (opened when a schedule is saved, _askExactAlarms), a change re-arms the
+      // schedules once, exactly when granted.
+      final wasAllowed = _exactAlarmAllowed;
       await _refreshPermissions();
       final allowed = await _native.canScheduleExactAlarms();
-      if (allowed != _exactAlarmAllowed) {
-        _exactAlarmAllowed = allowed;
-        await _syncSchedules();
-      }
+      _exactAlarmAllowed = allowed;
+      if (allowed != wasAllowed) await _syncSchedules();
       notifyListeners();
     }
     await _checkPendingStart();
@@ -1041,22 +1042,13 @@ class RealAppModel extends AppModel implements PlaybackHost {
   }
 
   @override
-  void setMoment(Moment moment) {
-    if (_scene.moment == moment) return;
-    _scene = _scene.copyWith(moment: moment);
-    _saveScene();
-    notifyListeners();
-  }
-
-  @override
   void setLayerLevel(LayerKind kind, String id, int level) {
     final item = _catalog.item(kind, id);
     if (item == null) return;
     final target = level.clamp(0, 100);
     final present = _scene.hasLayer(kind, id);
-    // Decor only where it applies: a 3D scene that can show it (contract § 12). Removing one
-    // that does not apply stays possible.
-    if (kind == LayerKind.decor && target > 0 && !_catalog.decorApplies(_scene.landscapeId, id)) return;
+    // No landscape shows a decor any more (contract § 12): never added.
+    if (!kind.isAudio) return;
     if (target > 0 && !_rules.canUseItem(_plan, kind, id)) {
       _emit(const OpenPremiumEvent());
       return;
@@ -1150,7 +1142,7 @@ class RealAppModel extends AppModel implements PlaybackHost {
 
   @override
   void applyFavorite(Favorite favorite) {
-    // In line with the catalog (contract § 12): a retired landscape, decor that does not apply.
+    // In line with the catalog (contract § 12): a retired landscape, no decor.
     final saved = _catalog.sanitize(favorite.scene);
     if (saved == null) return;
     final landscape = _catalog.landscape(saved.landscapeId)!;
@@ -1358,17 +1350,40 @@ class RealAppModel extends AppModel implements PlaybackHost {
     await _saveSchedules();
     await _syncSchedules();
     notifyListeners();
+    if (schedule.active) await _askExactAlarms();
     return true;
   }
 
   @override
   Future<void> setScheduleActive(String scheduleId, bool active) async {
+    final known = _schedules.any((s) => s.id == scheduleId);
     _schedules = [
       for (final s in _schedules) s.id == scheduleId ? s.copyWith(active: active) : s,
     ];
     await _saveSchedules();
     await _syncSchedules();
     notifyListeners();
+    if (active && known) await _askExactAlarms();
+  }
+
+  /// A schedule was just saved active or switched on (product owner, 10 November 2026: « il doit
+  /// directement activer l'autorisation d'alarme »): when exact alarms are not allowed (Android
+  /// 12+, « Alarmes et rappels » off), the system screen of the app opens at once
+  /// (requestPermission → openExactAlarmSettings). The schedule is already saved and armed,
+  /// inexactly until the user allows it; back in the app, _onResumed re-arms it exactly. Asked
+  /// at each save or activation while not granted, never at app start; below Android 12 exact
+  /// alarms are always allowed and nothing opens.
+  Future<void> _askExactAlarms() async {
+    final allowed = await _native.canScheduleExactAlarms();
+    if (allowed) {
+      if (!_exactAlarmAllowed) {
+        _exactAlarmAllowed = true;
+        notifyListeners();
+      }
+      return;
+    }
+    _exactAlarmAllowed = false;
+    await requestPermission(PermissionKind.exactAlarm);
   }
 
   @override

@@ -26,20 +26,21 @@ void main() {
     sleepTracking: true,
   );
 
-  test('round trip keeps landscape, layers and moment only', () {
+  test('round trip keeps landscape, sounds, music and moment only', () {
     final data = encodeSceneForLink(scene);
     final decoded = decodeSceneFromLink(data, catalog)!;
     expect(decoded.landscapeId, 'lac-lune');
     expect(decoded.moment, Moment.nuit);
     expect(decoded.sounds, scene.sounds);
     expect(decoded.music, scene.music);
-    expect(decoded.decor, scene.decor);
+    // No landscape shows a decor any more (contract § 12): dropped.
+    expect(decoded.decor, isEmpty);
     // Not shared: the recipient gets the defaults.
     expect(decoded.timer, Scene.defaultTimer);
     expect(decoded.sleepTracking, isFalse);
     expect(
       decoded,
-      scene.copyWith(timer: Scene.defaultTimer, sleepTracking: false),
+      scene.copyWith(timer: Scene.defaultTimer, sleepTracking: false, decor: const []),
     );
   });
 
@@ -128,7 +129,7 @@ void main() {
     expect(decoded.decor, isEmpty);
   });
 
-  test('decor only where it applies: a 3D scene and its own elements (contract § 12)', () {
+  test('the decor layer is accepted and dropped, on every landscape (contract § 12)', () {
     Scene? decode(String landscape) => decodeSceneFromLink(
       encodeJson({
         'version': 1,
@@ -141,9 +142,11 @@ void main() {
       }),
       catalog,
     );
-    expect(decode('ondes')!.decor, const [Layer(id: 'etoiles', level: 40)]);
-    expect(decode('jardin-zen')!.decor, const [Layer(id: 'petales', level: 30)]);
-    expect(decode('pluie-ville')!.decor, isEmpty);
+    for (final landscape in ['ondes', 'jardin-zen', 'foret-lucioles', 'pluie-ville']) {
+      final decoded = decode(landscape)!;
+      expect(decoded.landscapeId, landscape);
+      expect(decoded.decor, isEmpty, reason: landscape);
+    }
   });
 
   test('unknown items are dropped, levels clamped, duplicates removed', () {
@@ -176,7 +179,7 @@ void main() {
       Layer(id: 'pluie-douce', level: 34),
     ]);
     expect(decoded.music, isEmpty);
-    expect(decoded.decor, const [Layer(id: 'lucioles', level: 20)]);
+    expect(decoded.decor, isEmpty);
     expect(decoded.timer, Scene.defaultTimer);
     expect(decoded.sleepTracking, isFalse);
   });
