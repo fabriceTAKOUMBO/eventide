@@ -6,7 +6,7 @@
 - **3D en direct retirée** : les six paysages Imaginaire sont lus comme des vidéos (contrat § 12, architecture § 22.1) ; moteur déplacé dans `tools/imaginaire/runtime/` pour le rendu hors ligne. L'ajout d'éléments de décor par l'utilisateur disparaît.
 - **Autorisation d'alarme** : l'écran système « Alarmes et rappels » s'ouvre dès qu'on enregistre ou active une programmation sans l'autorisation ; réarmement exact au retour corrigé (architecture § 22.2).
 - **Page de dépôt** (Artifact privé, https://claude.ai/artifact/4mLaBeDJ7zzujMhvSsu5Yd) : le product owner y dépose une vidéo (20 Mo au plus) ou un lien Higgsfield / Google Drive, avec nom, rubrique, gratuit / Premium, orages et note ; chaque dépôt a un état (reçu, en traitement, dans l'app, à refaire) que nous mettons à jour. Solution d'attente : nous intégrons les dépôts à chaque démo. Le vrai tableau de bord (§ 14) prendra le relais une fois le serveur déployé.
-- **Vérifications** : 550 tests de l'app, 390 de l'API ; l'APK n'a pas pu être compilé localement (pas de SDK Android) : la CI le fait.
+- **Vérifications** : 550 tests de l'app, 390 de l'API ; CI 42833391824 verte (compilation, contrôle des APK, émulateurs 34 et 36) ; démo S24 : artefact 13772394151.
 
 ## 30 octobre 2026 — scènes 3D dans l'app, Imaginaire remplace Astral
 
