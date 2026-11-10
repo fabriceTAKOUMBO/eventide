@@ -29,12 +29,12 @@ Depuis le 29 octobre 2026, le tonnerre de la bande son de `pluie-ville` est repr
 
 ## Paysages imaginaires (3D)
 
-Contrat d'API § 12 : six scènes 3D dessinées en direct par l'application (three.js dans une WebView), hors ligne, depuis `app/assets/imaginaire/`. Aucune image, aucune texture, aucun modèle 3D ni aucun son de tiers : tout est procédural (géométrie et bruits calculés). Aucune IA générative.
+Contrat d'API § 12 : six paysages tirés de scènes 3D. Depuis le 10 novembre 2026, l'application ne dessine plus la 3D : elle lit leurs vidéos ; les scènes (three.js) ne servent plus qu'aux outils de rendu hors ligne, dans `tools/imaginaire/runtime/`. Aucune image, aucune texture, aucun modèle 3D ni aucun son de tiers : tout est procédural (géométrie et bruits calculés). Aucune IA générative.
 
 | Fichiers | Source | Statut |
 |---|---|---|
-| `app/assets/imaginaire/index.html`, `runtime.js`, `decors.js`, `scenery.js`, `scenes/*.js` | Écrits par nous (octobre 2026) | Création propre, aucun droit tiers |
-| `app/assets/imaginaire/vendor/three.min.js` | three.js 0.186.1 (paquet npm `three`), regroupé et réduit aux classes utilisées par `tools/imaginaire/build-three.mjs` (esbuild 0.28.2) | **Licence MIT**, © 2010-2026 three.js authors. Le texte de la licence est livré à côté (`vendor/LICENSE-three.txt`) et doit figurer dans l'écran des licences de l'application |
+| `tools/imaginaire/runtime/index.html`, `runtime.js`, `decors.js`, `scenery.js`, `scenes/*.js` | Écrits par nous (octobre 2026) | Création propre, aucun droit tiers |
+| `tools/imaginaire/runtime/vendor/three.min.js` | three.js 0.186.1 (paquet npm `three`), regroupé et réduit aux classes utilisées par `tools/imaginaire/build-three.mjs` (esbuild 0.28.2) | **Licence MIT**, © 2010-2026 three.js authors. Le texte de la licence est à côté (`vendor/LICENSE-three.txt`) ; three.js n'est plus livré dans l'application (outils seulement), il n'a donc plus à figurer dans son écran des licences |
 | `app/assets/landscapes/<id>.jpg` (images fixes des six scènes, embarquées), `app/assets/landscapes/foret-lucioles.mp4` (embarqué, gratuit), `content/videos/paysages/{lac-lune,aurore,jardin-zen,mer-nuages,ondes}.mp4` (S3, Premium) | Rendus de nos scènes par `tools/imaginaire/render.js` (Chromium sans écran, ffmpeg) | Création propre, aucun droit tiers |
 | `tools/imaginaire/preview/` (page d'aperçu) | Copies des fichiers ci-dessus ; police Manrope copiée de `app/assets/fonts/` | Manrope : SIL Open Font License 1.1 (`OFL-Manrope.txt` à côté) |
 

@@ -456,6 +456,8 @@ Retour du product owner (Galaxy S24 SM-S921B, Android 16, démo optimisée par R
 
 ## 20. Paysages imaginaires (3D)
 
+> **Depuis le 10 novembre 2026, l'application ne dessine plus la 3D** : les six paysages Imaginaire sont lus comme des vidéos (§ 22). Cette section décrit les scènes et leur moteur, qui ne servent plus qu'au rendu hors ligne des vidéos (`tools/imaginaire/runtime/`, autrefois `app/assets/imaginaire/`) ; ce qui y concerne le téléphone (WebView, budget GPU, § 20.6) est historique.
+
 Décision du product owner (29 octobre 2026, [contrat § 12](../api/contrat-v1.md)) : le décor d'un paysage filmé ne se modifie plus ; les éléments du décor appartiennent à la catégorie « Imaginaire » (qui remplace « Astral » depuis le 30 octobre 2026), de six scènes 3D dessinées en direct par l'application avec three.js, où l'utilisateur ajoute ou retire des éléments. Exigence de direction artistique : calme, lent, belle lumière, profondeur, léger parallaxe, rien de criard ni de « dessin animé », texte blanc lisible dans le tiers inférieur.
 
 ### 20.1 Runtime (`app/assets/imaginaire/`, hors ligne)
@@ -627,3 +629,20 @@ Demande du product owner : publier de nouveaux paysages filmés, sons et musique
 1. Bouton Google avec le vrai client web (origine JavaScript du domaine déclarée).
 2. Taille réelle de l'image Docker avec ffmpeg (estimée à 285 Mo compressés contre 100 Mo avant).
 3. Un envoi réel de bout en bout : traitement, aperçu, publication, apparition dans l'app au retour au premier plan.
+
+## 22. Paysages Imaginaire en vidéo, autorisation d'alarme (10 novembre 2026)
+
+### 22.1 Fin de la 3D en direct
+
+Retour du product owner après essai sur le Galaxy S24 : « les animations 3D font chauffer le téléphone, transforme-les directement en vidéo ». Les six paysages Imaginaire (`foret-lucioles`, gratuit ; `lac-lune`, `aurore`, `jardin-zen`, `mer-nuages`, `ondes`) passent à `rendu: video` (contrat § 12, note du 10 novembre) et suivent exactement le chemin des paysages filmés : boucle vidéo (le décodage H.264 est matériel), image fixe, fond d'écran, carte de l'écran de verrouillage, catalogue publié. La boucle gratuite et les six images fixes sont embarquées ; les cinq boucles Premium viennent du serveur (embarquées dans la démo).
+
+- **Retiré de l'application** : la surface WebView des scènes et sa vue, le garde-fou Kotlin `SceneWebViewGuard`, la règle ProGuard WebView, l'onglet « Décor » de « Mon mix » et ses puces « Moment » (avec `setMoment` ; le champ `moment` reste stocké et partagé), la sentinelle de scène vivante du garde-fou de plantage (le garde-fou de démarrage du § 19 reste ; un ancien `guard.json` est encore lu).
+- **Catalogue** : `rendu: 3d` ou toute autre valeur inconnue est lu sans planter et le paysage est caché (repli sur `cascade-foret` pour un favori ou un lien). La liste `decors` et la couche `decor` d'une scène sont encore lues, puis toujours retirées. Un paysage publié (§ 21) reste limité aux thèmes `nature` et `urbain`.
+- **Moteur 3D** : déplacé dans `tools/imaginaire/runtime/` pour le rendu des vidéos (`render.js`, `check.js`, l'aperçu fonctionnent comme avant). La compétence `.claude/skills/scene-imaginaire` décrit désormais une scène rendue en vidéo.
+- **WebView** : `webview_flutter` n'est plus une dépendance directe, mais `google_mobile_ads` l'embarque encore (les publicités en ont besoin) : l'APK n'y gagne que les fichiers des scènes (≈ 0,28 Mo compressés).
+- **Contrôle de l'APK** (`tool/ci/check_apk_contents.sh`) : plus aucun fichier `assets/imaginaire/` ; images fixes des six et boucle gratuite exigées partout ; boucles Premium absentes de la production, présentes dans la démo.
+- **Perdu** : l'ajout d'éléments (neige, lucioles…) par l'utilisateur, qui demandait le calcul en direct. Une variante (par exemple la forêt sous la neige) devient un paysage à part entière, avec sa propre vidéo.
+
+### 22.2 Autorisation d'alarme demandée en programmant
+
+Demande du product owner : « lorsqu'un utilisateur veut programmer un réveil, il doit directement activer l'autorisation d'alarme ». Enregistrer une programmation active, ou en activer une, sans l'autorisation des alarmes exactes (Android 12 et plus) l'enregistre et l'arme d'abord, puis **ouvre aussitôt l'écran système « Alarmes et rappels »** de l'application. Tant que l'autorisation manque, chaque enregistrement ou activation le rouvre ; jamais au démarrage ; rien sous Android 12. Au retour dans l'application, si l'autorisation est donnée, les programmations sont réarmées à l'heure exacte (un défaut corrigé : le rafraîchissement mettait le cache à jour avant de comparer, donc ne voyait jamais le changement). Le manifeste déclare `SCHEDULE_EXACT_ALARM` et pas `USE_EXACT_ALARM` (réservée par Google Play aux réveils et agendas) ; le contrôle de l'APK le vérifie.

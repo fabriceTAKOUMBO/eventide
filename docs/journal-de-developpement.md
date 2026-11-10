@@ -1,5 +1,13 @@
 # Journal de développement — Eventide
 
+## 10 novembre 2026 — paysages Imaginaire en vidéo, alarme, page de dépôt
+
+- **Retour du product owner** : « les animations 3D font chauffer le téléphone, transforme-les directement en vidéo ; construis une interface pour que je puisse poster directement les vidéos ; lorsqu'un utilisateur veut programmer un réveil, il doit directement activer l'autorisation d'alarme ».
+- **3D en direct retirée** : les six paysages Imaginaire sont lus comme des vidéos (contrat § 12, architecture § 22.1) ; moteur déplacé dans `tools/imaginaire/runtime/` pour le rendu hors ligne. L'ajout d'éléments de décor par l'utilisateur disparaît.
+- **Autorisation d'alarme** : l'écran système « Alarmes et rappels » s'ouvre dès qu'on enregistre ou active une programmation sans l'autorisation ; réarmement exact au retour corrigé (architecture § 22.2).
+- **Page de dépôt** (Artifact privé, https://claude.ai/artifact/4mLaBeDJ7zzujMhvSsu5Yd) : le product owner y dépose une vidéo (20 Mo au plus) ou un lien Higgsfield / Google Drive, avec nom, rubrique, gratuit / Premium, orages et note ; chaque dépôt a un état (reçu, en traitement, dans l'app, à refaire) que nous mettons à jour. Solution d'attente : nous intégrons les dépôts à chaque démo. Le vrai tableau de bord (§ 14) prendra le relais une fois le serveur déployé.
+- **Vérifications** : 550 tests de l'app, 390 de l'API ; l'APK n'a pas pu être compilé localement (pas de SDK Android) : la CI le fait.
+
 ## 30 octobre 2026 — scènes 3D dans l'app, Imaginaire remplace Astral
 
 - **Demande du product owner : tableau de bord et mise à jour automatique.** « Ajouter des fichiers depuis un dashboard et l'application sera mise à jour automatiquement ; un compte administrateur qui a l'autorisation de publier et de consulter les autres utilisateurs. » Contrat d'abord (§ 13 catalogue publié, § 14 tableau de bord), puis trois agents en parallèle : application (552 tests), API et tableau de bord (389 tests), infrastructure (tests Terraform simulés, gardes étendues, ADR § 12, runbook `tableau-de-bord.md`). **Rien n'est appliqué sur AWS.** Limites : pas de publication de scène 3D (code embarqué) ; ne fonctionne qu'une fois le serveur déployé (domaine encore à choisir). Démo S24 avec Full Relax et les six scènes : CI 41099139959, artefact 12997852976.
